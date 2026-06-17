@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Espressif USB Serial/JTAG (ESP32-C6 nativ USB) -->
+    <usb-device vendor-id="12346" product-id="4097"/>  <!-- C6 -->
+    <usb-device vendor-id="12346" product-id="4099"/>  <!-- C3: 303A:1003 -->
+    <!-- tartalek: CP2102 es CH340 hidak, ha masik board kerulne be -->
+    <usb-device vendor-id="4292" product-id="60000"/>
+    <usb-device vendor-id="6790" product-id="29987"/>
+</resources>

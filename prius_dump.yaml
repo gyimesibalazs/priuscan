@@ -1,0 +1,51 @@
+# Prius CAN — IDEIGLENES DUMP CONFIG az ajto-frame megtalalasahoz
+# ============================================================
+# Ez NEM a teljes monitor; csak a CAN forgalmat dumpolja a soros portra,
+# hogy ajto nyitas/csukas kozben lasd, melyik frame melyik bitje valt.
+#
+# Hasznalat:
+#   esphome run prius_dump.yaml      (USB kabellel)
+#   -> a soros monitorban folynak a "#XXX b0 b1 ..." sorok
+#   -> nyisd/csukd az ajtokat egyenkent, es figyeld, melyik frame valtozik
+#
+# A zaj csokkentesere: csak a 0x500-0x5FF tartomanyt dumpoljuk (itt vannak
+# a karosszeria/komfort broadcast frame-ek), es CSAK ha a frame tartalma
+# az elozohoz kepest VALTOZOTT -> igy ajtonyitaskor pont a releváns
+# frame ugrik be, nem arasztja el a konzolt az allando forgalom.
+
+esphome:
+  name: prius-dump
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+logger:
+  level: INFO
+  hardware_uart: USB_SERIAL_JTAG
+
+canbus:
+  - platform: esp32_can
+    id: can0
+    tx_pin: GPIO6
+    rx_pin: GPIO5
+    can_id: 0x7DF
+    bit_rate: 500KBPS
+    on_frame:
+      - can_id: 0
+        can_id_mask: 0
+        then:
+          - lambda: |-
+              // csak a karosszeria-tartomany (0x500..0x6FF), valtozas-szuressel
+              if (can_id < 0x500 || can_id > 0x6FF) return;
+              static std::map<uint32_t, std::vector<uint8_t>> last;
+              auto it = last.find(can_id);
+              if (it != last.end() && it->second == x) return;  // nem valtozott
+              last[can_id] = x;
+              char line[80];
+              int off = snprintf(line, sizeof(line), "#%03X", (unsigned)can_id);
+              for (auto b : x) off += snprintf(line+off, sizeof(line)-off, " %02X", b);
+              line[off++] = '\n'; line[off] = 0;
+              printf("%s", line);
+              fflush(stdout);
