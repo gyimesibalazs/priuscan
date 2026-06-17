@@ -69,6 +69,10 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
             }
         }
 
+        TextButton(onClick = { prefs.statusX = -1; prefs.statusY = -1 }) {
+            Text("Státuszsáv helyének visszaállítása")
+        }
+
         Text(
             "Home Assistant kapcsolat (MQTT). A szenzorok MQTT Discovery-vel " +
             "maguktól megjelennek HA-ban. Net nélkül a batch-ek ts-sel pufferbe " +

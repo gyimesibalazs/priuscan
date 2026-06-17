@@ -56,7 +56,7 @@ class CanService : Service() {
     private val prefsListener =
         android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
             haPusher.restart()
-            main.post { refreshNotifications() }
+            main.post { refreshNotifications(); overlays.resetStatusView() }
         }
 
     @Volatile private var running = true

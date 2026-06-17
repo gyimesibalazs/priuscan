@@ -97,6 +97,15 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
         statusView = null
     }
 
+    /** A statusz-csikot visszahelyezi a Prefs-ben tarolt (vagy alapertelmezett) helyre. */
+    fun resetStatusView() {
+        val v = statusView ?: return
+        val lp = v.layoutParams as? WindowManager.LayoutParams ?: return
+        lp.x = if (prefs.statusX >= 0) prefs.statusX else 8
+        lp.y = if (prefs.statusY >= 0) prefs.statusY else statusBarHeight()
+        try { wm.updateViewLayout(v, lp) } catch (_: Exception) {}
+    }
+
     private fun statusBarHeight(): Int {
         val id = ctx.resources.getIdentifier("status_bar_height", "dimen", "android")
         return if (id > 0) ctx.resources.getDimensionPixelSize(id) else 0
