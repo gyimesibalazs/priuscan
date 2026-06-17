@@ -54,9 +54,16 @@ class CanService : Service() {
     private lateinit var haPusher: HaPusher
 
     private val prefsListener =
-        android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-            haPusher.restart()
-            main.post { refreshNotifications(); overlays.resetStatusView() }
+        android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            // az overlay-pozicio mentese (drag) NE inditson ujra semmit, kulonben
+            // minden elengedeskor visszaugrik; csak a reset (mindketto -1) helyez at
+            val posKey = key == "status_x" || key == "status_y"
+            if (!posKey) {
+                haPusher.restart()
+                main.post { refreshNotifications() }
+            } else if (prefs.statusX < 0 && prefs.statusY < 0) {
+                main.post { overlays.resetStatusView() }
+            }
         }
 
     @Volatile private var running = true
