@@ -34,7 +34,10 @@ class CanService : Service() {
 
     companion object {
         val state = MutableStateFlow(CanState.EMPTY)
+        // connected = true CSAK ha valodi PriusCAN-adat erkezik (nem eleg a port nyitas)
         val connected = MutableStateFlow(false)
+        // melyik USB-eszkozhoz vagyunk kotve (termeknev / VID:PID / eszkoznev)
+        val deviceInfo = MutableStateFlow<String?>(null)
 
         private const val CHANNEL = "priuscan"
         private const val NOTIF_ID = 1
@@ -66,13 +69,13 @@ class CanService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        overlays = OverlayManager(this)
+        prefs = Prefs(this)
+        overlays = OverlayManager(this, prefs)
         notifMgr = getSystemService(NotificationManager::class.java)
         notifMgr.createNotificationChannel(
             NotificationChannel(CHANNEL, "Prius CAN", NotificationManager.IMPORTANCE_LOW)
         )
         startForeground(NOTIF_ID, buildNotification(null, null, null, primary = true))
-        prefs = Prefs(this)
         haPusher = HaPusher(this, prefs)
         haPusher.start()
         prefs.sp.registerOnSharedPreferenceChangeListener(prefsListener)
@@ -98,25 +101,44 @@ class CanService : Service() {
             val link = SerialLink(this)
             val buf = ByteArray(4096)
             val line = StringBuilder()
+            // azok az eszkozok, amik megnyithatok voltak, de NEM PriusCAN-adatot
+            // kuldtek (pl. masik ESP / TPMS) - ezeket ebben a korben atugorjuk
+            val rejected = HashSet<Int>()
             while (running) {
-                val port = link.openPort()
-                if (port == null) {
+                val opened = link.open(rejected)
+                if (opened == null) {
                     connected.value = false
+                    deviceInfo.value = null
+                    rejected.clear()     // uj kor: adjunk eselyt mindenkinek ujra
                     Thread.sleep(3000)   // ujraprobalkozas, amig az ESP fel nem all
                     continue
                 }
-                connected.value = true
+                val port = opened.port
+                var valid = false
+                val openedAt = System.currentTimeMillis()
+                line.setLength(0)
                 try {
                     while (running) {
                         val n = port.read(buf, 500)
                         for (i in 0 until n) {
                             val c = buf[i].toInt().toChar()
                             if (c == '\n') {
-                                handleLine(line.toString())
+                                if (handleLine(line.toString()) && !valid) {
+                                    // valodi PriusCAN-adat -> EZ a jo eszkoz
+                                    valid = true
+                                    connected.value = true
+                                    deviceInfo.value = link.describe(opened.device)
+                                }
                                 line.setLength(0)
                             } else if (line.length < 4096) {
                                 line.append(c)
                             }
+                        }
+                        // ha 4 mp alatt nem jott ervenyes PriusCAN-sor, ez nem a
+                        // mi eszkozunk -> elutasitjuk es a kovetkezot probaljuk
+                        if (!valid && System.currentTimeMillis() - openedAt > 4000) {
+                            rejected.add(opened.device.deviceId)
+                            break
                         }
                     }
                 } catch (_: Exception) {
@@ -124,24 +146,31 @@ class CanService : Service() {
                 } finally {
                     try { port.close() } catch (_: Exception) {}
                     connected.value = false
+                    deviceInfo.value = null
                 }
             }
         }.also { it.isDaemon = true; it.start() }
     }
 
-    private fun handleLine(raw: String) {
+    /** @return true, ha ez egy ervenyes PriusCAN JSON-sor (nem mas eszkoz adata). */
+    private fun handleLine(raw: String): Boolean {
         val s = raw.trim()
-        if (!s.startsWith("{")) return   // log/dump sorok eldobasa
-        val json = try { JSONObject(s) } catch (_: Exception) { return }
+        if (!s.startsWith("{")) return false   // log/dump sorok eldobasa
+        val json = try { JSONObject(s) } catch (_: Exception) { return false }
+        // PriusCAN-alairas: az emit_json minden sora tartalmazza a door+cruise
+        // mezoket -> ezzel kulonbozteti meg egy masik ESP/TPMS adatatol
+        if (!json.has("door") || !json.has("cruise")) return false
         val st = CanState(json)
         state.value = st
         main.post { onState(st) }
+        return true
     }
 
     // ---------------- allapot-reakciok (main threaden) ----------------
 
     private fun onState(s: CanState) {
         updateNotifications(s)
+        updateStatusStrip(s)
 
         // warning -> hang + overlay, csak szintvaltasnal (ne ismeteljen)
         val wp = s.wpWarn
@@ -164,13 +193,16 @@ class CanService : Service() {
     }
 
     private fun alert(level: Int, text: String) {
-        val tg = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-        if (level >= 2) {
-            tg.startTone(ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK, 2500)
-        } else {
-            tg.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1200)
-        }
-        main.postDelayed({ tg.release() }, 3000)
+        // a ToneGenerator konstruktor dobhat, ha az audio eroforras foglalt
+        try {
+            val tg = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+            if (level >= 2) {
+                tg.startTone(ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK, 2500)
+            } else {
+                tg.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1200)
+            }
+            main.postDelayed({ try { tg.release() } catch (_: Exception) {} }, 3000)
+        } catch (_: Exception) {}
         overlays.showAlert(level, text)
     }
 
@@ -219,6 +251,22 @@ class CanService : Service() {
     fun refreshNotifications() {
         lastSlotText.clear()
         updateNotifications(state.value)
+        updateStatusStrip(state.value)
+    }
+
+    /**
+     * A kivalasztott ertekek egyetlen, mindig lathato overlay-csikban a kepernyo
+     * tetejen. A fejegyseg ROM statuszsora nem mutatja a notification-ikonokat,
+     * ezert ez a glance-display.
+     */
+    private fun updateStatusStrip(s: CanState) {
+        val enabled = itemOrder.filter { it in prefs.statusItems }.ifEmpty { listOf("ct") }
+        val text = enabled.joinToString("    ") { key ->
+            val v = itemText(key, s) ?: "–"
+            val u = itemUnit(key, s)
+            if (u.isEmpty()) "${itemLabel(key)} $v" else "$v $u"
+        }
+        main.post { overlays.updateStatus(text) }
     }
 
     private fun updateNotifications(s: CanState) {

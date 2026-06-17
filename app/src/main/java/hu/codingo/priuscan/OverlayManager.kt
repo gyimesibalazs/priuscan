@@ -19,15 +19,19 @@ import android.widget.TextView
  *  - ajto-overlay: felulrol becsuszo Prius vonalrajz a nyitott ajtokkal,
  *    addig latszik, amig ajto van nyitva
  */
-class OverlayManager(private val ctx: Context) {
+class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
 
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val main = Handler(Looper.getMainLooper())
 
     private var alertView: View? = null
-    private var doorView: DoorOverlayView? = null
-    private var door3D: Prius3DView? = null
+    private var statusView: TextView? = null
+    private var doorImg: DoorImageView? = null
     private var doorContainer: View? = null
+    private var doorLp: WindowManager.LayoutParams? = null
+    // a containert egyszer hozzuk letre es ujrahasznaljuk; csukaskor csak
+    // levesszuk a WindowManager-rol (nem epitunk ujat minden ciklusban)
+    @Volatile private var doorsVisible = false
 
     private fun canDraw() = Settings.canDrawOverlays(ctx)
 
@@ -39,6 +43,64 @@ class OverlayManager(private val ctx: Context) {
             or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
         PixelFormat.TRANSLUCENT
     )
+
+    // ---------------- statusz-csik (mindig lathato) ----------------
+    // A fejegyseg ROM-ja a sajat statuszsoraban NEM mutatja a harmadik felеs
+    // notification-ikonokat, ezert a kivalasztott ertekeket sajat overlay-kent
+    // rajzoljuk a kepernyo tetejere, a rendszersav ala.
+
+    fun updateStatus(text: String) {
+        if (text.isEmpty()) { hideStatus(); return }
+        if (!canDraw()) { hideStatus(); return }
+        statusView?.let { it.text = text; return }
+        val tv = TextView(ctx).apply {
+            this.text = text
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            setPadding(20, 6, 24, 8)
+            setBackgroundColor(0xCC0E1216.toInt())
+            setShadowLayer(4f, 0f, 0f, Color.BLACK)
+        }
+        val lp = baseParams().apply {
+            // hozzaerheto (huzhato), de nem fogad fokuszt
+            gravity = Gravity.TOP or Gravity.START
+            x = if (prefs.statusX >= 0) prefs.statusX else 8
+            y = if (prefs.statusY >= 0) prefs.statusY else statusBarHeight()
+        }
+        // szabadon huzhato barhova; az uj poziciot elmentjuk
+        tv.setOnTouchListener(object : View.OnTouchListener {
+            var startX = 0f; var startY = 0f; var baseX = 0; var baseY = 0; var moved = false
+            override fun onTouch(v: View, e: android.view.MotionEvent): Boolean {
+                when (e.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        startX = e.rawX; startY = e.rawY; baseX = lp.x; baseY = lp.y; moved = false
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        lp.x = baseX + (e.rawX - startX).toInt()
+                        lp.y = baseY + (e.rawY - startY).toInt()
+                        if (kotlin.math.abs(e.rawX - startX) > 6 || kotlin.math.abs(e.rawY - startY) > 6) moved = true
+                        try { wm.updateViewLayout(v, lp) } catch (_: Exception) {}
+                    }
+                    android.view.MotionEvent.ACTION_UP -> {
+                        if (moved) { prefs.statusX = lp.x; prefs.statusY = lp.y }
+                    }
+                }
+                return true
+            }
+        })
+        try { wm.addView(tv, lp); statusView = tv } catch (_: Exception) {}
+    }
+
+    private fun hideStatus() {
+        statusView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        statusView = null
+    }
+
+    private fun statusBarHeight(): Int {
+        val id = ctx.resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (id > 0) ctx.resources.getDimensionPixelSize(id) else 0
+    }
 
     // ---------------- riaszto popup ----------------
 
@@ -79,64 +141,73 @@ class OverlayManager(private val ctx: Context) {
             return
         }
         if (!canDraw()) return
-        if (doorContainer == null) {
-            // elsodlegesen a 3D modell; ha a GL init elhasal a fejegysegen,
-            // visszaesunk a 2D rajzra
-            val content: View = try {
-                Prius3DView(ctx).also { door3D = it }
-            } catch (_: Throwable) {
-                DoorOverlayView(ctx).also { doorView = it }
+        val box = ensureDoorContainer() ?: return
+        if (!doorsVisible) {
+            doorsVisible = true
+            box.animate().cancel()
+            if (box.parent == null) {
+                try {
+                    wm.addView(box, doorLp)
+                    box.translationY = -700f   // felulrol becsuszas
+                } catch (_: Exception) {
+                    doorsVisible = false
+                    return
+                }
             }
-            val box = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
-                setBackgroundColor(0xCC101418.toInt())
-                setPadding(40, 24, 40, 32)
-                addView(TextView(ctx).apply {
-                    text = "NYITOTT AJTÓ"
-                    textSize = 18f
-                    setTypeface(typeface, Typeface.BOLD)
-                    setTextColor(0xFFFF5252.toInt())
-                    gravity = Gravity.CENTER
-                })
-                val w = if (door3D != null) 400 else 360
-                val h = if (door3D != null) 600 else 560
-                addView(content, LinearLayout.LayoutParams(w, h))
-            }
-            val lp = baseParams().apply {
-                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                y = 0
-            }
-            try {
-                wm.addView(box, lp)
-                doorContainer = box
-                // felulrol becsuszas
-                box.translationY = -700f
-                box.animate().translationY(0f).setDuration(250).start()
-            } catch (_: Exception) {
-                door3D = null
-                doorView = null
-                return
-            }
+            box.animate().translationY(0f).setDuration(250).start()
         }
-        door3D?.setMask(mask)
-        doorView?.mask = mask
+        doorImg?.setMask(mask)
+    }
+
+    /** A container + kep-nezet egyszeri felepitese; ujrahasznaljuk minden ciklusban. */
+    private fun ensureDoorContainer(): View? {
+        doorContainer?.let { return it }
+        // Elore renderelt felulnezeti PNG-k kombinacionkent (DoorImageView).
+        // Nincs GL/Filament -> nem fagy, gyors.
+        val content: View = DoorImageView(ctx).also { doorImg = it }
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setBackgroundColor(0xCC101418.toInt())
+            setPadding(28, 20, 28, 24)
+            addView(TextView(ctx).apply {
+                text = "NYITOTT AJTÓ"
+                textSize = 18f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(0xFFFF5252.toInt())
+                gravity = Gravity.CENTER
+            })
+            addView(content, LinearLayout.LayoutParams(440, 420))
+        }
+        doorContainer = box
+        doorLp = baseParams().apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = 0
+        }
+        return box
     }
 
     private fun hideDoors() {
-        val v = doorContainer ?: return
-        doorContainer = null
-        doorView = null
-        door3D = null
-        v.animate().translationY(-700f).setDuration(200).withEndAction {
-            try { wm.removeView(v) } catch (_: Exception) {}
+        doorsVisible = false
+        val box = doorContainer ?: return
+        if (box.parent == null) return
+        box.animate().cancel()
+        box.animate().translationY(-700f).setDuration(200).withEndAction {
+            // a withEndAction cancel-re is lefuthat: csak akkor vegyuk le, ha
+            // tenyleg rejtve maradunk (kozben nem nyilt ki ujra)
+            if (!doorsVisible) {
+                try { if (box.parent != null) wm.removeView(box) } catch (_: Exception) {}
+            }
         }.start()
     }
 
     fun removeAll() {
         removeAlert()
+        hideStatus()
+        doorsVisible = false
         doorContainer?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         doorContainer = null
-        doorView = null
+        doorImg = null
+        doorLp = null
     }
 }

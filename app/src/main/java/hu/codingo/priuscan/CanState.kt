@@ -96,8 +96,6 @@ object Fields {
             Field("amb", "Külső hőfok", "°C"),
         ),
     )
-
-    const val BLOCK_COUNT = 14
 }
 
 
@@ -105,20 +103,14 @@ object Fields {
 class CanState(json: JSONObject?) {
 
     val values = HashMap<String, Double>()
-    val blocks = DoubleArray(Fields.BLOCK_COUNT) { Double.NaN }
     val ts = System.currentTimeMillis()
 
     init {
         if (json != null) {
             for (key in json.keys()) {
-                if (key == "blk") continue
+                // a firmware a HV blokkokat b01..b14 kulcskent kuldi (nem tombkent)
                 val v = json.optDouble(key)
                 if (!v.isNaN()) values[key] = v
-            }
-            json.optJSONArray("blk")?.let { arr ->
-                for (i in 0 until minOf(arr.length(), Fields.BLOCK_COUNT)) {
-                    blocks[i] = arr.optDouble(i)
-                }
             }
         }
     }

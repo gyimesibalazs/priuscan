@@ -36,11 +36,20 @@ class SerialLink(private val ctx: Context) {
         UsbSerialProber(table)
     }
 
-    /** Blokkolva probal portot nyitni; null, ha nincs eszkoz / nincs engedely. */
-    fun openPort(): UsbSerialPort? {
+    /** Egy megnyitott port + a hozza tartozo eszkoz (azonositashoz). */
+    data class Opened(val port: UsbSerialPort, val device: UsbDevice)
+
+    /**
+     * Blokkolva probal portot nyitni. Az `exclude`-ban szereplo eszkoz-ID-ket
+     * kihagyja - igy ha tobb soros eszkoz van a buszon (pl. egy masik ESP / TPMS),
+     * a CanService sorra veheti oket es az ADAT alapjan valaszthatja ki a jot.
+     * null, ha nincs (tovabbi) eszkoz / nincs engedely.
+     */
+    fun open(exclude: Set<Int> = emptySet()): Opened? {
         val drivers =
             prober.findAllDrivers(usb) + UsbSerialProber.getDefaultProber().findAllDrivers(usb)
-        val driver = drivers.firstOrNull() ?: return null
+        // a sajat prober (303A) elol van -> azt preferaljuk; az elutasitottakat atugorjuk
+        val driver = drivers.firstOrNull { it.device.deviceId !in exclude } ?: return null
         val device = driver.device
 
         if (!usb.hasPermission(device) && !requestPermissionBlocking(device)) return null
@@ -52,11 +61,19 @@ class SerialLink(private val ctx: Context) {
             port.setParameters(BAUD, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
             port.dtr = true
             port.rts = true
-            port
+            Opened(port, device)
         } catch (e: Exception) {
             try { port.close() } catch (_: Exception) {}
             null
         }
+    }
+
+    /** Emberi olvasashoz: termeknev + VID:PID + eszkoznev. */
+    fun describe(d: UsbDevice): String {
+        val vidpid = "%04X:%04X".format(d.vendorId, d.productId)
+        val name = try { d.productName } catch (_: Exception) { null }
+        return listOfNotNull(name?.takeIf { it.isNotBlank() }, vidpid, d.deviceName)
+            .joinToString("  ·  ")
     }
 
     /** Engedelykeres szinkron megvarassal (max 15 s). */

@@ -40,7 +40,4 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
-    implementation("com.google.android.filament:filament-android:1.51.0")
-    implementation("com.google.android.filament:gltfio-android:1.51.0")
-    implementation("com.google.android.filament:filament-utils-android:1.51.0")
 }

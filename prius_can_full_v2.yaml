@@ -790,17 +790,6 @@ sensor:
       if (std::isnan(v)) return {};
       return v;
 
-binary_sensor:
-  - { platform: template, name: "Door Driver",    id: door_driver }
-  - { platform: template, name: "Door Passenger", id: door_passenger }
-  - { platform: template, name: "Door Rear",      id: door_rear }
-  - { platform: template, name: "Door Trunk",     id: door_trunk }
-  - { platform: template, name: "Cruise Active",  id: cruise_on }
-  - platform: template
-    name: "Water Pump Running"
-    id: wp_running
-    lambda: 'return prius::V.get("wpRun") > 0.5f;'
-
   # ---- 2-es kor: tovabbi diagnosztika ----
   - platform: template
     name: "Engine Torque"
@@ -868,6 +857,18 @@ binary_sensor:
     accuracy_decimals: 0
     lambda: 'float v=prius::V.get("oilDist"); if(std::isnan(v))return {}; return v;'
 
+binary_sensor:
+  - { platform: template, name: "Door Driver",    id: door_driver }
+  - { platform: template, name: "Door Passenger", id: door_passenger }
+  - { platform: template, name: "Door Rear Left",  id: door_rear_left }
+  - { platform: template, name: "Door Rear Right", id: door_rear_right }
+  - { platform: template, name: "Door Trunk",     id: door_trunk }
+  - { platform: template, name: "Cruise Active",  id: cruise_on }
+  - platform: template
+    name: "Water Pump Running"
+    id: wp_running
+    lambda: 'return prius::V.get("wpRun") > 0.5f;'
+
 switch:
   - platform: template
     name: "CAN Dump Mode"
@@ -900,7 +901,10 @@ canbus:
               uint8_t m = x[5];
               id(door_driver).publish_state(m & 0x20);
               id(door_passenger).publish_state(m & 0x10);
-              id(door_rear).publish_state(m & 0x0C);
+              // ket hatso kulon (tipp: bit2 0x04 = bal, bit3 0x08 = jobb;
+              // ha forditva van, csak a ket sort/bitet kell cserelni)
+              id(door_rear_left).publish_state(m & 0x04);
+              id(door_rear_right).publish_state(m & 0x08);
               id(door_trunk).publish_state(m & 0x02);
       - can_id: 0x5C8   # tempomat fokapcsolo
         then:
@@ -949,6 +953,8 @@ interval:
     then:
       - lambda: |-
           char extra[48];
-          int dm = (id(door_driver).state?0x80:0)|(id(door_passenger).state?0x40:0)|(id(door_rear).state?0x04:0)|(id(door_trunk).state?0x01:0);
+          int dm = (id(door_driver).state?0x80:0)|(id(door_passenger).state?0x40:0)
+                 |(id(door_rear_left).state?0x08:0)|(id(door_rear_right).state?0x04:0)
+                 |(id(door_trunk).state?0x01:0);
           snprintf(extra, sizeof(extra), "\"door\":%d,\"cruise\":%d", dm, id(cruise_on).state?1:0);
           prius::emit_json(extra);

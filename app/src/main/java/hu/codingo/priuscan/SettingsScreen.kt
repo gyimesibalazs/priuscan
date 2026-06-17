@@ -83,19 +83,19 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
         }
 
         OutlinedTextField(host, { host = it }, label = { Text("MQTT broker (host/IP)") },
-            Modifier.fillMaxWidth(), singleLine = true)
+            modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(port, { port = it.filter(Char::isDigit) }, label = { Text("Port") },
-            Modifier.fillMaxWidth(), singleLine = true)
+            modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(user, { user = it }, label = { Text("Felhasználó (opcionális)") },
-            Modifier.fillMaxWidth(), singleLine = true)
+            modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(pass, { pass = it }, label = { Text("Jelszó") },
-            Modifier.fillMaxWidth(), singleLine = true,
+            modifier = Modifier.fillMaxWidth(), singleLine = true,
             visualTransformation = PasswordVisualTransformation())
         OutlinedTextField(prefix, { prefix = it }, label = { Text("Topic prefix") },
-            Modifier.fillMaxWidth(), singleLine = true)
+            modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(interval, { interval = it.filter(Char::isDigit) },
             label = { Text("Push időköz (másodperc)") },
-            Modifier.fillMaxWidth(), singleLine = true)
+            modifier = Modifier.fillMaxWidth(), singleLine = true)
 
         Spacer(Modifier.height(8.dp))
         Button(

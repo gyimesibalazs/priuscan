@@ -41,4 +41,12 @@ class Prefs(ctx: Context) {
     var statusItems: Set<String>
         get() = sp.getStringSet("status_items", setOf("ct", "soc")) ?: setOf("ct")
         set(v) = sp.edit().putStringSet("status_items", v).apply()
+
+    /** A statusz-csik overlay pozicioja (px). -1 = meg nincs beallitva. */
+    var statusX: Int
+        get() = sp.getInt("status_x", -1)
+        set(v) = sp.edit().putInt("status_x", v).apply()
+    var statusY: Int
+        get() = sp.getInt("status_y", -1)
+        set(v) = sp.edit().putInt("status_y", v).apply()
 }

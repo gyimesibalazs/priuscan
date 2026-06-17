@@ -32,6 +32,14 @@ inline bool tp_active = false;
 inline uint16_t tp_src = 0;
 inline uint32_t tp_started_ms = 0;
 
+// Keres<->valasz sorositas: egyszerre csak EGY keres lehet a buszon. Amig az
+// elozo keresre varunk valaszt (meg az elso keret/FF sem jott meg), ne kuldjunk
+// ujabbat, kulonben egy masik ECU valasza elklappolhatja a most epulo multi-
+// frame atvitelt (ez okozta a motor-ECU akadozasat a suru pollnal).
+inline bool awaiting = false;        // kerest kuldtunk, valasz meg nem zarult le
+inline uint16_t await_resp = 0;      // a vart valasz CAN ID-ja (= keres + 8)
+inline uint32_t await_started = 0;
+
 struct PollItem { uint16_t req; uint8_t mode; uint8_t pid; };
 inline const PollItem POLL[] = {
   {0x7E0, 0x21, 0x01},
@@ -223,6 +231,8 @@ inline uint16_t on_can_frame(uint16_t resp_id, const std::vector<uint8_t> &x, ui
     if (len == 0 || (int)x.size() < 1+len) return 0;
     std::vector<uint8_t> p(x.begin()+1, x.begin()+1+len);
     parse_payload(resp_id, p);
+    // egykeretes valasz (akar negativ 7F is): a keres lezarult
+    if (resp_id == await_resp) awaiting = false;
     return 0;
   } else if (pci == 0x1) {
     tp_len = ((x[0] & 0x0F) << 8) | x[1];
@@ -236,6 +246,8 @@ inline uint16_t on_can_frame(uint16_t resp_id, const std::vector<uint8_t> &x, ui
       tp_buf.resize(tp_len);
       tp_active = false;
       parse_payload(resp_id, tp_buf);
+      // multi-frame valasz teljesult: a keres lezarult
+      if (resp_id == await_resp) awaiting = false;
     }
   }
   return 0;
@@ -249,11 +261,20 @@ inline bool next_request(uint16_t &req_id, std::vector<uint8_t> &out, uint32_t n
   if (tp_active && (now_ms - tp_started_ms) < 120) {
     return false;
   }
+  // teljes sorositas: amig az elozo keresre varunk (FF meg meg sem jott),
+  // ne kuldjunk masikat - max 120 ms utan tovabblepunk (nem-valaszolo ECU)
+  if (awaiting && (now_ms - await_started) < 120) {
+    return false;
+  }
   tp_active = false;
+  awaiting = false;
   const PollItem &it = POLL[poll_i];
   poll_i = (poll_i + 1) % POLL_N;
   req_id = it.req;
   out = {0x02, it.mode, it.pid, 0, 0, 0, 0, 0};
+  awaiting = true;
+  await_resp = req_id + 8;     // OBD: a valasz ID = keres ID + 8
+  await_started = now_ms;
   return true;
 }
 

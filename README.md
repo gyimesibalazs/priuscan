@@ -6,8 +6,12 @@ Full CAN/OBD telemetry & diagnostics for the **Toyota Prius Gen3 (XW30 / ZVW30)*
   `prius_parse.h`). Polls four diagnostic ECUs over ISO-TP + passive broadcast
   frames; emits one JSON line per ~0.5 s on USB serial.
 * **Android app** (`app/`) — Kotlin + Compose head-unit app: live dashboard,
-  status-bar gauges, audible/visual warnings, 3D door-open overlay, Home
-  Assistant MQTT push with offline buffer.
+  a draggable always-on status overlay (the head-unit ROM hides third-party
+  notification icons), audible/visual warnings, a top-down door-open overlay
+  built from pre-rendered PNGs (one per door combination), Home Assistant MQTT
+  push with offline buffer.
+* **`render/`** — Blender script (`render_combos.py`) + source model
+  (`prius.glb`) that bakes the 32 door-state PNGs into `app/src/main/assets`.
 
 It reads ~80 signals — engine, full hybrid drive, complete HV battery
 diagnostics (14 block voltages, internal resistance, current, temps), A/C, ABS,
@@ -22,7 +26,11 @@ body — using formulas from the canonical PriusChat GenIII Torque CSV.
 Firmware: put `prius_can_full_v2.yaml` and `prius_parse.h` in the same dir, then
 `esphome run prius_can_full_v2.yaml`.
 
-App: `cd app && ./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`.
+App (from repo root): `./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`.
+
+Door overlay PNGs are committed under `app/src/main/assets/car_*.png`; to
+re-bake them after a model/pivot change: `blender -b -P render/render_combos.py
+-- render/prius.glb app/src/main/assets`.
 
 ## Continue with Claude Code
 ```bash

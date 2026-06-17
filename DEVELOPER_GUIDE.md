@@ -32,8 +32,9 @@ the calibration status, and the open tasks.
   passive broadcast frames, decodes everything into a value store, and emits a
   single-line JSON object on the native USB serial port (~2 Hz).
 * The **Android app** (head unit) reads that JSON over USB, displays it, raises
-  audible/visual warnings, renders a 3D door-open overlay, and opportunistically
-  pushes data to Home Assistant via MQTT with an offline JSONL buffer.
+  audible/visual warnings, shows a draggable always-on status overlay and a
+  top-down door-open overlay (pre-rendered PNGs), and opportunistically pushes
+  data to Home Assistant via MQTT with an offline JSONL buffer.
 
 ### Why this design
 * No Wi-Fi/OTA in production: the device is powered from and talks over the head
@@ -103,14 +104,31 @@ value, not the Sensor object). So:
 * A 1 s interval calls `prius::compute_derived()`, a 500 ms interval calls
   `prius::emit_json(extra)`.
 
-### ISO-TP handling & the polling-vs-transfer timing fix
+### ISO-TP handling & full request↔response serialization
 Multi-frame responses (e.g. `2101`, the 14 block voltages) arrive as
 first-frame → flow-control → consecutive-frames. The polling loop must **not**
 fire a new request while a transfer is in progress, otherwise the transfer is
-aborted and the data never completes. `next_request` therefore waits (up to a
-120 ms timeout, tracked via `tp_started_ms`) for any active ISO-TP transfer
-before issuing the next poll. This was the root cause of the engine-ECU (7E0)
-data freezing in early logs.
+aborted and the data never completes.
+
+`next_request` enforces this in two stages:
+1. **In-progress guard** — while an ISO-TP transfer is mid-flight it waits (up
+   to a 120 ms timeout, tracked via `tp_started_ms`).
+2. **Full serialization** (`awaiting` / `await_resp`) — after sending a request
+   it refuses to send another until that request's response has *completed*
+   (single frame, multi-frame, or even a negative `7F`), or 120 ms elapses.
+   This closes the earlier race: between sending a request and its first frame
+   arriving, `tp_active` was still false, so the next 80 ms tick could fire a
+   second request and another ECU's first frame would clobber the shared
+   `tp_buf`/`tp_src`. Only one request is ever on the bus at a time now.
+
+This was the suspected root cause of the engine-ECU (7E0) data **freezing**:
+the engine is `POLL[0]`, answered once right after boot, then its subsequent
+multi-frame responses got clobbered while the battery ECU (which happened to
+win the timing) kept updating. Since `prius::V` never clears a key, the engine
+values then stayed frozen at their startup snapshot — looking like "responds
+once when the app starts". Verify on-vehicle after flashing; if it persists,
+next suspects are the app asserting DTR/RTS on connect (resets the ESP) and/or
+a missing `3E 00` TesterPresent keep-alive to 7E0.
 
 ### Polled ECUs and PIDs
 Response ID = request ID + 8.
@@ -126,8 +144,10 @@ Response ID = request ID + 8.
 Passive broadcast frames (no request):
 * **0x620** — doors. `byte5` bits (verified by dump):
   `bit5 (0x20)` = front-left/driver, `bit4 (0x10)` = front-right/passenger,
-  `bit3+bit2 (0x0C)` = rear doors (not individually separable from the dump),
-  `bit1 (0x02)` = trunk.
+  `bit3 (0x08)` = rear-right, `bit2 (0x04)` = rear-left, `bit1 (0x02)` = trunk.
+  The two rears are now published **separately** (`door_rear_left` /
+  `door_rear_right`); the L/R assignment is a best guess — swap the two
+  `publish_state` lines if a dump shows it reversed.
 * **0x5C8** — cruise main switch (byte2 bit4) — *tentative, verify in dump*.
 
 ### JSON output schema
@@ -146,7 +166,7 @@ Body:     bodyV fuelIn oilDist
 Fans/ECU: battFan ecuMode fanMode dtcCur dtcHist
 Derived:  ctR (coolant rate °C/min) fuel (l/h) wpW (water-pump warn 0/1/2)
           cellW (HV cell warn 0/1/2)
-State:    door (bitmask 0x80 drv / 0x40 pass / 0x04 rear / 0x01 trunk) cruise
+State:    door (bitmask 0x80 drv / 0x40 pass / 0x08 rear-L / 0x04 rear-R / 0x01 trunk) cruise
 Debug:    raw0..raw7 (raw bytes of the 0x7B8/2147 response — G-sensor cal)
 ```
 
@@ -175,30 +195,39 @@ Package `hu.codingo.priuscan`, minSdk 26, Kotlin + Jetpack Compose. ~1700 LOC.
 | File | Responsibility |
 |------|----------------|
 | `MainActivity.kt` | Compose main screen: header (key gauges), grouped sensor list, 14 HV block list, Settings navigation. |
-| `CanService.kt` | Foreground service (START_STICKY). Owns the USB serial reader with auto-reconnect; builds the status-bar notifications; raises warnings (sound + overlay); drives the door overlay; relays state to `HaPusher`. |
+| `CanService.kt` | Foreground service (START_STICKY). Owns the USB serial reader with auto-reconnect; builds the status-bar notifications + the draggable status overlay; raises warnings (sound + overlay); drives the door overlay; relays state to `HaPusher`. |
 | `SerialLink.kt` | usb-serial-for-android wrapper; CDC-ACM driver registration for the C3 (0x303A/0x1003) and C6 (0x303A/0x1001) native USB; line reader. |
-| `CanState.kt` | `Fields` object (display groups + units) and `CanState` (parses one JSON line; `d(key)`/`i(key)` accessors; `door`, `gear`, `coolant`, `wpWarn`, `cellWarn`, `blocks[]`). |
-| `OverlayManager.kt` | System-alert overlay window: warning popup + door overlay host (3D, with 2D fallback). |
-| `Prius3DView.kt` | Filament renderer for `assets/prius.glb`. Per-node hinge animation (T·R·T⁻¹ around the pivot). Top-down camera (up vector 0,0,-1). **Door mask → mesh mapping is here** (note the model's fl/fr naming is swapped vs reality — 0x80→Door_fr, 0x40→Door_fl). |
-| `DoorOverlayView.kt` | 2D Canvas fallback door overlay (when Filament is unavailable). |
+| `CanState.kt` | `Fields` object (display groups + units) and `CanState` (parses one JSON line; `d(key)`/`i(key)` accessors; `door`, `gear`, `coolant`, `wpWarn`, `cellWarn`). |
+| `OverlayManager.kt` | System-alert overlay windows: warning popup, the draggable status strip, and the door overlay host. The container is built once and reused (shown/hidden, not rebuilt). |
+| `DoorImageView.kt` | Door overlay: loads the pre-rendered `assets/car_<doormask hex>.png` for the current door combination and draws it scaled-to-fit (small LruCache). No GL/Filament. **Door mask → mesh mapping note:** the model's fl/fr naming is swapped vs reality (0x80 driver→Door_fr, 0x40 passenger→Door_fl); see `render/render_combos.py`. |
 | `HaPusher.kt` | MQTT client (Paho). Opportunistic connect; offline JSONL backlog (`ha_backlog.jsonl`, 2 MB cap, timestamped); publishes fresh state to `<prefix>/state`, backlog to `<prefix>/backlog`; auto-publishes MQTT Discovery configs for every field incl. b01..b14. Host field accepts full URI (tcp/ssl/ws/wss). |
 | `SettingsScreen.kt` | Compose settings: status-bar item checkboxes (ct/soc/rpm/cons), MQTT host/port/user/pass/prefix, push interval. |
-| `Prefs.kt` | SharedPreferences wrapper. |
-| `BootReceiver.kt` | Starts the service on boot. |
+| `Prefs.kt` | SharedPreferences wrapper (incl. saved status-overlay x/y). |
+| `BootReceiver.kt` | Starts the service on `BOOT_COMPLETED`. |
 
-### Status-bar notifications
-Each enabled item gets its **own** notification with a **custom-drawn icon** so
-several values sit side by side in the status bar. Icons are alpha-masked by
-Android (drawn white). Two-line layout: value over unit (e.g. `85`/`°C`,
-`1200`/`RPM`). SoC is drawn as a battery glyph with a charge-proportional fill +
-`%`. Configurable via Settings; the prefs listener rebuilds notifications live.
+### Status overlay (and why not the notification bar)
+The head-unit ROM (K706, Android 10) does **not** render third-party
+notification icons in its system status bar, so the status-bar-notification
+approach is invisible there. Instead `OverlayManager.updateStatus` draws the
+selected values as an always-on `TYPE_APPLICATION_OVERLAY` strip. It is
+**draggable anywhere** (touch-drag, position persisted in `Prefs.statusX/Y`).
+Note: an app overlay can never sit *on top of* the system status bar (window
+z-order is fixed by type), so it lives below/around it. The per-value
+custom-drawn notification icons are still posted (work on ROMs that show them).
 
-### 3D door overlay
-The user-supplied Prius GLB (`assets/prius.glb`, model TAI0504) has separate
-nodes `Door_fl/fr/rl/rr`, `Trunk`, `Hood`. Top-down view, nose up. The door
-bitmask from JSON drives which meshes animate open. **Verify driver-side in-car
-after flashing**; if the wrong side opens, swap the 0x80/0x40 bits in
-`Prius3DView.kt`.
+### Door overlay (pre-rendered PNGs)
+Filament 3D was dropped: on this head unit a `SurfaceView` GL swapchain inside
+an overlay window did not composite **and** stalled the main thread (ANR). The
+door overlay is now **pre-baked**: `render/render_combos.py` (Blender, headless
+Cycles) renders all 32 door combinations of `render/prius.glb` from a strict
+top-down ortho camera (nose up), framed to the all-doors-open bounding box so
+nothing clips, transparent background, ~480 px. Output is
+`app/src/main/assets/car_<doormask hex>.png` (e.g. `car_00.png` closed,
+`car_cd.png` everything open). `DoorImageView` just loads the file matching
+`mask & 0xCD`. Re-bake after a model/pivot change:
+`blender -b -P render/render_combos.py -- render/prius.glb app/src/main/assets`.
+**Verify driver-side in-car**; if the wrong side opens, swap the bit→mesh rows
+in `render_combos.py` (and re-render).
 
 ### Home Assistant / history
 HA's recorder cannot accept back-dated state, so historical drive data must go
@@ -236,7 +265,8 @@ Install from Windows (WSL can't see USB by default): copy the APK out via
 native FS (`~/...`), not `/mnt/c`, for speed.
 
 Use **debug**, not release — no signing key needed, no minification (which can
-trip up Filament/Paho).
+trip up Paho). The APK is ~17 MB (Filament was removed; the door overlay is
+pre-rendered PNGs now).
 
 ---
 
@@ -257,10 +287,15 @@ trip up Filament/Paho).
    (same response, bytes 3–4) works, so the payload indexing is right but the
    G bytes read wrong. **Use `raw0..raw7` on the web UI** (temporarily re-enabled
    Wi-Fi) to find the real byte, then fix `case 0x47` in `prius_parse.h`.
-2. **Rear doors L/R split** — both rears showed 0x0C together; do a targeted
-   test (open only the left rear) to separate bits 2 and 3.
-3. **Fuel confirmation** — re-log a drive after the ISO-TP fix to confirm
-   fuel/rpm/spd are live.
+2. **Rear doors L/R** — now split (bit2 0x04 = rear-L, bit3 0x08 = rear-R, a
+   best guess). Confirm L/R by opening one rear door; swap the two
+   `publish_state` lines in the 0x620 handler if reversed.
+3. **Engine ECU "responds once"** — engine values froze at the startup snapshot.
+   Fixed in firmware by full request↔response serialization (§3 ISO-TP). Re-log
+   after flashing to confirm `ct`/`rpm`/`spd`/`fuel` update continuously; if not,
+   try not asserting DTR/RTS in `SerialLink.kt` (avoids resetting the ESP on
+   connect) and/or a periodic `3E 00` TesterPresent to 7E0. PriusChat confirms
+   Gen3 mode-21 PIDs are normally loggable continuously.
 4. **InfluxDB location** — decide HA host vs Netcup VPS for the history chain.
 5. **DTC read-out (mode 03/07)** — `dtcCur`/`dtcHist` give *counts*; decoding the
    actual P-codes is a natural next feature (the ISO-TP machinery already exists).

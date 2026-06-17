@@ -28,7 +28,11 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,6 +96,11 @@ fun MainScreen(
 ) {
     val state by CanService.state.collectAsState()
     val connected by CanService.connected.collectAsState()
+    val device by CanService.deviceInfo.collectAsState()
+    // a Beallitasok/rendszer-dialogbol visszaterve ujraertekeljuk az engedelyt,
+    // hogy a gomb eltunjon, ha kozben megadtak
+    var granted by remember { mutableStateOf(overlayGranted()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { granted = overlayGranted() }
 
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -105,9 +114,9 @@ fun MainScreen(
                 }
             }
         }
-        item { Header(state, connected) }
+        item { Header(state, connected, device) }
 
-        if (!overlayGranted()) {
+        if (!granted) {
             item {
                 Button(onClick = onOverlayPerm, Modifier.fillMaxWidth()) {
                     Text("Overlay engedély megadása (riasztásokhoz kötelező)")
@@ -141,7 +150,7 @@ fun MainScreen(
 }
 
 @Composable
-private fun Header(s: CanState, connected: Boolean) {
+private fun Header(s: CanState, connected: Boolean, device: String?) {
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.foundation.layout.Box(
@@ -150,8 +159,17 @@ private fun Header(s: CanState, connected: Boolean) {
             )
             Spacer(Modifier.size(8.dp))
             Text(
-                if (connected) "ESP32 kapcsolódva" else "Nincs kapcsolat…",
+                if (connected) "PriusCAN kapcsolódva" else "Nincs kapcsolat…",
                 color = Color(0xFF9EB6C3), fontSize = 14.sp,
+            )
+        }
+        // pontosan melyik USB-eszkoz adja az ervenyes PriusCAN-adatot
+        if (connected && device != null) {
+            Text(
+                device,
+                color = Color(0xFF5E7A8A), fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.padding(start = 20.dp),
             )
         }
         Row(verticalAlignment = Alignment.Bottom) {
