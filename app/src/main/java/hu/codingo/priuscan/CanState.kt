@@ -95,6 +95,14 @@ object Fields {
             Field("vbat", "12V akku", "V", 2),
             Field("amb", "Külső hőfok", "°C"),
         ),
+        // IDEIGLENES motor-ECU diagnosztika (eltávolítható, ha kész):
+        //  eFF = hány első keret jött a motor-ECU-tól, eOK = hány 2101 fejeződött be.
+        //  Ha eFF folyamatosan nő, de eOK alig -> a CF-ek vesznek el (RX/timing).
+        "DEBUG motor-ECU" to listOf(
+            Field("eFF", "2101 első keret (FF)"),
+            Field("eOK", "2101 sikeres"),
+            Field("eLen", "utolsó válasz hossz", "B"),
+        ),
     )
 }
 

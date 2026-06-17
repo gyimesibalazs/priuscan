@@ -40,6 +40,12 @@ inline bool awaiting = false;        // kerest kuldtunk, valasz meg nem zarult l
 inline uint16_t await_resp = 0;      // a vart valasz CAN ID-ja (= keres + 8)
 inline uint32_t await_started = 0;
 
+// DEBUG-szamlalok a motor-ECU (0x7E8) diagnozisahoz:
+//   eng_ff = hany elso keret (FF) jott a motor-ECU-tol
+//   eng_ok = hany 2101 valasz fejezodott be sikeresen
+// Ha eng_ff >> eng_ok -> a CF-keretek vesznek el (RX-drop/timing), nem a session.
+inline uint32_t eng_ff = 0, eng_ok = 0;
+
 struct PollItem { uint16_t req; uint8_t mode; uint8_t pid; };
 inline const PollItem POLL[] = {
   {0x7E0, 0x21, 0x01},
@@ -75,6 +81,8 @@ inline void parse_payload(uint16_t resp_id, const std::vector<uint8_t> &p) {
   if (mode != 0x61) return;
 
   if (resp_id == 0x7E8 && pid == 0x01) {
+    eng_ok++;                 // DEBUG: hany 2101 fejezodott be sikeresen
+    V.set("eLen", (float)dn); // DEBUG: az utolso valasz hossza
     if (dn < 14) return;
     V.set("load", d[0] * 20.0f / 51.0f);
     V.set("maf", u16(d, 3) / 100.0f);
@@ -235,6 +243,7 @@ inline uint16_t on_can_frame(uint16_t resp_id, const std::vector<uint8_t> &x, ui
     if (resp_id == await_resp) awaiting = false;
     return 0;
   } else if (pci == 0x1) {
+    if (resp_id == 0x7E8) eng_ff++;   // DEBUG: motor-ECU elso keret
     tp_len = ((x[0] & 0x0F) << 8) | x[1];
     tp_buf.assign(x.begin()+2, x.end());
     tp_active = true; tp_src = resp_id;
@@ -320,6 +329,8 @@ inline void compute_derived() {
     if (tmax>=50) cw=2; else if (tmax-tmin>8 && cw<1) cw=1;
   }
   V.set("cellW", (float)cw);
+  V.set("eFF", (float)eng_ff);   // DEBUG: motor-ECU FF szamlalo
+  V.set("eOK", (float)eng_ok);   // DEBUG: sikeres 2101 szamlalo
 }
 
 inline void emit_json(const char *door_cruise_extra) {
@@ -332,9 +343,11 @@ inline void emit_json(const char *door_cruise_extra) {
     "wFL","wFR","wRL","wRR","wDif","gLat","gFwd","steer","brkP",
     "engNm","injml","injus","battFan","ecuMode","fanMode","dtcCur","dtcHist",
     "acAmb","blower","acPress","bodyV","fuelIn","oilDist",
-    "ctR","wpRun","wpW","cellW", nullptr
+    "ctR","wpRun","wpW","cellW",
+    "eLen","eFF","eOK",               // DEBUG motor-ECU
+    nullptr
   };
-  char buf[1700]; int off = 0; const int cap = sizeof(buf);
+  char buf[2048]; int off = 0; const int cap = sizeof(buf);
   buf[off++] = '{';
   for (int i=0; KEYS[i]; i++) {
     float v = V.get(KEYS[i]);
