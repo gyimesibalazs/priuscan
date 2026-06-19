@@ -15,3 +15,8 @@
 # ESPHome
 .esphome/
 secrets.yaml
+carlogs/
+
+# stray captures / Windows artifacts
+/logs*.txt
+*:Zone.Identifier

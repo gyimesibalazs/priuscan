@@ -32,6 +32,19 @@ Assistant. Two halves:
    names are swapped vs reality. Keep firmware bitmask and app mapping consistent.
 7. Production firmware has **no Wi-Fi/OTA/web_server**. They're only temporarily
    enabled for G-sensor calibration (raw0..raw7 on the web UI).
+8. **The Android app is multilingual — every user-facing UI string is a string
+   resource, translated to all supported locales.** Base (English) lives in
+   `app/src/main/res/values/strings.xml`; per-language overrides in
+   `values-<lang>/` (currently `hu, de, fr, es, it, pt, nl, pl`). Sensor labels
+   and group titles are `@StringRes` ids on `CanState.Field`/`Fields.groups`;
+   Compose uses `stringResource(...)`, `CanService`/`OverlayManager` use
+   `getString(...)`, `HaPusher` uses `ctx.getString(...)` for HA discovery names.
+   **Never hardcode UI text.** When adding/changing a UI string: add the key to
+   the English base AND every `values-<lang>/strings.xml` (same key set + same
+   `printf` format specifiers in all of them — the build/runtime depends on it).
+   Exceptions that are intentionally NOT localized: brand strings (`"Prius CAN"`,
+   `priuscan`), gear letters (`P/R/N/D/B`), and bare units rendered next to
+   numbers.
 
 ## Build & test
 * Firmware: `esphome run prius_can_full_v2.yaml` (USB), `esphome logs ...` to watch.

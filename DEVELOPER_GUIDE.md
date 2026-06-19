@@ -299,6 +299,11 @@ pre-rendered PNGs now).
 4. **InfluxDB location** — decide HA host vs Netcup VPS for the history chain.
 5. **DTC read-out (mode 03/07)** — `dtcCur`/`dtcHist` give *counts*; decoding the
    actual P-codes is a natural next feature (the ISO-TP machinery already exists).
+6. **HV cell-warning calibration** — `cellW` now blends a fixed-threshold safety
+   path with a **self-learning weak-block layer** (`learn_update`/`learn_verdict`,
+   see §8). The learn thresholds (`LRN_K1/K2`, `LRN_ALPHA`, `LRN_LOAD_A`) and the
+   provisional under-load delta thresholds are **estimates** — tune them from a
+   real driving log (the app's local JSONL store, §4) before trusting absolute levels.
 
 ### Deliberately NOT done (safety / not feasible)
 * SRS airbag DTCs — separate diag protocol, Techstream territory.
@@ -316,3 +321,39 @@ door/cruise broadcast frames are **not** in that CSV — they were reverse
 engineered from dumps (`prius_dump.yaml`) and are the least-certain part. When
 adding PIDs, take the equation from the CSV (letters A,B,C… map to payload bytes
 d[0], d[1], d[2]… after the mode+PID echo).
+
+---
+
+## 8. Battery-health monitoring (research summary)
+
+Full report with citations and caveats: **`BATTERY_HEALTH.md`**. Short version —
+how to assess the NiMH pack purely from the passively logged signals
+(`b01..b14`, `hvA`, `tb1..3`/`hvAir`, `maxR`, `blkD`, `soc`):
+
+* **Goal 1 — early weak-block / asymmetry (best-supported, passive):** statistical
+  anomaly detection on the per-block voltage stream — moving-window entropy,
+  **Z-score "abnormity coefficient"**, normalized CV, CVA+KDE+Mahalanobis.
+  Use **SD/MAD/Z-score, not IQR** (IQR over-flags). Threshold must be
+  **load/condition-aware** (raw thresholds cause many false positives on real data).
+* **Goal 2 — SOH / IR growth / capacity fade:** rising **internal resistance**
+  (SoC- and temperature-dependent → normalize by SoC+temp bins), under-load
+  voltage depression, self-discharge; EOL ≡ 80 % of rated Ah. Voltage spread is
+  load-dependent: **high discharge current** makes weak-block/IR differences
+  obvious (I·R dominates) — compute block stats **conditioned on `|hvA|` bins**.
+* **Goal 3 — RUL:** data-driven ML (lowest avg error), adaptive Kalman online,
+  and the NiMH-specific **Palmgren–Miner** fatigue damage-accumulation model.
+
+**Implemented here:** a **self-learning weak-block layer** in `prius_parse.h`
+(`learn_update`/`learn_verdict`): per-block Z-score vs the pack mean, learned via
+a per-block EWMA (adaptive data-relative baseline), updated **only under load**
+(`|hvA|>30 A`) with a maturity gate. Outputs `cwL`/`wblk`/`wz` and feeds `cellW`
+as `max(fixed, learned)`. State (`lz[14]+lz_n`) persists in an ESPHome
+`restore_value` global (≤1 flash write / 5 min, only while driving). It detects
+**relative asymmetry/change, not absolute SOH** — absolute SOH/RUL needs a
+known-good reference. Validate the learned baseline against the app's local JSONL
+log (§4) before tuning the thresholds.
+
+**Key caveat:** nearly all strong statistical methods were validated on Li-ion,
+not NiMH — the math transfers but the numeric thresholds must be re-tuned for
+NiMH (flat plateau, memory-effect voltage depression, temperature sensitivity).
+ICA/DVA is likely unusable on NiMH (flat plateau suppresses dQ/dV peaks).
