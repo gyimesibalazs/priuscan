@@ -2,8 +2,9 @@ package hu.codingo.priuscan
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.json.JSONObject
 
-/** App-beallitasok. A HA pusher ujraindul, ha valtozik (listener a service-ben). */
+/** App settings. The HA pusher restarts when these change (listener in the service). */
 class Prefs(ctx: Context) {
 
     val sp: SharedPreferences = ctx.getSharedPreferences("priuscan", Context.MODE_PRIVATE)
@@ -32,17 +33,44 @@ class Prefs(ctx: Context) {
         get() = sp.getString("topic_prefix", "priuscan") ?: "priuscan"
         set(v) = sp.edit().putString("topic_prefix", v.trim().trimEnd('/')).apply()
 
-    /** Push idokoz masodpercben. */
+    /** Push interval in seconds. */
     var pushIntervalSec: Int
         get() = sp.getInt("push_interval", 30)
         set(v) = sp.edit().putInt("push_interval", v.coerceIn(2, 3600)).apply()
 
-    /** Melyik ertekek menjenek ki a statuszsorba (kulcsok: ct, soc, rpm, cons). */
+    /** Which values to show in the status bar (keys: ct, soc, rpm, cons). */
     var statusItems: Set<String>
         get() = sp.getStringSet("status_items", setOf("ct", "soc")) ?: setOf("ct")
         set(v) = sp.edit().putStringSet("status_items", v).apply()
 
-    /** A statusz-csik overlay pozicioja (px). -1 = meg nincs beallitva. */
+    /** Local data logging (JSONL files) without HA. */
+    var logEnabled: Boolean
+        get() = sp.getBoolean("log_enabled", true)
+        set(v) = sp.edit().putBoolean("log_enabled", v).apply()
+
+    /** Reference HV pack capacity (Ah) for the SoH/degradation calc. Default ~Prius
+     *  6.5 Ah; set to the transplanted Prius-4 cell's rated capacity. */
+    var batteryRefAh: Float
+        get() = sp.getFloat("battery_ref_ah", 6.5f)
+        set(v) = sp.edit().putFloat("battery_ref_ah", v.coerceIn(1f, 20f)).apply()
+
+    /** Learned TPMS sensor IDs per wheel (key = Wheel.name, value = hex id), JSON-encoded. */
+    var tpmsIds: Map<String, String>
+        get() {
+            val raw = sp.getString("tpms_ids", null) ?: return emptyMap()
+            return try {
+                val o = JSONObject(raw)
+                o.keys().asSequence().associateWith { o.getString(it) }
+            } catch (_: Exception) { emptyMap() }
+        }
+        set(v) = sp.edit().putString("tpms_ids", JSONObject(v).toString()).apply()
+
+    /** The status-bar overlay font size (sp). */
+    var statusFontSize: Float
+        get() = sp.getFloat("status_font_size", 14f)
+        set(v) = sp.edit().putFloat("status_font_size", v.coerceIn(8f, 48f)).apply()
+
+    /** The status-bar overlay position (px). -1 = not set yet. */
     var statusX: Int
         get() = sp.getInt("status_x", -1)
         set(v) = sp.edit().putInt("status_x", v).apply()

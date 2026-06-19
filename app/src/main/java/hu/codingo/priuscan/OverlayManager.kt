@@ -14,10 +14,10 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 /**
- * Ket overlay:
- *  - riaszto popup (warning/alert szoveggel, auto-eltuno, koppintasra zar)
- *  - ajto-overlay: felulrol becsuszo Prius vonalrajz a nyitott ajtokkal,
- *    addig latszik, amig ajto van nyitva
+ * Two overlays:
+ *  - alert popup (with warning/alert text, auto-dismissing, closes on tap)
+ *  - door overlay: a Prius line drawing that slides in from the top showing the
+ *    open doors, visible as long as a door is open
  */
 class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
 
@@ -29,8 +29,8 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
     private var doorImg: DoorImageView? = null
     private var doorContainer: View? = null
     private var doorLp: WindowManager.LayoutParams? = null
-    // a containert egyszer hozzuk letre es ujrahasznaljuk; csukaskor csak
-    // levesszuk a WindowManager-rol (nem epitunk ujat minden ciklusban)
+    // we create the container once and reuse it; on close we only
+    // detach it from the WindowManager (we don't build a new one every cycle)
     @Volatile private var doorsVisible = false
 
     private fun canDraw() = Settings.canDrawOverlays(ctx)
@@ -44,31 +44,29 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
         PixelFormat.TRANSLUCENT
     )
 
-    // ---------------- statusz-csik (mindig lathato) ----------------
-    // A fejegyseg ROM-ja a sajat statuszsoraban NEM mutatja a harmadik felеs
-    // notification-ikonokat, ezert a kivalasztott ertekeket sajat overlay-kent
-    // rajzoljuk a kepernyo tetejere, a rendszersav ala.
+    // ---------------- status strip (always visible) ----------------
+    // The head-unit ROM does NOT show third-party notification icons in its own
+    // status bar, so we draw the selected values as our own overlay at the top of
+    // the screen, just below the system bar.
 
     fun updateStatus(text: String) {
         if (text.isEmpty()) { hideStatus(); return }
         if (!canDraw()) { hideStatus(); return }
-        statusView?.let { it.text = text; return }
+        // reuse the existing view: refresh text + style (font size/color)
+        statusView?.let { it.text = text; styleStatus(it); return }
         val tv = TextView(ctx).apply {
             this.text = text
-            textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.WHITE)
             setPadding(20, 6, 24, 8)
-            setBackgroundColor(0xCC0E1216.toInt())
-            setShadowLayer(4f, 0f, 0f, Color.BLACK)
         }
+        styleStatus(tv)
         val lp = baseParams().apply {
-            // hozzaerheto (huzhato), de nem fogad fokuszt
+            // touchable (draggable), but does not take focus
             gravity = Gravity.TOP or Gravity.START
             x = if (prefs.statusX >= 0) prefs.statusX else 8
             y = if (prefs.statusY >= 0) prefs.statusY else statusBarHeight()
         }
-        // szabadon huzhato barhova; az uj poziciot elmentjuk
+        // freely draggable anywhere; we save the new position
         tv.setOnTouchListener(object : View.OnTouchListener {
             var startX = 0f; var startY = 0f; var baseX = 0; var baseY = 0; var moved = false
             override fun onTouch(v: View, e: android.view.MotionEvent): Boolean {
@@ -97,7 +95,28 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
         statusView = null
     }
 
-    /** A statusz-csikot visszahelyezi a Prefs-ben tarolt (vagy alapertelmezett) helyre. */
+    /**
+     * The status strip style: font size configurable from settings, NO background (box).
+     *
+     * Color: the overlay sits on the system status bar, which on this head unit is
+     * ALWAYS dark (the system also draws light icons on it) - so the light/dark
+     * uiMode was a bad signal (black text in the daytime -> invisible). The overlay
+     * window cannot query the system status bar's color, so WHITE text
+     * + a strong BLACK outline (subtitle style): it stays readable on any background -
+     * on a dark bar the text shows, on light content the outline shows -, and it looks
+     * like the system's white icons.
+     */
+    private fun styleStatus(tv: TextView) {
+        tv.textSize = prefs.statusFontSize
+        tv.setTextColor(Color.WHITE)
+        tv.background = null
+        tv.setShadowLayer(6f, 0f, 0f, Color.BLACK)
+    }
+
+    /** Immediate restyle after a settings save (font size). */
+    fun refreshStatusStyle() { statusView?.let { styleStatus(it) } }
+
+    /** Moves the status strip back to the position stored in Prefs (or the default). */
     fun resetStatusView() {
         val v = statusView ?: return
         val lp = v.layoutParams as? WindowManager.LayoutParams ?: return
@@ -111,7 +130,7 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
         return if (id > 0) ctx.resources.getDimensionPixelSize(id) else 0
     }
 
-    // ---------------- riaszto popup ----------------
+    // ---------------- alert popup ----------------
 
     fun showAlert(level: Int, text: String) {
         if (!canDraw()) return
@@ -132,7 +151,7 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
         try {
             wm.addView(tv, lp)
             alertView = tv
-            // szint 1: 8 s utan eltunik; szint 2: 20 s (vagy koppintas)
+            // level 1: disappears after 8 s; level 2: 20 s (or a tap)
             main.postDelayed({ removeAlert() }, if (level >= 2) 20000L else 8000L)
         } catch (_: Exception) {}
     }
@@ -142,7 +161,7 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
         alertView = null
     }
 
-    // ---------------- ajto overlay ----------------
+    // ---------------- door overlay ----------------
 
     fun updateDoors(mask: Int) {
         if (mask == 0) {
@@ -157,7 +176,7 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
             if (box.parent == null) {
                 try {
                     wm.addView(box, doorLp)
-                    box.translationY = -700f   // felulrol becsuszas
+                    box.translationY = -700f   // slide in from the top
                 } catch (_: Exception) {
                     doorsVisible = false
                     return
@@ -168,11 +187,11 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
         doorImg?.setMask(mask)
     }
 
-    /** A container + kep-nezet egyszeri felepitese; ujrahasznaljuk minden ciklusban. */
+    /** One-time build of the container + image view; we reuse it every cycle. */
     private fun ensureDoorContainer(): View? {
         doorContainer?.let { return it }
-        // Elore renderelt felulnezeti PNG-k kombinacionkent (DoorImageView).
-        // Nincs GL/Filament -> nem fagy, gyors.
+        // Pre-rendered top-view PNGs per combination (DoorImageView).
+        // No GL/Filament -> no freezing, fast.
         val content: View = DoorImageView(ctx).also { doorImg = it }
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -180,7 +199,7 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
             setBackgroundColor(0xCC101418.toInt())
             setPadding(28, 20, 28, 24)
             addView(TextView(ctx).apply {
-                text = "NYITOTT AJTÓ"
+                text = ctx.getString(R.string.open_door)
                 textSize = 18f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(0xFFFF5252.toInt())
@@ -202,8 +221,8 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
         if (box.parent == null) return
         box.animate().cancel()
         box.animate().translationY(-700f).setDuration(200).withEndAction {
-            // a withEndAction cancel-re is lefuthat: csak akkor vegyuk le, ha
-            // tenyleg rejtve maradunk (kozben nem nyilt ki ujra)
+            // withEndAction can also run on cancel: only remove it if we
+            // actually stay hidden (a door didn't open again in the meantime)
             if (!doorsVisible) {
                 try { if (box.parent != null) wm.removeView(box) } catch (_: Exception) {}
             }

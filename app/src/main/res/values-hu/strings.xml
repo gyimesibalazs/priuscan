@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hungarian (hu) locale override. -->
+<resources>
+
+    <!-- ===== Main screen ===== -->
+    <string name="settings_button">⚙ Beállítások</string>
+    <string name="connected">PriusCAN csatlakozva</string>
+    <string name="disconnected">Nincs kapcsolat…</string>
+    <string name="perm_overlay">Overlay engedély megadása (riasztásokhoz szükséges)</string>
+    <string name="perm_battery">Akkumulátor-optimalizálás kikapcsolása</string>
+    <string name="coolant_caption">hűtővíz</string>
+    <string name="hv_block_voltages">HV blokkfeszültségek</string>
+    <string name="block_n">Blokk %1$02d</string>
+
+    <!-- header warnings -->
+    <string name="warn_overheat">⚠ TÚLMELEGEDÉS  </string>
+    <string name="warn_cooling">⚠ Hűtési figyelmeztetés  </string>
+    <string name="warn_hv_fault">⚠ HV AKKU HIBA</string>
+    <string name="warn_hv_cell">⚠ HV cella figyelmeztetés</string>
+
+    <!-- ===== Settings screen ===== -->
+    <string name="settings_title">Beállítások</string>
+    <string name="status_items_title">Állapotsáv elemei</string>
+    <string name="status_items_desc">Minden engedélyezett érték külön ikont kap az állapotsávban (számként kirajzolva), így egyszerre több is látszik.</string>
+    <string name="opt_ct">Hűtővíz hőmérséklet</string>
+    <string name="opt_soc">HV akku töltöttség</string>
+    <string name="opt_rpm">Fordulatszám</string>
+    <string name="opt_cons">Pillanatnyi fogyasztás</string>
+    <string name="font_size_label">Állapotsáv betűméret (sp, 8–48)</string>
+    <string name="reset_status_pos">Állapotsáv pozíció visszaállítása</string>
+    <string name="local_logging_title">Helyi naplózás</string>
+    <string name="local_logging_desc">Nyers mérési adatokat ment helyi JSONL fájlba (HA nélkül is). Napi rotáció, a régebbi napok gzip-pel tömörítve. Felhalmozott: %1$s</string>
+    <string name="log_info">%1$s (%2$d fájl)</string>
+    <string name="logging_enabled">Naplózás engedélyezve</string>
+    <string name="download_logs">Naplók letöltése</string>
+    <string name="delete_logs">Naplók törlése</string>
+    <string name="ha_desc">Home Assistant kapcsolat (MQTT). Az érzékelők automatikusan megjelennek a HA-ban MQTT Discovery útján. Internet nélkül a kötegek időbélyeggel pufferelődnek, és újracsatlakozáskor a %1$s/backlog címre kerülnek.</string>
+    <string name="ha_enabled">HA integráció engedélyezve</string>
+    <string name="mqtt_broker">MQTT broker (host/IP)</string>
+    <string name="mqtt_port">Port</string>
+    <string name="mqtt_user">Felhasználó (opcionális)</string>
+    <string name="mqtt_pass">Jelszó</string>
+    <string name="mqtt_topic_prefix">Topic előtag</string>
+    <string name="push_interval">Küldési időköz (másodperc)</string>
+    <string name="save">Mentés</string>
+    <string name="cancel">Mégse</string>
+
+    <!-- ===== Notifications / status strip (short labels) ===== -->
+    <string name="nlabel_ct">Hűtővíz</string>
+    <string name="nlabel_soc">HV akku</string>
+    <string name="nlabel_rpm">Motor</string>
+    <string name="nlabel_cons">Fogyasztás</string>
+    <string name="notif_connecting">Csatlakozás az ESP32-höz…</string>
+
+    <!-- ===== Alerts (sound + overlay pop-up) ===== -->
+    <string name="alert_overheat">TÚLMELEGEDÉS! %1$d°C</string>
+    <string name="alert_cooling">Hűtési figyelmeztetés: %1$d°C</string>
+    <string name="alert_hv_fault">HV AKKU HIBA! ΔU=%1$.2fV (blokk %2$d)</string>
+    <string name="alert_hv_cell">HV cella figyelmeztetés: ΔU=%1$.2fV</string>
+
+    <!-- ===== Door overlay ===== -->
+    <string name="open_door">NYITOTT AJTÓ</string>
+
+    <!-- ===== Home Assistant discovery names (state-like fields not in the Fields list) ===== -->
+    <string name="ha_door">Ajtó maszk</string>
+    <string name="ha_cruise">Sebességtartó</string>
+    <string name="ha_wp_running">Vízpumpa jár</string>
+    <string name="ha_wp_warn">Vízpumpa figyelmeztetés</string>
+    <string name="ha_cell_warn">HV cella figyelmeztetés</string>
+    <string name="ha_block_n">HV blokk %1$02d</string>
+
+    <!-- ===== Sensor group titles ===== -->
+    <string name="grp_engine">Motor</string>
+    <string name="grp_hybrid_drive">Hibrid hajtás</string>
+    <string name="grp_hybrid_batt">Hibrid akkumulátor</string>
+    <string name="grp_climate">Klíma</string>
+    <string name="grp_drive_brake">Vezetés / fék</string>
+    <string name="grp_maintenance">Karbantartás / állapot</string>
+    <string name="grp_other">Egyéb</string>
+    <string name="grp_debug">DEBUG motor-ECU</string>
+
+    <!-- ===== Sensor labels (engine) ===== -->
+    <string name="f_ct">Hűtővíz</string>
+    <string name="f_rpm">Fordulatszám</string>
+    <string name="f_spd">Sebesség</string>
+    <string name="f_load">Terhelés</string>
+    <string name="f_maf">MAF</string>
+    <string name="f_map">Szívócső nyomás</string>
+    <string name="f_iat">Szívólevegő</string>
+    <string name="f_thr">Fojtószelep</string>
+    <string name="f_pedal">Gázpedál</string>
+    <string name="f_fuel">Fogyasztás</string>
+    <string name="f_engNm">Motor nyomaték</string>
+    <string name="f_injml">Befecskendezés</string>
+    <string name="f_run">Futási idő</string>
+
+    <!-- ===== Sensor labels (hybrid drive) ===== -->
+    <string name="f_mg1t">MG1 hőmérséklet</string>
+    <string name="f_mg1r">MG1 fordulat</string>
+    <string name="f_mg1q">MG1 nyomaték</string>
+    <string name="f_mg2t">MG2 hőmérséklet</string>
+    <string name="f_mg2r">MG2 fordulat</string>
+    <string name="f_mg2q">MG2 nyomaték</string>
+    <string name="f_inv1">Inverter MG1</string>
+    <string name="f_inv2">Inverter MG2</string>
+    <string name="f_btu">Boost konv. felső</string>
+    <string name="f_btl">Boost konv. alsó</string>
+    <string name="f_vl">VL feszültség</string>
+    <string name="f_vh">VH feszültség</string>
+    <string name="f_invct">Inverter hűtővíz</string>
+    <string name="f_invwp">Inverter vízpumpa</string>
+
+    <!-- ===== Sensor labels (hybrid battery) ===== -->
+    <string name="f_soc">Töltöttség</string>
+    <string name="f_hvA">Pack áram</string>
+    <string name="f_hvdis">Kisütési limit</string>
+    <string name="f_hvchg">Töltési limit</string>
+    <string name="f_bmin">Blokk min</string>
+    <string name="f_bmax">Blokk max</string>
+    <string name="f_blkD">Blokk eltérés</string>
+    <string name="f_weakB">Leggyengébb blokk</string>
+    <string name="f_maxR">Max belső ellenállás</string>
+    <string name="f_hvAir">Akku hűtőlevegő</string>
+    <string name="f_tb1">TB1</string>
+    <string name="f_tb2">TB2</string>
+    <string name="f_tb3">TB3</string>
+    <string name="f_tHot">Forró akku idő</string>
+
+    <!-- ===== Sensor labels (climate) ===== -->
+    <string name="f_cabin">Utastér hőmérséklet</string>
+    <string name="f_setT">Beállított hőmérséklet</string>
+    <string name="f_comp">Kompresszor</string>
+    <string name="f_evap">Párologtató</string>
+    <string name="f_acw">A/C teljesítmény</string>
+    <string name="f_solar">Napfény érzékelő</string>
+    <string name="f_acAmb">Külső (klíma)</string>
+    <string name="f_blower">Ventilátor szint</string>
+    <string name="f_acPress">Hűtőközeg nyomás</string>
+
+    <!-- ===== Sensor labels (driving / brake) ===== -->
+    <string name="f_wFL">Kerék BE</string>
+    <string name="f_wFR">Kerék JE</string>
+    <string name="f_wRL">Kerék BH</string>
+    <string name="f_wRR">Kerék JH</string>
+    <string name="f_wDif">Első kerék eltérés</string>
+    <string name="f_gLat">Oldalgyorsulás</string>
+    <string name="f_gFwd">Hosszgyorsulás</string>
+    <string name="f_steer">Kormányszög</string>
+    <string name="f_brkP">Féknyomás</string>
+
+    <!-- ===== Sensor labels (maintenance / status) ===== -->
+    <string name="f_bodyV">12V (karosszéria)</string>
+    <string name="f_fuelIn">Üzemanyagszint</string>
+    <string name="f_oilDist">Olajcsere óta</string>
+    <string name="f_battFan">Akku hűtőventilátor</string>
+    <string name="f_dtcCur">Aktív DTC-k</string>
+    <string name="f_dtcHist">Tárolt DTC-k</string>
+
+    <!-- ===== Sensor labels (other) ===== -->
+    <string name="f_vbat">12V akkumulátor</string>
+    <string name="f_amb">Külső hőmérséklet</string>
+
+    <!-- ===== Sensor labels (debug) ===== -->
+    <string name="f_eFF">2101 első keret (FF)</string>
+    <string name="f_eOK">2101 sikeres</string>
+    <string name="f_eLen">utolsó válasz hossza</string>
+
+    <!-- ===== TPMS (tyre pressure) ===== -->
+    <string name="tpms_connected">TPMS csatlakozva</string>
+    <string name="tpms_no_signal">TPMS: nincs jel</string>
+    <string name="tpms_title">Keréknyomás</string>
+    <string name="tpms_fl">BE</string>
+    <string name="tpms_fr">JE</string>
+    <string name="tpms_rl">BH</string>
+    <string name="tpms_rr">JH</string>
+    <string name="tpms_spare">Pótkerék</string>
+    <string name="tpms_section">TPMS</string>
+    <string name="tpms_query">Érzékelő ID-k lekérése</string>
+    <string name="tpms_pair_button">%1$s párosítása</string>
+    <string name="tpms_pair_stop">Párosítás leállítása</string>
+    <string name="tpms_pair_title">%1$s párosítása</string>
+    <string name="tpms_pair_msg">Aktiváld az érzékelőt (engedj le / fújj fel egy kis levegőt). Figyelés…</string>
+    <string name="tpms_pair_countdown">%1$d s</string>
+    <string name="tpms_id_fmt">ID: %1$s</string>
+
+    <!-- battery health / cruise -->
+    <string name="f_cellW">Cella figyelmeztetés</string>
+    <string name="f_cwL">Cella figy. (tanult)</string>
+    <string name="f_wblk">Gyenge blokk (tanult)</string>
+    <string name="f_wz">Gyenge blokk Z</string>
+    <string name="f_setSpd">Tempomat sebesség</string>
+    <!-- GPS + cruise strip -->
+    <string name="gps_title">GPS</string>
+    <string name="gps_no_fix">nincs jel</string>
+    <string name="perm_location">Helyhozzáférés engedélyezése (GPS)</string>
+    <string name="f_lat">Szélesség</string>
+    <string name="f_lon">Hosszúság</string>
+    <string name="f_gspd">GPS sebesség</string>
+    <string name="f_galt">Magasság</string>
+    <string name="f_gbrg">Irány</string>
+    <string name="f_gacc">Pontosság</string>
+    <string name="opt_setspd">Tempomat sebesség</string>
+    <string name="nlabel_setspd">Tempomat</string>
+    <string name="tab_dashboard">Műszerfal</string>
+    <string name="permissions_title">Engedélyek</string>
+    <!-- trip -->
+    <string name="grp_trip">Út</string>
+    <string name="f_tDist">Táv</string>
+    <string name="f_tFuel">Elfogyott üzemanyag</string>
+    <string name="f_tAvg">Átlag</string>
+    <string name="connection_title">Kapcsolat</string>
+    <!-- battery capacity / SoH -->
+    <string name="f_capAh">Kapacitás</string>
+    <string name="f_capKwh">Energia</string>
+    <string name="f_capSoh">Egészségi állapot (SoH)</string>
+    <string name="battery_ref_label">Referencia kapacitás (Ah)</string>
+    <!-- refuel tab -->
+    <string name="tab_refuel">Tankolás</string>
+    <string name="r_since_refuel">Utolsó tankolás óta</string>
+    <string name="r_time">Idő</string>
+    <string name="r_dist">Táv</string>
+    <string name="r_avgspeed">Átlagsebesség</string>
+    <string name="r_avgcons">Átlagfogyasztás</string>
+    <string name="r_history">Előzmények</string>
+    <string name="r_none">még nincs adat</string>
+    <!-- CAN dump -->
+    <string name="dump_title">CAN dump</string>
+    <string name="dump_desc">Nyers CAN-frame-ek rögzítése (szűrt 0x500–0x6FF, deduplikált) fájlba diagnosztikához. A szenzor-napló érintetlen. Auto-stop 10 perc / 50 MB után.</string>
+    <string name="dump_enabled">CAN dump</string>
+    <string name="dump_share">Dump megosztása</string>
+</resources>

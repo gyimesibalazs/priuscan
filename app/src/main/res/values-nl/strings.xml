@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dutch (nl) locale override. Mirrors values/strings.xml.
+     Keep keys and format specifiers identical to the English base. -->
+<resources>
+
+    <!-- ===== Main screen ===== -->
+    <string name="settings_button">⚙ Instellingen</string>
+    <string name="connected">PriusCAN verbonden</string>
+    <string name="disconnected">Geen verbinding…</string>
+    <string name="perm_overlay">Overlay-toestemming verlenen (vereist voor waarschuwingen)</string>
+    <string name="perm_battery">Batterijoptimalisatie uitschakelen</string>
+    <string name="coolant_caption">koelvloeistof</string>
+    <string name="hv_block_voltages">HV-blokspanningen</string>
+    <string name="block_n">Blok %1$02d</string>
+
+    <!-- header warnings -->
+    <string name="warn_overheat">⚠ OVERVERHITTING  </string>
+    <string name="warn_cooling">⚠ Koelwaarschuwing  </string>
+    <string name="warn_hv_fault">⚠ HV-ACCUSTORING</string>
+    <string name="warn_hv_cell">⚠ HV-celwaarschuwing</string>
+
+    <!-- ===== Settings screen ===== -->
+    <string name="settings_title">Instellingen</string>
+    <string name="status_items_title">Items in de statusbalk</string>
+    <string name="status_items_desc">Elke ingeschakelde waarde krijgt een eigen pictogram in de statusbalk (weergegeven als getal), zodat er meerdere tegelijk zichtbaar zijn.</string>
+    <string name="opt_ct">Koelvloeistoftemperatuur</string>
+    <string name="opt_soc">HV-acculading</string>
+    <string name="opt_rpm">Motortoerental</string>
+    <string name="opt_cons">Actueel verbruik</string>
+    <string name="font_size_label">Lettergrootte statusbalk (sp, 8–48)</string>
+    <string name="reset_status_pos">Positie statusbalk herstellen</string>
+    <string name="local_logging_title">Lokaal loggen</string>
+    <string name="local_logging_desc">Slaat ruwe meetgegevens op in een lokaal JSONL-bestand (ook zonder HA). Dagelijkse rotatie, oudere dagen met gzip gecomprimeerd. Verzameld: %1$s</string>
+    <string name="log_info">%1$s (%2$d bestanden)</string>
+    <string name="logging_enabled">Loggen ingeschakeld</string>
+    <string name="download_logs">Logs downloaden</string>
+    <string name="delete_logs">Logs verwijderen</string>
+    <string name="ha_desc">Home Assistant-verbinding (MQTT). Sensoren verschijnen automatisch in HA via MQTT Discovery. Zonder internet worden batches met tijdstempels gebufferd en bij herverbinding naar %1$s/backlog verzonden.</string>
+    <string name="ha_enabled">HA-integratie ingeschakeld</string>
+    <string name="mqtt_broker">MQTT-broker (host/IP)</string>
+    <string name="mqtt_port">Poort</string>
+    <string name="mqtt_user">Gebruiker (optioneel)</string>
+    <string name="mqtt_pass">Wachtwoord</string>
+    <string name="mqtt_topic_prefix">Topic-prefix</string>
+    <string name="push_interval">Push-interval (seconden)</string>
+    <string name="save">Opslaan</string>
+    <string name="cancel">Annuleren</string>
+
+    <!-- ===== Notifications / status strip (short labels) ===== -->
+    <string name="nlabel_ct">Koelvloeistof</string>
+    <string name="nlabel_soc">HV-accu</string>
+    <string name="nlabel_rpm">Motor</string>
+    <string name="nlabel_cons">Verbruik</string>
+    <string name="notif_connecting">Verbinden met de ESP32…</string>
+
+    <!-- ===== Alerts (sound + overlay pop-up) ===== -->
+    <string name="alert_overheat">OVERVERHITTING! %1$d°C</string>
+    <string name="alert_cooling">Koelwaarschuwing: %1$d°C</string>
+    <string name="alert_hv_fault">HV-ACCUSTORING! ΔU=%1$.2fV (blok %2$d)</string>
+    <string name="alert_hv_cell">HV-celwaarschuwing: ΔU=%1$.2fV</string>
+
+    <!-- ===== Door overlay ===== -->
+    <string name="open_door">DEUR OPEN</string>
+
+    <!-- ===== Home Assistant discovery names (state-like fields not in the Fields list) ===== -->
+    <string name="ha_door">Deurmasker</string>
+    <string name="ha_cruise">Cruisecontrol</string>
+    <string name="ha_wp_running">Waterpomp actief</string>
+    <string name="ha_wp_warn">Waterpompwaarschuwing</string>
+    <string name="ha_cell_warn">HV-celwaarschuwing</string>
+    <string name="ha_block_n">HV-blok %1$02d</string>
+
+    <!-- ===== Sensor group titles ===== -->
+    <string name="grp_engine">Motor</string>
+    <string name="grp_hybrid_drive">Hybride-aandrijving</string>
+    <string name="grp_hybrid_batt">Hybride-accu</string>
+    <string name="grp_climate">Klimaatregeling</string>
+    <string name="grp_drive_brake">Rijden / rem</string>
+    <string name="grp_maintenance">Onderhoud / status</string>
+    <string name="grp_other">Overig</string>
+    <string name="grp_debug">DEBUG motor-ECU</string>
+
+    <!-- ===== Sensor labels (engine) ===== -->
+    <string name="f_ct">Koelvloeistof</string>
+    <string name="f_rpm">Motortoerental</string>
+    <string name="f_spd">Snelheid</string>
+    <string name="f_load">Belasting</string>
+    <string name="f_maf">MAF</string>
+    <string name="f_map">Spruitstukdruk</string>
+    <string name="f_iat">Inlaatlucht</string>
+    <string name="f_thr">Gasklep</string>
+    <string name="f_pedal">Gaspedaal</string>
+    <string name="f_fuel">Verbruik</string>
+    <string name="f_engNm">Motorkoppel</string>
+    <string name="f_injml">Inspuiting</string>
+    <string name="f_run">Looptijd</string>
+
+    <!-- ===== Sensor labels (hybrid drive) ===== -->
+    <string name="f_mg1t">MG1-temp</string>
+    <string name="f_mg1r">MG1-toerental</string>
+    <string name="f_mg1q">MG1-koppel</string>
+    <string name="f_mg2t">MG2-temp</string>
+    <string name="f_mg2r">MG2-toerental</string>
+    <string name="f_mg2q">MG2-koppel</string>
+    <string name="f_inv1">Omvormer MG1</string>
+    <string name="f_inv2">Omvormer MG2</string>
+    <string name="f_btu">Boostomvormer boven</string>
+    <string name="f_btl">Boostomvormer onder</string>
+    <string name="f_vl">VL-spanning</string>
+    <string name="f_vh">VH-spanning</string>
+    <string name="f_invct">Omvormerkoelvloeistof</string>
+    <string name="f_invwp">Omvormerwaterpomp</string>
+
+    <!-- ===== Sensor labels (hybrid battery) ===== -->
+    <string name="f_soc">Lading</string>
+    <string name="f_hvA">Pakketstroom</string>
+    <string name="f_hvdis">Ontlaadlimiet</string>
+    <string name="f_hvchg">Laadlimiet</string>
+    <string name="f_bmin">Blok min</string>
+    <string name="f_bmax">Blok max</string>
+    <string name="f_blkD">Blokverschil</string>
+    <string name="f_weakB">Zwakste blok</string>
+    <string name="f_maxR">Max inwendige weerstand</string>
+    <string name="f_hvAir">Accukoellucht</string>
+    <string name="f_tb1">TB1</string>
+    <string name="f_tb2">TB2</string>
+    <string name="f_tb3">TB3</string>
+    <string name="f_tHot">Tijd warme accu</string>
+
+    <!-- ===== Sensor labels (climate) ===== -->
+    <string name="f_cabin">Interieurtemp</string>
+    <string name="f_setT">Ingestelde temp</string>
+    <string name="f_comp">Compressor</string>
+    <string name="f_evap">Verdamper</string>
+    <string name="f_acw">A/C-vermogen</string>
+    <string name="f_solar">Zonnesensor</string>
+    <string name="f_acAmb">Buiten (klimaat)</string>
+    <string name="f_blower">Ventilatorstand</string>
+    <string name="f_acPress">Koudemiddeldruk</string>
+
+    <!-- ===== Sensor labels (driving / brake) ===== -->
+    <string name="f_wFL">Wiel LV</string>
+    <string name="f_wFR">Wiel RV</string>
+    <string name="f_wRL">Wiel LA</string>
+    <string name="f_wRR">Wiel RA</string>
+    <string name="f_wDif">Verschil voorwielen</string>
+    <string name="f_gLat">Laterale G</string>
+    <string name="f_gFwd">Longitudinale G</string>
+    <string name="f_steer">Stuurhoek</string>
+    <string name="f_brkP">Remdruk</string>
+
+    <!-- ===== Sensor labels (maintenance / status) ===== -->
+    <string name="f_bodyV">12V (carrosserie)</string>
+    <string name="f_fuelIn">Brandstofniveau</string>
+    <string name="f_oilDist">Sinds olieverversing</string>
+    <string name="f_battFan">Accukoelventilator</string>
+    <string name="f_dtcCur">Actieve DTC\'s</string>
+    <string name="f_dtcHist">Opgeslagen DTC\'s</string>
+
+    <!-- ===== Sensor labels (other) ===== -->
+    <string name="f_vbat">12V-accu</string>
+    <string name="f_amb">Buitentemperatuur</string>
+
+    <!-- ===== Sensor labels (debug) ===== -->
+    <string name="f_eFF">2101 eerste frame (FF)</string>
+    <string name="f_eOK">2101 geslaagd</string>
+    <string name="f_eLen">laatste antwoordlengte</string>
+
+
+    <!-- ===== TPMS (bandenspanning) ===== -->
+    <string name="tpms_connected">TPMS verbonden</string>
+    <string name="tpms_no_signal">TPMS: geen signaal</string>
+    <string name="tpms_title">Bandenspanning</string>
+    <string name="tpms_fl">LV</string>
+    <string name="tpms_fr">RV</string>
+    <string name="tpms_rl">LA</string>
+    <string name="tpms_rr">RA</string>
+    <string name="tpms_spare">Reserve</string>
+    <string name="tpms_section">TPMS</string>
+    <string name="tpms_query">Sensor-ID\'s ophalen</string>
+    <string name="tpms_pair_button">%1$s koppelen</string>
+    <string name="tpms_pair_stop">Koppelen stoppen</string>
+    <string name="tpms_pair_title">%1$s koppelen</string>
+    <string name="tpms_pair_msg">Activeer de sensor (laat wat lucht ontsnappen / pomp wat bij). Bezig met luisteren…</string>
+    <string name="tpms_pair_countdown">%1$d s</string>
+    <string name="tpms_id_fmt">ID: %1$s</string>
+
+    <!-- battery health / cruise -->
+    <string name="f_cellW">Celwaarschuwing</string>
+    <string name="f_cwL">Celwaarschuwing (geleerd)</string>
+    <string name="f_wblk">Zwak blok (geleerd)</string>
+    <string name="f_wz">Zwak blok Z</string>
+    <string name="f_setSpd">Cruise-snelheid</string>
+    <!-- GPS + cruise strip -->
+    <string name="gps_title">GPS</string>
+    <string name="gps_no_fix">geen fix</string>
+    <string name="perm_location">Locatietoestemming verlenen (GPS)</string>
+    <string name="f_lat">Breedtegraad</string>
+    <string name="f_lon">Lengtegraad</string>
+    <string name="f_gspd">GPS-snelheid</string>
+    <string name="f_galt">Hoogte</string>
+    <string name="f_gbrg">Koers</string>
+    <string name="f_gacc">Nauwkeurigheid</string>
+    <string name="opt_setspd">Cruise-snelheid</string>
+    <string name="nlabel_setspd">Cruise</string>
+    <string name="tab_dashboard">Dashboard</string>
+    <string name="permissions_title">Toestemmingen</string>
+    <!-- trip -->
+    <string name="grp_trip">Rit</string>
+    <string name="f_tDist">Afstand</string>
+    <string name="f_tFuel">Verbruikte brandstof</string>
+    <string name="f_tAvg">Gemiddelde</string>
+    <string name="connection_title">Verbinding</string>
+    <!-- battery capacity / SoH -->
+    <string name="f_capAh">Capaciteit</string>
+    <string name="f_capKwh">Energie</string>
+    <string name="f_capSoh">Gezondheidstoestand (SoH)</string>
+    <string name="battery_ref_label">Referentiecapaciteit (Ah)</string>
+    <!-- refuel tab -->
+    <string name="tab_refuel">Tanken</string>
+    <string name="r_since_refuel">Sinds laatste tankbeurt</string>
+    <string name="r_time">Tijd</string>
+    <string name="r_dist">Afstand</string>
+    <string name="r_avgspeed">Gem. snelheid</string>
+    <string name="r_avgcons">Gem. verbruik</string>
+    <string name="r_history">Geschiedenis</string>
+    <string name="r_none">nog geen gegevens</string>
+    <!-- CAN dump -->
+    <string name="dump_title">CAN-dump</string>
+    <string name="dump_desc">Ruwe CAN-frames (gefilterd 0x500–0x6FF, ontdubbeld) opnemen in een bestand voor diagnose. Het sensorlog blijft ongemoeid. Stopt automatisch na 10 min / 50 MB.</string>
+    <string name="dump_enabled">CAN-dump</string>
+    <string name="dump_share">Dump delen</string>
+</resources>

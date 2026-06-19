@@ -9,17 +9,17 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Home Assistant integracio MQTT-n keresztul:
+ * Home Assistant integration over MQTT:
  *
- *  - Csatlakozaskor HA MQTT Discovery configokat publikal (retained),
- *    igy az OSSZES szenzor magatol megjelenik HA-ban, "Prius CAN" device alatt.
- *  - A beallitott idokozonkent EGY batch megy ki: a teljes allapot egyetlen
- *    JSON-kent a <prefix>/state topicra; minden HA szenzor value_template-tel
- *    ebbol olvas.
- *  - Ha nincs kapcsolat (nincs net az autoban), a batch-ek ts-sel egyutt
- *    fajlba pufferelodnak; ujracsatlakozaskor a backlog a <prefix>/backlog
- *    topicra megy ki chunkokban. (A HA state machine nem tud visszadatumozni,
- *    ezert a backlog kulon topic - automatizmussal/InfluxDB-vel dolgozhato fel.)
+ *  - On connect it publishes HA MQTT Discovery configs (retained),
+ *    so ALL sensors show up in HA automatically, under the "Prius CAN" device.
+ *  - At the configured interval ONE batch goes out: the full state as a single
+ *    JSON to the <prefix>/state topic; every HA sensor reads from this with a
+ *    value_template.
+ *  - If there is no connection (no internet in the car), the batches are buffered
+ *    to a file together with their ts; on reconnect the backlog goes out to the
+ *    <prefix>/backlog topic in chunks. (The HA state machine can't backdate,
+ *    so the backlog is a separate topic - process it with automation/InfluxDB.)
  *  - LWT: <prefix>/status = offline.
  */
 class HaPusher(private val ctx: Context, private val prefs: Prefs) {
@@ -29,7 +29,7 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
     private var client: MqttClient? = null
 
     private val backlogFile: File get() = File(ctx.filesDir, "ha_backlog.jsonl")
-    private val maxBacklogBytes = 2L * 1024 * 1024   // ~2 MB, utana a legregebbi felet dobjuk
+    private val maxBacklogBytes = 2L * 1024 * 1024   // ~2 MB, beyond that we drop the oldest half
 
     fun start() {
         if (running || !prefs.haEnabled || prefs.mqttHost.isBlank()) return
@@ -52,7 +52,7 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
 
     fun restart() { stop(); start() }
 
-    // ---------------- fo ciklus ----------------
+    // ---------------- main loop ----------------
 
     private fun tick() {
         val state = CanService.state.value
@@ -74,7 +74,7 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
 
     private fun buildPayload(s: CanState): JSONObject {
         val o = JSONObject()
-        o.put("ts", s.ts / 1000)   // unix masodperc
+        o.put("ts", s.ts / 1000)   // unix seconds
         for ((k, v) in s.values) o.put(k, v)
         return o
     }
@@ -84,8 +84,8 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
     private fun ensureConnected(): Boolean {
         if (client?.isConnected == true) return true
         return try {
-            // ha a host mar teljes URI (tcp:// ssl:// ws:// wss://), ugy hasznaljuk;
-            // kulonben tcp://host:port
+            // if the host is already a full URI (tcp:// ssl:// ws:// wss://), use it as-is;
+            // otherwise tcp://host:port
             val h = prefs.mqttHost
             val uri = if (h.contains("://")) h else "tcp://$h:${prefs.mqttPort}"
             val c = MqttClient(uri, "priuscan-headunit", MemoryPersistence())
@@ -141,17 +141,18 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
 
         for ((_, fields) in Fields.groups) {
             for (f in fields) {
-                sensorConfig(f.key, f.label, f.unit, "{{ value_json.${f.key} }}")
+                sensorConfig(f.key, ctx.getString(f.labelRes), f.unit, "{{ value_json.${f.key} }}")
             }
         }
-        // allapot-jellegu mezok, amik nincsenek a Fields listaban
-        sensorConfig("door", "Ajtó maszk", "", "{{ value_json.door }}")
-        sensorConfig("cruise", "Tempomat", "", "{{ value_json.cruise }}")
-        sensorConfig("wpRun", "Vízpumpa jár", "", "{{ value_json.wpRun }}")
-        sensorConfig("wpW", "Vízpumpa warning", "", "{{ value_json.wpW }}")
-        sensorConfig("cellW", "HV cella warning", "", "{{ value_json.cellW }}")
+        // state-like fields that are not in the Fields list (HA entity identity is the
+        // topic/key, so the localized friendly name is safe to change with locale)
+        sensorConfig("door", ctx.getString(R.string.ha_door), "", "{{ value_json.door }}")
+        sensorConfig("cruise", ctx.getString(R.string.ha_cruise), "", "{{ value_json.cruise }}")
+        sensorConfig("wpRun", ctx.getString(R.string.ha_wp_running), "", "{{ value_json.wpRun }}")
+        sensorConfig("wpW", ctx.getString(R.string.ha_wp_warn), "", "{{ value_json.wpW }}")
+        sensorConfig("cellW", ctx.getString(R.string.ha_cell_warn), "", "{{ value_json.cellW }}")
         for (i in 1..14) {
-            sensorConfig("b%02d".format(i), "HV blokk %02d".format(i), "V",
+            sensorConfig("b%02d".format(i), ctx.getString(R.string.ha_block_n, i), "V",
                 "{{ value_json.b%02d }}".format(i))
         }
     }
@@ -167,7 +168,7 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
     }
 
     private fun trimBacklog() {
-        // a legregebbi fele megy a kukaba
+        // the oldest half gets thrown away
         val lines = backlogFile.readLines()
         backlogFile.writeText(lines.drop(lines.size / 2).joinToString("\n", postfix = "\n"))
     }
@@ -176,7 +177,7 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
     private fun flushBacklog() {
         if (!backlogFile.exists() || backlogFile.length() == 0L) return
         val lines = backlogFile.readLines().filter { it.isNotBlank() }
-        // 50-es chunkokban, JSON tombkent
+        // in chunks of 50, as a JSON array
         var i = 0
         while (i < lines.size) {
             val chunk = JSONArray()

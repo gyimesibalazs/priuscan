@@ -1,113 +1,109 @@
 package hu.codingo.priuscan
 
+import androidx.annotation.StringRes
 import org.json.JSONObject
 
-/** Egy szenzormezo leiroja a megjeleniteshez. */
+/** Descriptor of a single sensor field for display. label is a string resource id. */
 data class Field(
     val key: String,
-    val label: String,
+    @StringRes val labelRes: Int,
     val unit: String = "",
     val decimals: Int = 0,
 )
 
-/** A megjelenitesi sorrend es csoportositas - a fo kepernyo ebbol epul.
- *  A kulcsok a prius_parse.h emit_json() kimenetevel egyeznek (v2 config). */
+/** The display order and grouping - the main screen is built from this.
+ *  Group titles and field labels are string resources (localized).
+ *  The keys match the output of prius_parse.h emit_json() (v2 config). */
 object Fields {
-    val groups: List<Pair<String, List<Field>>> = listOf(
-        "Motor" to listOf(
-            Field("ct", "Hűtővíz", "°C"),
-            Field("rpm", "Fordulat", "rpm"),
-            Field("spd", "Sebesség", "km/h"),
-            Field("load", "Terhelés", "%"),
-            Field("maf", "MAF", "g/s", 1),
-            Field("map", "Szívócső nyomás", "kPa"),
-            Field("iat", "Szívólevegő", "°C"),
-            Field("thr", "Fojtószelep", "%"),
-            Field("pedal", "Gázpedál", "%"),
-            Field("fuel", "Fogyasztás", "l/h", 1),
-            Field("engNm", "Motornyomaték", "Nm"),
-            Field("injml", "Befecskendezés", "ml", 3),
-            Field("run", "Futási idő", "s"),
+    /** Shown on the dashboard only (not a tab). */
+    val trip = listOf(
+        Field("tDist", R.string.f_tDist, "km", 1),
+        Field("tFuel", R.string.f_tFuel, "L", 2),
+        Field("tAvg", R.string.f_tAvg, "l/100km", 1),
+    )
+
+    val groups: List<Pair<Int, List<Field>>> = listOf(
+        R.string.grp_engine to listOf(
+            Field("ct", R.string.f_ct, "°C"),
+            Field("rpm", R.string.f_rpm, "rpm"),
+            Field("spd", R.string.f_spd, "km/h"),
+            Field("load", R.string.f_load, "%"),
+            Field("maf", R.string.f_maf, "g/s", 1),
+            Field("map", R.string.f_map, "kPa"),
+            Field("iat", R.string.f_iat, "°C"),
+            Field("thr", R.string.f_thr, "%"),
+            Field("pedal", R.string.f_pedal, "%"),
+            Field("fuel", R.string.f_fuel, "l/h", 1),
+            Field("engNm", R.string.f_engNm, "Nm"),
+            Field("injml", R.string.f_injml, "ml", 3),
+            Field("run", R.string.f_run, "s"),
         ),
-        "Hibrid hajtás" to listOf(
-            Field("mg1t", "MG1 hőfok", "°C"),
-            Field("mg1r", "MG1 fordulat", "rpm"),
-            Field("mg1q", "MG1 nyomaték", "Nm"),
-            Field("mg2t", "MG2 hőfok", "°C"),
-            Field("mg2r", "MG2 fordulat", "rpm"),
-            Field("mg2q", "MG2 nyomaték", "Nm"),
-            Field("inv1", "Inverter MG1", "°C"),
-            Field("inv2", "Inverter MG2", "°C"),
-            Field("btu", "Boost konv. felső", "°C"),
-            Field("btl", "Boost konv. alsó", "°C"),
-            Field("vl", "VL feszültség", "V"),
-            Field("vh", "VH feszültség", "V"),
-            Field("invct", "Inverter hűtővíz", "°C"),
-            Field("invwp", "Inverter vízpumpa", "rpm"),
+        R.string.grp_hybrid_drive to listOf(
+            Field("mg1t", R.string.f_mg1t, "°C"),
+            Field("mg1r", R.string.f_mg1r, "rpm"),
+            Field("mg1q", R.string.f_mg1q, "Nm"),
+            Field("mg2t", R.string.f_mg2t, "°C"),
+            Field("mg2r", R.string.f_mg2r, "rpm"),
+            Field("mg2q", R.string.f_mg2q, "Nm"),
+            Field("inv1", R.string.f_inv1, "°C"),
+            Field("inv2", R.string.f_inv2, "°C"),
+            Field("btu", R.string.f_btu, "°C"),
+            Field("btl", R.string.f_btl, "°C"),
+            Field("vl", R.string.f_vl, "V"),
+            Field("vh", R.string.f_vh, "V"),
+            Field("invct", R.string.f_invct, "°C"),
+            Field("invwp", R.string.f_invwp, "rpm"),
         ),
-        "Hibrid akku" to listOf(
-            Field("soc", "Töltöttség", "%"),
-            Field("hvA", "Pack áram", "A", 1),
-            Field("hvdis", "Kisütési limit", "kW", 1),
-            Field("hvchg", "Töltési limit", "kW", 1),
-            Field("bmin", "Blokk min", "V", 2),
-            Field("bmax", "Blokk max", "V", 2),
-            Field("blkD", "Blokk delta", "V", 2),
-            Field("weakB", "Leggyengébb blokk"),
-            Field("maxR", "Max belső ellenállás", "mΩ"),
-            Field("hvAir", "Akku hűtőlevegő", "°C"),
-            Field("tb1", "TB1", "°C"),
-            Field("tb2", "TB2", "°C"),
-            Field("tb3", "TB3", "°C"),
-            Field("tHot", "Forró akku idő"),
+        R.string.grp_hybrid_batt to listOf(
+            Field("soc", R.string.f_soc, "%"),
+            Field("hvA", R.string.f_hvA, "A", 1),
+            Field("hvdis", R.string.f_hvdis, "kW", 1),
+            Field("hvchg", R.string.f_hvchg, "kW", 1),
+            Field("bmin", R.string.f_bmin, "V", 2),
+            Field("bmax", R.string.f_bmax, "V", 2),
+            Field("blkD", R.string.f_blkD, "V", 2),
+            Field("weakB", R.string.f_weakB),
+            Field("maxR", R.string.f_maxR, "mΩ"),
+            Field("hvAir", R.string.f_hvAir, "°C"),
+            Field("tb1", R.string.f_tb1, "°C"),
+            Field("tb2", R.string.f_tb2, "°C"),
+            Field("tb3", R.string.f_tb3, "°C"),
+            Field("tHot", R.string.f_tHot),
+            Field("battFan", R.string.f_battFan, "%"),
+            Field("cellW", R.string.f_cellW),
+            Field("cwL", R.string.f_cwL),
+            Field("wblk", R.string.f_wblk),
+            Field("wz", R.string.f_wz, "", 2),
+            Field("capAh", R.string.f_capAh, "Ah", 2),
+            Field("capKwh", R.string.f_capKwh, "kWh", 2),
         ),
-        "Klíma" to listOf(
-            Field("cabin", "Kabinhőfok", "°C"),
-            Field("setT", "Beállított hőfok", "°C", 1),
-            Field("comp", "Kompresszor", "rpm"),
-            Field("evap", "Párologtató", "°C"),
-            Field("acw", "A/C fogyasztás", "W"),
-            Field("solar", "Napszenzor"),
-            Field("acAmb", "Külső (klíma)", "°C"),
-            Field("blower", "Ventilátor szint"),
-            Field("acPress", "Hűtőközeg nyomás", "MPa", 2),
+        R.string.grp_climate to listOf(
+            Field("cabin", R.string.f_cabin, "°C"),
+            Field("setT", R.string.f_setT, "°C", 1),
+            Field("comp", R.string.f_comp, "rpm"),
+            Field("evap", R.string.f_evap, "°C"),
+            Field("acw", R.string.f_acw, "W"),
+            Field("solar", R.string.f_solar),
+            Field("acAmb", R.string.f_acAmb, "°C"),
+            Field("blower", R.string.f_blower),
+            Field("acPress", R.string.f_acPress, "MPa", 2),
         ),
-        "Menet / fék" to listOf(
-            Field("wFL", "Kerék BE", "km/h", 1),
-            Field("wFR", "Kerék JE", "km/h", 1),
-            Field("wRL", "Kerék BH", "km/h", 1),
-            Field("wRR", "Kerék JH", "km/h", 1),
-            Field("wDif", "Első kerék eltérés", "%", 2),
-            Field("gLat", "Oldalgyorsulás", "m/s²", 2),
-            Field("gFwd", "Hosszgyorsulás", "m/s²", 2),
-            Field("steer", "Kormányszög", "°"),
-            Field("brkP", "Féknyomás", "V", 2),
-        ),
-        "Karbantartás / állapot" to listOf(
-            Field("bodyV", "12V (body)", "V", 1),
-            Field("fuelIn", "Üzemanyagszint", "L", 1),
-            Field("oilDist", "Olajcsere óta", "km"),
-            Field("battFan", "Akku hűtőventilátor", "%"),
-            Field("dtcCur", "Aktív hibakódok"),
-            Field("dtcHist", "Korábbi hibakódok"),
-        ),
-        "Egyéb" to listOf(
-            Field("vbat", "12V akku", "V", 2),
-            Field("amb", "Külső hőfok", "°C"),
-        ),
-        // IDEIGLENES motor-ECU diagnosztika (eltávolítható, ha kész):
-        //  eFF = hány első keret jött a motor-ECU-tól, eOK = hány 2101 fejeződött be.
-        //  Ha eFF folyamatosan nő, de eOK alig -> a CF-ek vesznek el (RX/timing).
-        "DEBUG motor-ECU" to listOf(
-            Field("eFF", "2101 első keret (FF)"),
-            Field("eOK", "2101 sikeres"),
-            Field("eLen", "utolsó válasz hossz", "B"),
+        R.string.grp_drive_brake to listOf(
+            Field("wFL", R.string.f_wFL, "km/h", 1),
+            Field("wFR", R.string.f_wFR, "km/h", 1),
+            Field("wRL", R.string.f_wRL, "km/h", 1),
+            Field("wRR", R.string.f_wRR, "km/h", 1),
+            Field("wDif", R.string.f_wDif, "%", 2),
+            Field("gLat", R.string.f_gLat, "m/s²", 2),
+            Field("gFwd", R.string.f_gFwd, "m/s²", 2),
+            Field("steer", R.string.f_steer, "°"),
+            Field("brkP", R.string.f_brkP, "V", 2),
         ),
     )
 }
 
 
-/** Egy beerkezett allapot-pillanatkep. */
+/** A single received state snapshot. */
 class CanState(json: JSONObject?) {
 
     val values = HashMap<String, Double>()
@@ -116,7 +112,7 @@ class CanState(json: JSONObject?) {
     init {
         if (json != null) {
             for (key in json.keys()) {
-                // a firmware a HV blokkokat b01..b14 kulcskent kuldi (nem tombkent)
+                // the firmware sends the HV blocks as keys b01..b14 (not as an array)
                 val v = json.optDouble(key)
                 if (!v.isNaN()) values[key] = v
             }

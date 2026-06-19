@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- French locale override. Translated from the English base. -->
+<resources>
+
+    <!-- ===== Main screen ===== -->
+    <string name="settings_button">⚙ Réglages</string>
+    <string name="connected">PriusCAN connecté</string>
+    <string name="disconnected">Aucune connexion…</string>
+    <string name="perm_overlay">Accorder l\'autorisation de superposition (requise pour les alertes)</string>
+    <string name="perm_battery">Désactiver l\'optimisation de la batterie</string>
+    <string name="coolant_caption">liquide de refroidissement</string>
+    <string name="hv_block_voltages">Tensions des blocs HV</string>
+    <string name="block_n">Bloc %1$02d</string>
+
+    <!-- header warnings -->
+    <string name="warn_overheat">⚠ SURCHAUFFE  </string>
+    <string name="warn_cooling">⚠ Alerte refroidissement  </string>
+    <string name="warn_hv_fault">⚠ DÉFAUT BATTERIE HV</string>
+    <string name="warn_hv_cell">⚠ Alerte cellule HV</string>
+
+    <!-- ===== Settings screen ===== -->
+    <string name="settings_title">Réglages</string>
+    <string name="status_items_title">Éléments de la barre d\'état</string>
+    <string name="status_items_desc">Chaque valeur activée dispose de sa propre icône dans la barre d\'état (affichée sous forme de chiffre), afin d\'en visualiser plusieurs à la fois.</string>
+    <string name="opt_ct">Température du liquide de refroidissement</string>
+    <string name="opt_soc">Charge de la batterie HV</string>
+    <string name="opt_rpm">Régime moteur</string>
+    <string name="opt_cons">Consommation instantanée</string>
+    <string name="font_size_label">Taille de police de la barre d\'état (sp, 8–48)</string>
+    <string name="reset_status_pos">Réinitialiser la position de la barre d\'état</string>
+    <string name="local_logging_title">Journalisation locale</string>
+    <string name="local_logging_desc">Enregistre les données brutes de mesure dans un fichier JSONL local (même sans HA). Rotation quotidienne, jours plus anciens compressés en gzip. Accumulé : %1$s</string>
+    <string name="log_info">%1$s (%2$d fichiers)</string>
+    <string name="logging_enabled">Journalisation activée</string>
+    <string name="download_logs">Télécharger les journaux</string>
+    <string name="delete_logs">Supprimer les journaux</string>
+    <string name="ha_desc">Connexion Home Assistant (MQTT). Les capteurs apparaissent automatiquement dans HA via MQTT Discovery. Sans Internet, les lots sont mis en mémoire tampon avec horodatage et envoyés à %1$s/backlog à la reconnexion.</string>
+    <string name="ha_enabled">Intégration HA activée</string>
+    <string name="mqtt_broker">Broker MQTT (hôte/IP)</string>
+    <string name="mqtt_port">Port</string>
+    <string name="mqtt_user">Utilisateur (facultatif)</string>
+    <string name="mqtt_pass">Mot de passe</string>
+    <string name="mqtt_topic_prefix">Préfixe de sujet</string>
+    <string name="push_interval">Intervalle d\'envoi (secondes)</string>
+    <string name="save">Enregistrer</string>
+    <string name="cancel">Annuler</string>
+
+    <!-- ===== Notifications / status strip (short labels) ===== -->
+    <string name="nlabel_ct">Refroidissement</string>
+    <string name="nlabel_soc">Batterie HV</string>
+    <string name="nlabel_rpm">Moteur</string>
+    <string name="nlabel_cons">Consommation</string>
+    <string name="notif_connecting">Connexion à l\'ESP32…</string>
+
+    <!-- ===== Alerts (sound + overlay pop-up) ===== -->
+    <string name="alert_overheat">SURCHAUFFE ! %1$d°C</string>
+    <string name="alert_cooling">Alerte refroidissement : %1$d°C</string>
+    <string name="alert_hv_fault">DÉFAUT BATTERIE HV ! ΔU=%1$.2fV (bloc %2$d)</string>
+    <string name="alert_hv_cell">Alerte cellule HV : ΔU=%1$.2fV</string>
+
+    <!-- ===== Door overlay ===== -->
+    <string name="open_door">PORTE OUVERTE</string>
+
+    <!-- ===== Home Assistant discovery names (state-like fields not in the Fields list) ===== -->
+    <string name="ha_door">Masque des portes</string>
+    <string name="ha_cruise">Régulateur de vitesse</string>
+    <string name="ha_wp_running">Pompe à eau en marche</string>
+    <string name="ha_wp_warn">Alerte pompe à eau</string>
+    <string name="ha_cell_warn">Alerte cellule HV</string>
+    <string name="ha_block_n">Bloc HV %1$02d</string>
+
+    <!-- ===== Sensor group titles ===== -->
+    <string name="grp_engine">Moteur</string>
+    <string name="grp_hybrid_drive">Transmission hybride</string>
+    <string name="grp_hybrid_batt">Batterie hybride</string>
+    <string name="grp_climate">Climatisation</string>
+    <string name="grp_drive_brake">Conduite / freinage</string>
+    <string name="grp_maintenance">Entretien / état</string>
+    <string name="grp_other">Autre</string>
+    <string name="grp_debug">DEBUG ECU moteur</string>
+
+    <!-- ===== Sensor labels (engine) ===== -->
+    <string name="f_ct">Refroidissement</string>
+    <string name="f_rpm">Régime moteur</string>
+    <string name="f_spd">Vitesse</string>
+    <string name="f_load">Charge</string>
+    <string name="f_maf">MAF</string>
+    <string name="f_map">Pression d\'admission</string>
+    <string name="f_iat">Air d\'admission</string>
+    <string name="f_thr">Papillon</string>
+    <string name="f_pedal">Accélérateur</string>
+    <string name="f_fuel">Consommation</string>
+    <string name="f_engNm">Couple moteur</string>
+    <string name="f_injml">Injection</string>
+    <string name="f_run">Durée de fonctionnement</string>
+
+    <!-- ===== Sensor labels (hybrid drive) ===== -->
+    <string name="f_mg1t">Temp. MG1</string>
+    <string name="f_mg1r">Régime MG1</string>
+    <string name="f_mg1q">Couple MG1</string>
+    <string name="f_mg2t">Temp. MG2</string>
+    <string name="f_mg2r">Régime MG2</string>
+    <string name="f_mg2q">Couple MG2</string>
+    <string name="f_inv1">Onduleur MG1</string>
+    <string name="f_inv2">Onduleur MG2</string>
+    <string name="f_btu">Convertisseur élévateur sup.</string>
+    <string name="f_btl">Convertisseur élévateur inf.</string>
+    <string name="f_vl">Tension VL</string>
+    <string name="f_vh">Tension VH</string>
+    <string name="f_invct">Refroidissement onduleur</string>
+    <string name="f_invwp">Pompe à eau onduleur</string>
+
+    <!-- ===== Sensor labels (hybrid battery) ===== -->
+    <string name="f_soc">Charge</string>
+    <string name="f_hvA">Courant du pack</string>
+    <string name="f_hvdis">Limite de décharge</string>
+    <string name="f_hvchg">Limite de charge</string>
+    <string name="f_bmin">Bloc min</string>
+    <string name="f_bmax">Bloc max</string>
+    <string name="f_blkD">Écart de bloc</string>
+    <string name="f_weakB">Bloc le plus faible</string>
+    <string name="f_maxR">Résistance interne max</string>
+    <string name="f_hvAir">Air de refroidissement batterie</string>
+    <string name="f_tb1">TB1</string>
+    <string name="f_tb2">TB2</string>
+    <string name="f_tb3">TB3</string>
+    <string name="f_tHot">Durée batterie chaude</string>
+
+    <!-- ===== Sensor labels (climate) ===== -->
+    <string name="f_cabin">Temp. habitacle</string>
+    <string name="f_setT">Temp. de consigne</string>
+    <string name="f_comp">Compresseur</string>
+    <string name="f_evap">Évaporateur</string>
+    <string name="f_acw">Puissance A/C</string>
+    <string name="f_solar">Capteur solaire</string>
+    <string name="f_acAmb">Extérieur (climatisation)</string>
+    <string name="f_blower">Niveau de ventilation</string>
+    <string name="f_acPress">Pression du réfrigérant</string>
+
+    <!-- ===== Sensor labels (driving / brake) ===== -->
+    <string name="f_wFL">Roue AVG</string>
+    <string name="f_wFR">Roue AVD</string>
+    <string name="f_wRL">Roue ARG</string>
+    <string name="f_wRR">Roue ARD</string>
+    <string name="f_wDif">Différence roues avant</string>
+    <string name="f_gLat">G latéral</string>
+    <string name="f_gFwd">G longitudinal</string>
+    <string name="f_steer">Angle de braquage</string>
+    <string name="f_brkP">Pression de freinage</string>
+
+    <!-- ===== Sensor labels (maintenance / status) ===== -->
+    <string name="f_bodyV">12V (carrosserie)</string>
+    <string name="f_fuelIn">Niveau de carburant</string>
+    <string name="f_oilDist">Depuis la vidange</string>
+    <string name="f_battFan">Ventilateur de refroidissement batterie</string>
+    <string name="f_dtcCur">DTC actifs</string>
+    <string name="f_dtcHist">DTC enregistrés</string>
+
+    <!-- ===== Sensor labels (other) ===== -->
+    <string name="f_vbat">Batterie 12V</string>
+    <string name="f_amb">Température extérieure</string>
+
+    <!-- ===== Sensor labels (debug) ===== -->
+    <string name="f_eFF">Première trame 2101 (FF)</string>
+    <string name="f_eOK">2101 réussi</string>
+    <string name="f_eLen">longueur de la dernière réponse</string>
+
+    <!-- ===== TPMS (pression des pneus) ===== -->
+    <string name="tpms_connected">TPMS connecté</string>
+    <string name="tpms_no_signal">TPMS : aucun signal</string>
+    <string name="tpms_title">Pression des pneus</string>
+    <string name="tpms_fl">AVG</string>
+    <string name="tpms_fr">AVD</string>
+    <string name="tpms_rl">ARG</string>
+    <string name="tpms_rr">ARD</string>
+    <string name="tpms_spare">Secours</string>
+    <string name="tpms_section">TPMS</string>
+    <string name="tpms_query">Obtenir les ID des capteurs</string>
+    <string name="tpms_pair_button">Associer %1$s</string>
+    <string name="tpms_pair_stop">Arrêter l\'association</string>
+    <string name="tpms_pair_title">Association de %1$s</string>
+    <string name="tpms_pair_msg">Activez le capteur (laissez échapper / gonflez un peu d\'air). Écoute en cours…</string>
+    <string name="tpms_pair_countdown">%1$d s</string>
+    <string name="tpms_id_fmt">ID : %1$s</string>
+
+    <!-- battery health / cruise -->
+    <string name="f_cellW">Alerte cellule</string>
+    <string name="f_cwL">Alerte cellule (apprise)</string>
+    <string name="f_wblk">Bloc faible (appris)</string>
+    <string name="f_wz">Bloc faible Z</string>
+    <string name="f_setSpd">Vitesse régulateur</string>
+    <!-- GPS + cruise strip -->
+    <string name="gps_title">GPS</string>
+    <string name="gps_no_fix">pas de fix</string>
+    <string name="perm_location">Autoriser la localisation (GPS)</string>
+    <string name="f_lat">Latitude</string>
+    <string name="f_lon">Longitude</string>
+    <string name="f_gspd">Vitesse GPS</string>
+    <string name="f_galt">Altitude</string>
+    <string name="f_gbrg">Cap</string>
+    <string name="f_gacc">Précision</string>
+    <string name="opt_setspd">Vitesse régulateur</string>
+    <string name="nlabel_setspd">Régulateur</string>
+    <string name="tab_dashboard">Tableau de bord</string>
+    <string name="permissions_title">Autorisations</string>
+    <!-- trip -->
+    <string name="grp_trip">Trajet</string>
+    <string name="f_tDist">Distance</string>
+    <string name="f_tFuel">Carburant consommé</string>
+    <string name="f_tAvg">Moyenne</string>
+    <string name="connection_title">Connexion</string>
+    <!-- battery capacity / SoH -->
+    <string name="f_capAh">Capacité</string>
+    <string name="f_capKwh">Énergie</string>
+    <string name="f_capSoh">État de santé (SoH)</string>
+    <string name="battery_ref_label">Capacité de référence (Ah)</string>
+    <!-- refuel tab -->
+    <string name="tab_refuel">Plein</string>
+    <string name="r_since_refuel">Depuis le dernier plein</string>
+    <string name="r_time">Temps</string>
+    <string name="r_dist">Distance</string>
+    <string name="r_avgspeed">Vitesse moyenne</string>
+    <string name="r_avgcons">Conso. moyenne</string>
+    <string name="r_history">Historique</string>
+    <string name="r_none">pas encore de données</string>
+    <!-- CAN dump -->
+    <string name="dump_title">Capture CAN</string>
+    <string name="dump_desc">Enregistrer les trames CAN brutes (filtrées 0x500–0x6FF, dédupliquées) dans un fichier pour le diagnostic. Le journal capteur reste intact. Arrêt auto après 10 min / 50 Mo.</string>
+    <string name="dump_enabled">Capture CAN</string>
+    <string name="dump_share">Partager la capture</string>
+</resources>

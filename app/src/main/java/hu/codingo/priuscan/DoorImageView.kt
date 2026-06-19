@@ -9,13 +9,13 @@ import android.util.LruCache
 import android.view.View
 
 /**
- * Elore renderelt felulnezeti Prius kepek ajto-kombinacionkent. Minden
- * kombinaciohoz egy PNG az assetsben: car_<door-maszk hex>.png (Blenderrel
- * renderelve, atlatszo hatter). A door-maszk also bitjei alapjan toltjuk be a
- * megfelelo kepet es rajzoljuk kozepre, aranytartoan. Nincs GL/Filament.
+ * Pre-rendered top-down Prius images per door combination. Each
+ * combination has a PNG in assets: car_<door-mask hex>.png (rendered
+ * with Blender, transparent background). Based on the lower bits of the door mask
+ * we load the matching image and draw it centered, keeping the aspect ratio. No GL/Filament.
  *
- * Bit-kiosztas (a firmware-rel egyezik):
- *   0x80 vezeto, 0x40 utas, 0x08 bal hatso, 0x04 jobb hatso, 0x01 csomagtarto.
+ * Bit layout (matches the firmware):
+ *   0x80 driver, 0x40 passenger, 0x08 rear left, 0x04 rear right, 0x01 trunk.
  */
 class DoorImageView(ctx: Context) : View(ctx) {
 
