@@ -1,26 +1,44 @@
-# Prius XW30 – TELJES CAN/OBD monitor ESP32-C6 Super Mini-n
+# Prius XW30 – FULL CAN/OBD monitor on the ESP32-C6 Super Mini
 # ============================================================
-# Forras: PriusChat "GenIII Prius 4-24-12" Torque CSV (usbseawolf2000),
-# minden keplet es bajt-offset ONNAN szarmazik -> verifikalt.
+# Source: PriusChat "GenIII Prius 4-24-12" Torque CSV (usbseawolf2000),
+# every formula and byte offset comes FROM THERE -> verified.
 #
-# Negy diag-ECU, ISO-TP-vel:
-#   7E0  motor-ECU      (mode 21 01: alap motoradatok)
-#   7E2  hibrid-ECU     (mode 21: MG, inverter, boost, HV akku, vizpumpa)
-#   7C4  klima-ECU      (mode 21: kompresszor, homersekletek)
-#   7B0  ABS/fek-ECU    (mode 21: kerekek, G-szenzorok, kormany)
-# Valaszok: keres+8 (7E8/7EA/7CC/7B8).
+# Four diag ECUs, over ISO-TP:
+#   7E0  engine ECU     (mode 21 01: basic engine data)
+#   7E2  hybrid ECU     (mode 21: MG, inverter, boost, HV battery, water pump)
+#   7C4  climate ECU    (mode 21: compressor, temperatures)
+#   7B0  ABS/brake ECU  (mode 21: wheels, G-sensors, steering)
+# Responses: request+8 (7E8/7EA/7CC/7B8).
 #
-# Plusz passziv broadcast frame-ek (ajto, lampa, tempomat) keres nelkul.
+# Plus passive broadcast frames (door, lamp, cruise control) with no request.
 #
-# Bekotes: OBD 6->CAN-H, 14->CAN-L, 4/5->GND (kozos!)
-# SN65HVD230: VCC->3V3, RS->GND, D->GPIO4, R->GPIO5. Tap: fejegyseg USB-C.
-# Kimenet: JSON sor a nativ USB-n (VID 303A PID 1001).
+# Wiring: OBD 6->CAN-H, 14->CAN-L, 4/5->GND (common!)
+# SN65HVD230: VCC->3V3, RS->GND, D->GPIO4, R->GPIO5. Power: head unit USB-C.
+# Output: JSON line over native USB (VID 303A PID 1001).
 
 esphome:
   name: prius-can
   friendly_name: Prius CAN
   includes:
     - prius_parse.h
+  on_boot:
+    priority: -100   # the globals have been restored by then
+    then:
+      - lambda: 'prius::learn_import(id(learn_state).data()); prius::cap_import(id(cap_state).data()); prius::last_refuel_epoch = id(refuel_epoch);'
+
+# Persistent storage of the self-learning weak-block baseline (lz[14] + sample count).
+# restore_value: restored on boot, periodically flushed to flash (the YAML
+# also writes out the header state every 60 s so the latest gets saved).
+globals:
+  - id: learn_state
+    type: "std::array<float, 15>"
+    restore_value: yes
+  - id: cap_state          # self-learned pack capacity: {cap_ah, cap_n, vl_avg}
+    type: "std::array<float, 3>"
+    restore_value: yes
+  - id: refuel_epoch       # unix seconds of the last detected refuel (persisted)
+    type: uint32_t
+    restore_value: yes
 
 esp32:
   board: esp32-c3-devkitm-1
@@ -31,29 +49,20 @@ logger:
   level: WARN
   hardware_uart: USB_SERIAL_JTAG
 
-# --- IDEIGLENES a G-szenzor debughoz: wifi AP + web UI ---
-# A web UI-n (http://192.168.4.1) elve latod a szenzorokat.
-# Ha kesz a kalibralas, ez a harom blokk torolheto a nyugalmi
-# (halozatmentes) uzemhez.
-wifi:
-  ap:
-    ssid: "PriusCAN"
-    password: "prius2026"
+# Quiet (network-free) operation: no wifi/web_server/OTA. The JSON goes out over
+# the serial (USB) port. For G-sensor calibration the wifi AP + web_server can be
+# temporarily put back (the raw0..raw7 sensors are already in place).
 
-web_server:
-  port: 80
-  version: 2
-
-# ====================== SZENZOROK ======================
+# ====================== SENSORS ======================
 sensor:
-  # ---- motor (7E0 mode 2101) ----
+  # ---- engine (7E0 mode 2101) ----
   - platform: template
     name: "Calc Load"
     id: load
     unit_of_measurement: "%"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("load");
+      float v = prius::get("load");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -62,7 +71,7 @@ sensor:
     unit_of_measurement: "g/s"
     accuracy_decimals: 1
     lambda: |-
-      float v = prius::V.get("maf");
+      float v = prius::get("maf");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -71,7 +80,7 @@ sensor:
     unit_of_measurement: "kPa"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("map");
+      float v = prius::get("map");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -81,7 +90,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("iat");
+      float v = prius::get("iat");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -91,7 +100,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("ct");
+      float v = prius::get("ct");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -100,7 +109,7 @@ sensor:
     unit_of_measurement: "rpm"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("rpm");
+      float v = prius::get("rpm");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -109,7 +118,7 @@ sensor:
     unit_of_measurement: "km/h"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("spd");
+      float v = prius::get("spd");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -118,11 +127,11 @@ sensor:
     unit_of_measurement: "s"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("run");
+      float v = prius::get("run");
       if (std::isnan(v)) return {};
       return v;
 
-  # ---- hibrid alap (7E2 mode 2101 / 015B) ----
+  # ---- hybrid basics (7E2 mode 2101 / 015B) ----
   - platform: template
     name: "SoC"
     id: soc
@@ -130,7 +139,7 @@ sensor:
     device_class: battery
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("soc");
+      float v = prius::get("soc");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -139,7 +148,7 @@ sensor:
     unit_of_measurement: "%"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("thr");
+      float v = prius::get("thr");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -148,7 +157,7 @@ sensor:
     unit_of_measurement: "%"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("pedal");
+      float v = prius::get("pedal");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -158,7 +167,7 @@ sensor:
     device_class: voltage
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("vbat");
+      float v = prius::get("vbat");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -168,7 +177,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("amb");
+      float v = prius::get("amb");
       if (std::isnan(v)) return {};
       return v;
 
@@ -180,7 +189,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("mg1t");
+      float v = prius::get("mg1t");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -189,7 +198,7 @@ sensor:
     unit_of_measurement: "rpm"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("mg1r");
+      float v = prius::get("mg1r");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -198,7 +207,7 @@ sensor:
     unit_of_measurement: "Nm"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("mg1q");
+      float v = prius::get("mg1q");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -208,7 +217,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("mg2t");
+      float v = prius::get("mg2t");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -217,7 +226,7 @@ sensor:
     unit_of_measurement: "rpm"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("mg2r");
+      float v = prius::get("mg2r");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -226,7 +235,7 @@ sensor:
     unit_of_measurement: "Nm"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("mg2q");
+      float v = prius::get("mg2q");
       if (std::isnan(v)) return {};
       return v;
 
@@ -238,7 +247,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("inv1");
+      float v = prius::get("inv1");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -248,7 +257,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("inv2");
+      float v = prius::get("inv2");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -258,7 +267,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("btu");
+      float v = prius::get("btu");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -268,7 +277,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("btl");
+      float v = prius::get("btl");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -277,7 +286,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("vl");
+      float v = prius::get("vl");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -286,7 +295,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("vh");
+      float v = prius::get("vh");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -296,7 +305,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("invct");
+      float v = prius::get("invct");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -305,7 +314,7 @@ sensor:
     unit_of_measurement: "rpm"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("invwp");
+      float v = prius::get("invwp");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -314,11 +323,11 @@ sensor:
     unit_of_measurement: "W"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("acw");
+      float v = prius::get("acw");
       if (std::isnan(v)) return {};
       return v;
 
-  # ---- HV akku reszletes (2181/2187/2192/2195/2198) ----
+  # ---- HV battery detailed (2181/2187/2192/2195/2198) ----
   - platform: template
     name: "HV Pack Current"
     id: hv_curr
@@ -326,7 +335,7 @@ sensor:
     device_class: current
     accuracy_decimals: 1
     lambda: |-
-      float v = prius::V.get("hvA");
+      float v = prius::get("hvA");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -335,7 +344,7 @@ sensor:
     unit_of_measurement: "kW"
     accuracy_decimals: 1
     lambda: |-
-      float v = prius::V.get("hvdis");
+      float v = prius::get("hvdis");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -344,7 +353,7 @@ sensor:
     unit_of_measurement: "kW"
     accuracy_decimals: 1
     lambda: |-
-      float v = prius::V.get("hvchg");
+      float v = prius::get("hvchg");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -353,7 +362,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("bmin");
+      float v = prius::get("bmin");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -362,7 +371,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("bmax");
+      float v = prius::get("bmax");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -371,7 +380,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("blkD");
+      float v = prius::get("blkD");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -379,7 +388,7 @@ sensor:
     id: weak_block
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("weakB");
+      float v = prius::get("weakB");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -389,7 +398,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("hvAir");
+      float v = prius::get("hvAir");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -399,7 +408,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("tb1");
+      float v = prius::get("tb1");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -409,7 +418,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("tb2");
+      float v = prius::get("tb2");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -419,7 +428,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("tb3");
+      float v = prius::get("tb3");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -428,7 +437,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b01");
+      float v = prius::get("b01");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -437,7 +446,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b02");
+      float v = prius::get("b02");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -446,7 +455,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b03");
+      float v = prius::get("b03");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -455,7 +464,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b04");
+      float v = prius::get("b04");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -464,7 +473,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b05");
+      float v = prius::get("b05");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -473,7 +482,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b06");
+      float v = prius::get("b06");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -482,7 +491,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b07");
+      float v = prius::get("b07");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -491,7 +500,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b08");
+      float v = prius::get("b08");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -500,7 +509,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b09");
+      float v = prius::get("b09");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -509,7 +518,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b10");
+      float v = prius::get("b10");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -518,7 +527,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b11");
+      float v = prius::get("b11");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -527,7 +536,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b12");
+      float v = prius::get("b12");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -536,7 +545,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b13");
+      float v = prius::get("b13");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -545,7 +554,7 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("b14");
+      float v = prius::get("b14");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -554,7 +563,7 @@ sensor:
     unit_of_measurement: "mΩ"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("maxR");
+      float v = prius::get("maxR");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -562,11 +571,11 @@ sensor:
     id: t_hot
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("tHot");
+      float v = prius::get("tHot");
       if (std::isnan(v)) return {};
       return v;
 
-  # ---- klima (7C4) ----
+  # ---- climate (7C4) ----
   - platform: template
     name: "Cabin Temp"
     id: cabin_t
@@ -574,7 +583,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("cabin");
+      float v = prius::get("cabin");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -583,7 +592,7 @@ sensor:
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     lambda: |-
-      float v = prius::V.get("setT");
+      float v = prius::get("setT");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -592,7 +601,7 @@ sensor:
     unit_of_measurement: "rpm"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("comp");
+      float v = prius::get("comp");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -602,7 +611,7 @@ sensor:
     device_class: temperature
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("evap");
+      float v = prius::get("evap");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -610,18 +619,18 @@ sensor:
     id: solar
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("solar");
+      float v = prius::get("solar");
       if (std::isnan(v)) return {};
       return v;
 
-  # ---- ABS / fek (7B0) ----
+  # ---- ABS / brake (7B0) ----
   - platform: template
     name: "Wheel FR"
     id: w_fr
     unit_of_measurement: "km/h"
     accuracy_decimals: 1
     lambda: |-
-      float v = prius::V.get("wFR");
+      float v = prius::get("wFR");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -630,7 +639,7 @@ sensor:
     unit_of_measurement: "km/h"
     accuracy_decimals: 1
     lambda: |-
-      float v = prius::V.get("wFL");
+      float v = prius::get("wFL");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -639,7 +648,7 @@ sensor:
     unit_of_measurement: "km/h"
     accuracy_decimals: 1
     lambda: |-
-      float v = prius::V.get("wRR");
+      float v = prius::get("wRR");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -648,7 +657,7 @@ sensor:
     unit_of_measurement: "km/h"
     accuracy_decimals: 1
     lambda: |-
-      float v = prius::V.get("wRL");
+      float v = prius::get("wRL");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -657,7 +666,7 @@ sensor:
     unit_of_measurement: "%"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("wDif");
+      float v = prius::get("wDif");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -666,7 +675,7 @@ sensor:
     unit_of_measurement: "m/s²"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("gLat");
+      float v = prius::get("gLat");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -675,7 +684,7 @@ sensor:
     unit_of_measurement: "m/s²"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("gFwd");
+      float v = prius::get("gFwd");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -684,7 +693,7 @@ sensor:
     unit_of_measurement: "°"
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("steer");
+      float v = prius::get("steer");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -693,17 +702,17 @@ sensor:
     unit_of_measurement: "V"
     accuracy_decimals: 2
     lambda: |-
-      float v = prius::V.get("brkP");
+      float v = prius::get("brkP");
       if (std::isnan(v)) return {};
       return v;
 
-  # --- IDEIGLENES G-szenzor debug: a 2147 valasz nyers bajtjai ---
+  # --- TEMPORARY G-sensor debug: the raw bytes of the 2147 response ---
   - platform: template
     name: "Raw byte 0"
     id: raw0
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("raw0");
+      float v = prius::get("raw0");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -711,7 +720,7 @@ sensor:
     id: raw1
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("raw1");
+      float v = prius::get("raw1");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -719,7 +728,7 @@ sensor:
     id: raw2
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("raw2");
+      float v = prius::get("raw2");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -727,7 +736,7 @@ sensor:
     id: raw3
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("raw3");
+      float v = prius::get("raw3");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -735,7 +744,7 @@ sensor:
     id: raw4
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("raw4");
+      float v = prius::get("raw4");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -743,7 +752,7 @@ sensor:
     id: raw5
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("raw5");
+      float v = prius::get("raw5");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -751,7 +760,7 @@ sensor:
     id: raw6
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("raw6");
+      float v = prius::get("raw6");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -759,18 +768,18 @@ sensor:
     id: raw7
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("raw7");
+      float v = prius::get("raw7");
       if (std::isnan(v)) return {};
       return v;
 
-  # ---- szamitott fogyasztas + warningok ----
+  # ---- calculated fuel consumption + warnings ----
   - platform: template
     name: "Fuel Rate"
     id: fuel_rate
     unit_of_measurement: "l/h"
     accuracy_decimals: 1
     lambda: |-
-      float v = prius::V.get("fuel");
+      float v = prius::get("fuel");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -778,7 +787,7 @@ sensor:
     id: wp_warn
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("wpW");
+      float v = prius::get("wpW");
       if (std::isnan(v)) return {};
       return v;
   - platform: template
@@ -786,76 +795,94 @@ sensor:
     id: cell_warn
     accuracy_decimals: 0
     lambda: |-
-      float v = prius::V.get("cellW");
+      float v = prius::get("cellW");
       if (std::isnan(v)) return {};
       return v;
 
-  # ---- 2-es kor: tovabbi diagnosztika ----
+  # ---- round 2: further diagnostics ----
   - platform: template
     name: "Engine Torque"
     id: eng_nm
     unit_of_measurement: "Nm"
     accuracy_decimals: 0
-    lambda: 'float v=prius::V.get("engNm"); if(std::isnan(v))return {}; return v;'
+    lambda: 'float v=prius::get("engNm"); if(std::isnan(v))return {}; return v;'
   - platform: template
     name: "Injection Volume"
     id: inj_ml
     unit_of_measurement: "ml"
     accuracy_decimals: 3
-    lambda: 'float v=prius::V.get("injml"); if(std::isnan(v))return {}; return v;'
+    lambda: 'float v=prius::get("injml"); if(std::isnan(v))return {}; return v;'
   - platform: template
     name: "Battery Cooling Fan"
     id: batt_fan
     unit_of_measurement: "%"
     accuracy_decimals: 0
-    lambda: 'float v=prius::V.get("battFan"); if(std::isnan(v))return {}; return v;'
+    lambda: 'float v=prius::get("battFan"); if(std::isnan(v))return {}; return v;'
   - platform: template
     name: "DTC Current Count"
     id: dtc_cur
     accuracy_decimals: 0
-    lambda: 'float v=prius::V.get("dtcCur"); if(std::isnan(v))return {}; return v;'
+    lambda: 'float v=prius::get("dtcCur"); if(std::isnan(v))return {}; return v;'
   - platform: template
     name: "DTC History Count"
     id: dtc_hist
     accuracy_decimals: 0
-    lambda: 'float v=prius::V.get("dtcHist"); if(std::isnan(v))return {}; return v;'
+    lambda: 'float v=prius::get("dtcHist"); if(std::isnan(v))return {}; return v;'
   - platform: template
     name: "AC Ambient Temp"
     id: ac_amb
     unit_of_measurement: "°C"
     device_class: temperature
     accuracy_decimals: 0
-    lambda: 'float v=prius::V.get("acAmb"); if(std::isnan(v))return {}; return v;'
+    lambda: 'float v=prius::get("acAmb"); if(std::isnan(v))return {}; return v;'
   - platform: template
     name: "Blower Level"
     id: blower
     accuracy_decimals: 0
-    lambda: 'float v=prius::V.get("blower"); if(std::isnan(v))return {}; return v;'
+    lambda: 'float v=prius::get("blower"); if(std::isnan(v))return {}; return v;'
   - platform: template
     name: "AC Refrigerant Pressure"
     id: ac_press
     unit_of_measurement: "MPa"
     accuracy_decimals: 2
-    lambda: 'float v=prius::V.get("acPress"); if(std::isnan(v))return {}; return v;'
+    lambda: 'float v=prius::get("acPress"); if(std::isnan(v))return {}; return v;'
   - platform: template
     name: "Body 12V"
     id: body_v
     unit_of_measurement: "V"
     device_class: voltage
     accuracy_decimals: 1
-    lambda: 'float v=prius::V.get("bodyV"); if(std::isnan(v))return {}; return v;'
+    lambda: 'float v=prius::get("bodyV"); if(std::isnan(v))return {}; return v;'
   - platform: template
     name: "Fuel Input"
     id: fuel_in
     unit_of_measurement: "L"
     accuracy_decimals: 1
-    lambda: 'float v=prius::V.get("fuelIn"); if(std::isnan(v))return {}; return v;'
+    lambda: 'float v=prius::get("fuelIn"); if(std::isnan(v))return {}; return v;'
   - platform: template
     name: "Distance Since Oil Change"
     id: oil_dist
     unit_of_measurement: "km"
     accuracy_decimals: 0
-    lambda: 'float v=prius::V.get("oilDist"); if(std::isnan(v))return {}; return v;'
+    lambda: 'float v=prius::get("oilDist"); if(std::isnan(v))return {}; return v;'
+
+  # ---- passive broadcast values (opendbc Gen3 DBC) ----
+  - platform: template
+    name: "Gear"            # 0=P 1=R 2=N 3=D 4=B
+    id: gear
+    accuracy_decimals: 0
+    lambda: 'float v=prius::get("gear"); if(std::isnan(v))return {}; return v;'
+  - platform: template
+    name: "Turn Signal"     # 1=left 2=right 3=none
+    id: turn_signal
+    accuracy_decimals: 0
+    lambda: 'float v=prius::get("turn"); if(std::isnan(v))return {}; return v;'
+  - platform: template
+    name: "Cruise Set Speed"
+    id: cruise_set_speed
+    unit_of_measurement: "km/h"
+    accuracy_decimals: 0
+    lambda: 'float v=prius::get("setSpd"); if(std::isnan(v))return {}; return v;'
 
 binary_sensor:
   - { platform: template, name: "Door Driver",    id: door_driver }
@@ -864,10 +891,11 @@ binary_sensor:
   - { platform: template, name: "Door Rear Right", id: door_rear_right }
   - { platform: template, name: "Door Trunk",     id: door_trunk }
   - { platform: template, name: "Cruise Active",  id: cruise_on }
+  - { platform: template, name: "Seatbelt Driver Unlatched", id: belt_driver }
   - platform: template
     name: "Water Pump Running"
     id: wp_running
-    lambda: 'return prius::V.get("wpRun") > 0.5f;'
+    lambda: 'return prius::get("wpRun") > 0.5f;'
 
 switch:
   - platform: template
@@ -876,7 +904,7 @@ switch:
     optimistic: true
     restore_mode: ALWAYS_OFF
 
-# ====================== CAN BUSZ ======================
+# ====================== CAN BUS ======================
 canbus:
   - platform: esp32_can
     id: can0
@@ -884,16 +912,32 @@ canbus:
     rx_pin: GPIO5
     can_id: 0x7DF
     bit_rate: 500KBPS
+    # RX queue 5 (TWAI default) -> 64. The filter is ACCEPT_ALL (every bus frame
+    # arrives), Canbus::loop() fully drains the queue every cycle, so the depth
+    # only buffers frames that pile up during main-loop stalls (slow lambda / USB
+    # fflush block). 64 ~1 KB RAM, a cheap reserve. (NOTE: the queue does NOT
+    # protect against loss during flash/NVS writes -- there the ISR can get
+    # suspended; that is covered by minimizing the rare flash writes.)
+    rx_queue_len: 64
     on_frame:
-      # ---------- passziv broadcast frame-ek ----------
-      # 0x620: ajtok allapota (dump-bol verifikalva). byte5 (index 5):
-      #   bit5 (0x20) = vezeto, bit4 (0x10) = utas  (ket elso ajto tesztelve)
-      #   bit3/2/1 (0x08/0x04/0x02) = hatsok/csomagter - meg ellenorizendo
-      # 0x620 byte5 (index 5) - dumpbol verifikalva:
-      #   bit5 (0x20) = bal elso (vezeto)
-      #   bit4 (0x10) = jobb elso (utas)
-      #   bit3 (0x08) = jobb hatso   bit2 (0x04) = bal hatso (tipp)
-      #   bit1 (0x02) = csomagter
+      # ---------- passive broadcast frames ----------
+      # 0x620 = SEATS_DOORS, byte5 (index 5). Sources of the bit mapping:
+      #   - front left/right + trunk: verified from own dump (0x20/0x10/0x02)
+      #   - the two rears: commaai/opendbc "toyota_prius_2010_pt.dbc" (Gen3/XW30):
+      #       DOOR_OPEN_FL=bit5(0x20) FR=bit4(0x10) RR=bit3(0x08) RL=bit2(0x04)
+      #       SEATBELT_DRIVER_UNLATCHED=byte7 bit6(0x40) -- in own log byte7 was
+      #       0x40 throughout, which cross-checks the byte/bit numbering.
+      #   bit5 (0x20) = front left (driver)
+      #   bit4 (0x10) = front right (passenger)
+      #   bit3 (0x08) = rear right   bit2 (0x04) = rear left
+      #   bit1 (0x02) = trunk
+      # CAVEAT: own "door can" log showed 0x0C (0x08|0x04 together) for both rear
+      #   events. Per the DBC this means TWO rear doors open at once; but it can NOT
+      #   be ruled out that this body-ECU always sends both bits for any rear door
+      #   (in which case the two cannot be told apart). FINAL decision: a clean
+      #   recording is needed -- all doors closed, ONLY the rear left opening/closing:
+      #     0x04 alone -> separable (the code below is correct);
+      #     0x0C -> this car combines them, merge the two rears into one signal.
       - can_id: 0x620
         then:
           - lambda: |-
@@ -901,17 +945,35 @@ canbus:
               uint8_t m = x[5];
               id(door_driver).publish_state(m & 0x20);
               id(door_passenger).publish_state(m & 0x10);
-              // ket hatso kulon (tipp: bit2 0x04 = bal, bit3 0x08 = jobb;
-              // ha forditva van, csak a ket sort/bitet kell cserelni)
+              // rear left/right separately (opendbc Gen3 DBC); see the CAVEAT above
+              // if the clean recording yields 0x0C for a single rear door
               id(door_rear_left).publish_state(m & 0x04);
               id(door_rear_right).publish_state(m & 0x08);
               id(door_trunk).publish_state(m & 0x02);
-      - can_id: 0x5C8   # tempomat fokapcsolo
+              // driver seatbelt unlatched: byte7 bit6 (opendbc SEATBELT_DRIVER_UNLATCHED)
+              if (x.size() >= 8) id(belt_driver).publish_state(x[7] & 0x40);
+      - can_id: 0x5C8   # cruise control main switch
         then:
           - lambda: |-
               if (x.size() >= 3) id(cruise_on).publish_state(x[2] & 0x10);
 
-      # ---------- ISO-TP diag valaszok (mind a negy ECU) ----------
+      # ---------- passive broadcast values (opendbc Gen3 DBC) ----------
+      # No request, high rate. The header on_broadcast() writes into prius::V[];
+      # if some ID is not on our bus, the value stays null (non-destructive).
+      - can_id: 0x1C4   # POWERTRAIN: fast ENGINE_RPM
+        then: { lambda: 'prius::on_broadcast(0x1C4, x);' }
+      - can_id: 0x0B4   # SPEED: vehicle speed
+        then: { lambda: 'prius::on_broadcast(0x0B4, x);' }
+      - can_id: 0x127   # GEAR_PACKET: gear position
+        then: { lambda: 'prius::on_broadcast(0x127, x);' }
+      - can_id: 0x614   # STEERING_LEVERS: index
+        then: { lambda: 'prius::on_broadcast(0x614, x);' }
+      - can_id: 0x1D3   # PCM_CRUISE_2: set cruise control speed
+        then: { lambda: 'prius::on_broadcast(0x1D3, x);' }
+      - can_id: 0x5A4   # Gas Gauge: fuel level (passive broadcast)
+        then: { lambda: 'prius::on_broadcast(0x5A4, x);' }
+
+      # ---------- ISO-TP diag responses (all four ECUs) ----------
       - can_id: 0x7E8
         then: { lambda: 'uint16_t fc=prius::on_can_frame(0x7E8,x,millis()); if(fc) id(can0).send_data(fc-8,false,{0x30,0x00,0x05,0,0,0,0,0});' }
       - can_id: 0x7EA
@@ -921,40 +983,75 @@ canbus:
       - can_id: 0x7B8
         then: { lambda: 'uint16_t fc=prius::on_can_frame(0x7B8,x,millis()); if(fc) id(can0).send_data(fc-8,false,{0x30,0x00,0x05,0,0,0,0,0});' }
 
-      # ---------- dump mod ----------
+      # ---------- dump mode (filtered + deduped + non-blocking, in the header) ----------
       - can_id: 0
         can_id_mask: 0
         then:
-          - lambda: |-
-              if (!id(dump_mode).state) return;
-              char line[80]; int off = snprintf(line, sizeof(line), "#%03X [%d]", (unsigned)can_id, (int)x.size());
-              for (auto b : x) off += snprintf(line+off, sizeof(line)-off, " %02X", b);
-              line[off++]='\n'; fwrite(line,1,off,stdout);
+          - lambda: 'if (id(dump_mode).state) prius::dump_frame((uint16_t)can_id, x.data(), (int)x.size());'
 
-# ====================== POLLING ÜTEMEZÉS ======================
+# ====================== POLLING SCHEDULE ======================
 interval:
-  # Diag PID-ek korbejarasa. Minden tick egy keres; a valasz ISO-TP-vel
-  # erkezik. ~80 ms eleg ket keres kozott (egy ISO-TP korut <30 ms).
-  - interval: 80ms
+  # Cycling through the diag PIDs - EVENT-DRIVEN. The 20 ms tick is just a fast
+  # watchdog: we send a new request ONLY if the previous response has already
+  # completed (prius::ready_for_next), OR if no response has come for >60 ms (lost
+  # response fallback). This way there is no fixed 80 ms dead time and no multi-frame
+  # ISO-TP transfer gets stuck either. The decision whether to send is in the header
+  # (ready_for_next/last_req_ms), the actual send_data is here.
+  - interval: 20ms
     then:
       - lambda: |-
-          uint16_t rid; std::vector<uint8_t> req;
-          if (prius::next_request(rid, req, millis()))
-            id(can0).send_data(rid, false, req);
+          uint32_t now = millis();
+          if (prius::ready_for_next || (now - prius::last_req_ms) > 60) {
+            // static: the capacity is retained between ticks -> assembling the
+            // request frame does not reallocate (single-threaded on the main loop, safe)
+            static std::vector<uint8_t> req;
+            uint16_t rid;
+            if (prius::next_request(rid, req, now))
+              id(can0).send_data(rid, false, req);
+          }
 
-  # Szamitott fogyasztas + warningok 1 s-onkent
-  - interval: 1s
+  # Host (head unit) wall-clock time over the serial link: read "T<unix>\n" lines
+  # (non-blocking stdin = USB Serial/JTAG). The head unit pushes its time so the
+  # ESP can timestamp events (e.g. refuel) without Wi-Fi/NTP.
+  - interval: 250ms
     then:
       - lambda: |-
-          prius::compute_derived();
+          prius::read_host_serial(millis());
+          if (prius::dump_cmd >= 0) {       // app-requested dump on/off -> drive the switch
+            if (prius::dump_cmd) { prius::dump_clear(); id(dump_mode).turn_on(); }
+            else                   id(dump_mode).turn_off();
+            prius::dump_cmd = -1;
+          }
 
-  # Teljes JSON allapot a soros portra 500 ms-onkent
+  # Calculated fuel consumption + warnings every 500 ms (fuel = computed from maf,
+  # so the derived values also keep pace with the fast 7E0/2101 poll)
   - interval: 500ms
     then:
       - lambda: |-
-          char extra[48];
+          prius::compute_derived(millis());
+
+  # Save the self-learning baseline into the persistent global every 5 minutes. The
+  # actual flash write is independent of this: ESPHome only saves the global ON CHANGE
+  # (memcmp), and the flash flush happens every flash_write_interval (default 60s)
+  # -> in practice <=1 flash write / 5 minutes, and ONLY while driving (with the car
+  # stationary the baseline does not change -> no write). For the slowly changing EWMA,
+  # losing 5 minutes (on an unexpected power loss) is negligible.
+  - interval: 300s
+    then:
+      - lambda: |-
+          prius::learn_export(id(learn_state).data());
+          prius::cap_export(id(cap_state).data());
+          if (prius::refuel_dirty) { id(refuel_epoch) = prius::last_refuel_epoch; prius::refuel_dirty = false; }
+
+  # Full JSON state to the serial port every 250 ms (4 Hz; the divider=1
+  # PIDs update more frequently than this internally, so every line has fresh rpm/spd)
+  - interval: 250ms
+    then:
+      - lambda: |-
+          char extra[64];
           int dm = (id(door_driver).state?0x80:0)|(id(door_passenger).state?0x40:0)
                  |(id(door_rear_left).state?0x08:0)|(id(door_rear_right).state?0x04:0)
                  |(id(door_trunk).state?0x01:0);
-          snprintf(extra, sizeof(extra), "\"door\":%d,\"cruise\":%d", dm, id(cruise_on).state?1:0);
-          prius::emit_json(extra);
+          snprintf(extra, sizeof(extra), "\"door\":%d,\"cruise\":%d,\"belt\":%d",
+                   dm, id(cruise_on).state?1:0, id(belt_driver).state?1:0);
+          prius::emit_json(extra, millis());

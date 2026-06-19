@@ -1,17 +1,19 @@
-# Prius CAN — IDEIGLENES DUMP CONFIG az ajto-frame megtalalasahoz
+# Prius CAN — TEMPORARY DUMP CONFIG for finding the door frame
 # ============================================================
-# Ez NEM a teljes monitor; csak a CAN forgalmat dumpolja a soros portra,
-# hogy ajto nyitas/csukas kozben lasd, melyik frame melyik bitje valt.
+# This is NOT the full monitor; it only dumps the CAN traffic to the serial
+# port, so that while opening/closing a door you can see which bit of which
+# frame changes.
 #
-# Hasznalat:
-#   esphome run prius_dump.yaml      (USB kabellel)
-#   -> a soros monitorban folynak a "#XXX b0 b1 ..." sorok
-#   -> nyisd/csukd az ajtokat egyenkent, es figyeld, melyik frame valtozik
+# Usage:
+#   esphome run prius_dump.yaml      (with a USB cable)
+#   -> the "#XXX b0 b1 ..." lines stream in the serial monitor
+#   -> open/close the doors one by one and watch which frame changes
 #
-# A zaj csokkentesere: csak a 0x500-0x5FF tartomanyt dumpoljuk (itt vannak
-# a karosszeria/komfort broadcast frame-ek), es CSAK ha a frame tartalma
-# az elozohoz kepest VALTOZOTT -> igy ajtonyitaskor pont a releváns
-# frame ugrik be, nem arasztja el a konzolt az allando forgalom.
+# To reduce noise: we only dump the 0x500-0x5FF range (this is where the
+# body/comfort broadcast frames live), and ONLY if the frame contents
+# CHANGED compared to the previous one -> this way the relevant frame pops
+# up exactly when a door opens, instead of the console being flooded by the
+# constant traffic.
 
 esphome:
   name: prius-dump
@@ -37,11 +39,11 @@ canbus:
         can_id_mask: 0
         then:
           - lambda: |-
-              // csak a karosszeria-tartomany (0x500..0x6FF), valtozas-szuressel
+              // only the body range (0x500..0x6FF), with change filtering
               if (can_id < 0x500 || can_id > 0x6FF) return;
               static std::map<uint32_t, std::vector<uint8_t>> last;
               auto it = last.find(can_id);
-              if (it != last.end() && it->second == x) return;  // nem valtozott
+              if (it != last.end() && it->second == x) return;  // unchanged
               last[can_id] = x;
               char line[80];
               int off = snprintf(line, sizeof(line), "#%03X", (unsigned)can_id);
