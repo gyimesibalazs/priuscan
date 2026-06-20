@@ -21,6 +21,7 @@ esphome:
   friendly_name: Prius CAN
   includes:
     - prius_parse.h
+    - prius_ota.h
   on_boot:
     priority: -100   # the globals have been restored by then
     then:
@@ -970,8 +971,12 @@ canbus:
         then: { lambda: 'prius::on_broadcast(0x614, x);' }
       - can_id: 0x1D3   # PCM_CRUISE_2: set cruise control speed
         then: { lambda: 'prius::on_broadcast(0x1D3, x);' }
-      - can_id: 0x5A4   # Gas Gauge: fuel level (passive broadcast)
-        then: { lambda: 'prius::on_broadcast(0x5A4, x);' }
+      - can_id: 0x612   # Combination meter: fuel level (byte[5])
+        then: { lambda: 'prius::on_broadcast(0x612, x);' }
+      - can_id: 0x611   # Combination meter: odometer (km)
+        then: { lambda: 'prius::on_broadcast(0x611, x);' }
+      - can_id: 0x4A1   # VSC skid-control: yaw/lateral (raw, TBD)
+        then: { lambda: 'prius::on_broadcast(0x4A1, x);' }
 
       # ---------- ISO-TP diag responses (all four ECUs) ----------
       - can_id: 0x7E8
@@ -1000,6 +1005,7 @@ interval:
   - interval: 20ms
     then:
       - lambda: |-
+          if (ota_active) return;          // pause diag polling during OTA (free the bus/CPU for the flash)
           uint32_t now = millis();
           if (prius::ready_for_next || (now - prius::last_req_ms) > 60) {
             // static: the capacity is retained between ticks -> assembling the
@@ -1016,11 +1022,15 @@ interval:
   - interval: 250ms
     then:
       - lambda: |-
-          prius::read_host_serial(millis());
+          if (!ota_active) prius::read_host_serial(millis());   // OTA owns stdin while active
           if (prius::dump_cmd >= 0) {       // app-requested dump on/off -> drive the switch
             if (prius::dump_cmd) { prius::dump_clear(); id(dump_mode).turn_on(); }
             else                   id(dump_mode).turn_off();
             prius::dump_cmd = -1;
+          }
+          if (prius::ota_request) {            // app asked to flash -> spawn the OTA task
+            prius::ota_request = false;
+            prius_ota_begin(prius::ota_size);
           }
 
   # Calculated fuel consumption + warnings every 500 ms (fuel = computed from maf,
@@ -1048,6 +1058,7 @@ interval:
   - interval: 250ms
     then:
       - lambda: |-
+          if (ota_active) return;        // keep the serial channel clean during OTA
           char extra[64];
           int dm = (id(door_driver).state?0x80:0)|(id(door_passenger).state?0x40:0)
                  |(id(door_rear_left).state?0x08:0)|(id(door_rear_right).state?0x04:0)

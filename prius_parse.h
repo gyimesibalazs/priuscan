@@ -39,6 +39,10 @@ enum VKey {
   CWL, WBLK, WZ,                // self-learning weak-block layer: level / block index / EWMA z
   TDIST, TFUEL, TAVG,           // since start: distance (km) / fuel (l) / average (l/100km)
   CAPAH, CAPKWH,                // self-learned pack capacity: Ah / kWh (coulomb counting)
+  TMOVE, TSPD,                  // since boot: active moving time (s) / avg speed (km/h)
+  TEV,                          // since boot: pure-EV distance (km, engine off + moving)
+  ODO,                          // odometer (km), from 0x611 broadcast bytes[5..7]
+  YAW,                          // VSC yaw/lateral signal, RAW signed16 from 0x4A1 b0-1 (TBD)
   N_JSON,                       // number of fields that go into the JSON (length of FIELDS)
   RAW0 = N_JSON, RAW1, RAW2, RAW3, RAW4, RAW5, RAW6, RAW7,
   V_COUNT
@@ -66,6 +70,8 @@ inline const char *KEYS[V_COUNT] = {
   "cwL","wblk","wz",
   "tDist","tFuel","tAvg",
   "capAh","capKwh",
+  "tMove","tSpd","tEv",
+  "odo","yaw",
   "raw0","raw1","raw2","raw3","raw4","raw5","raw6","raw7",
 };
 
@@ -100,15 +106,39 @@ inline void out_write(const char *p, int len) {
     if (rem <= (int)sizeof(out_res)) { memcpy(out_res, p + w, rem); out_res_n = rem; } else out_dropped++; }
 }
 
+// ===== Firmware version + serial OTA request =====
+// The app bundles a versioned firmware image and offers an update when FW_VERSION
+// is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
+// running firmware writes the streamed image to the inactive OTA partition via the
+// IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
+inline constexpr int FW_VERSION = 207;   // encoded major*100+minor -> 2.7
+inline bool ota_request = false;         // set by "O" command, consumed by YAML
+inline uint32_t ota_size = 0;            // image size to receive
+
 // ===== App-controlled CAN dump (filtered + deduped) =====
 // The app toggles this over serial (D1/D0). Frames in [dump_lo, dump_hi] are emitted
 // as "#XXX [len] BB BB..\n", deduped (only on change) to keep the rate low.
 inline int      dump_cmd = -1;                 // -1 none, 0/1 requested state (consumed by YAML)
 inline uint16_t dump_lo = 0x500, dump_hi = 0x6FF;
+inline bool     dump_unknown = false;          // D2: dump every frame we DON'T already decode
 inline std::map<uint16_t, std::vector<uint8_t>> dump_last;   // dedup state
 inline void dump_clear() { dump_last.clear(); }
+
+// IDs we already decode (broadcasts + diag req/resp + our own tx) -> skipped in D2 mode
+// so a discovery capture surfaces only the still-unknown frames.
+inline bool dump_is_known(uint16_t id) {
+  switch (id) {
+    case 0x1C4: case 0x0B4: case 0x127: case 0x614: case 0x1D3: case 0x5C8:
+    case 0x5A4: case 0x610: case 0x611: case 0x612: case 0x620: case 0x626: case 0x4A1:  // decoded broadcasts
+    case 0x7DF: case 0x7E0: case 0x7E2: case 0x7C4: case 0x7B0: case 0x7C0:  // our requests
+    case 0x7E8: case 0x7EA: case 0x7CC: case 0x7B8: case 0x7C8:              // diag responses
+      return true;
+    default: return false;
+  }
+}
 inline void dump_frame(uint16_t id, const uint8_t *d, int n) {
-  if (id < dump_lo || id > dump_hi) return;                  // ID filter
+  if (dump_unknown) { if (dump_is_known(id)) return; }       // D2: only unknown frames
+  else if (id < dump_lo || id > dump_hi) return;             // D1: ID range filter
   auto it = dump_last.find(id);                              // dedup: only on change
   if (it != dump_last.end() && (int)it->second.size() == n && !memcmp(it->second.data(), d, n)) return;
   dump_last[id].assign(d, d + n);
@@ -125,9 +155,10 @@ inline void dump_frame(uint16_t id, const uint8_t *d, int n) {
 inline float fuel_ref = -1;             // slow-tracked fuel-level baseline
 inline uint32_t last_refuel_epoch = 0;  // unix seconds of the last detected refuel
 inline uint32_t last_refuel_ms = 0;     // millis() at refuel (for pending correction)
+inline uint32_t refuel_seen_ms = 0;     // when fin first crossed the up-jump (confirm window)
 inline bool refuel_pending = false;     // refuel seen BEFORE host time was known -> correct later
 inline bool refuel_dirty = false;       // YAML flushes this to the persistent global
-inline constexpr float REFUEL_DELTA = 5.0f;
+inline constexpr float REFUEL_DELTA = 12.0f;   // fuelIn is now % (0..100): a significant up-jump
 
 // ===== Host wall-clock time (pushed from the head unit over serial) =====
 // The production firmware has no Wi-Fi/NTP, so the head unit is the only time
@@ -141,10 +172,16 @@ inline uint32_t cur_epoch(uint32_t now_ms) {
   return host_time_set ? host_epoch + (now_ms - host_epoch_ms) / 1000u : 0u;
 }
 inline void parse_host_line(const char *line, uint32_t now_ms) {
-  if (line[0] == 'D') {                       // CAN dump on/off (+ optional range)
-    if (line[1] == '0') dump_cmd = 0;
+  if (line[0] == 'O') {                        // serial OTA: "O<size>" -> stream the image
+    unsigned sz = 0;
+    if (sscanf(line + 1, " %u", &sz) == 1 && sz > 1000) { ota_size = sz; ota_request = true; }
+    return;
+  }
+  if (line[0] == 'D') {                        // CAN dump: D0 off, D1[lo hi] range, D2 unknown-only
+    if (line[1] == '0') { dump_cmd = 0; }
+    else if (line[1] == '2') { dump_cmd = 1; dump_unknown = true; }
     else {
-      dump_cmd = 1; unsigned lo, hi;
+      dump_cmd = 1; dump_unknown = false; unsigned lo, hi;
       if (sscanf(line + 2, " %x %x", &lo, &hi) == 2) { dump_lo = (uint16_t)lo; dump_hi = (uint16_t)hi; }
       else { dump_lo = 0x500; dump_hi = 0x6FF; }
     }
@@ -423,9 +460,15 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
     case 0x1D3:  // PCM_CRUISE_2: SET_SPEED (kph)
       if (x.size() >= 3) V[SETSPD] = (float)x[2];
       return;
-    case 0x5A4:  // Gas Gauge (passive): x[1] = fuel level, recorded max ~0x28 (=40).
-      // RAW value; scale TO BE CALIBRATED (l vs %). See the spec calibration note.
-      if (x.size() >= 2) V[FUELIN] = (float)x[1];
+    case 0x4A1:  // VSC skid-control: yaw/lateral signal, byte[0..1] signed16 BE (RAW, TBD)
+      if (x.size() >= 2) V[YAW] = (float)(int16_t)(((uint16_t)x[0] << 8) | x[1]);
+      return;
+    case 0x611:  // Combination meter: odometer in km, bytes[5..7] (24-bit)
+      if (x.size() >= 8) V[ODO] = (float)(((uint32_t)x[5] << 16) | ((uint32_t)x[6] << 8) | x[7]);
+      return;
+    case 0x612:  // Combination meter: fuel level = byte[5] as % (b5/255*100). Calibrated
+      // from dumps: 5/10 gauge segments = b5 129 ~= 50% -> linear 0..255 = empty..full.
+      if (x.size() >= 6) V[FUELIN] = (float)x[5] * 100.0f / 255.0f;
       return;
   }
 }
@@ -561,6 +604,9 @@ inline uint32_t derive_last_ms = 0;
 inline bool derive_init = false;
 inline float trip_dist = 0;   // km since start
 inline float trip_fuel = 0;   // l since start
+inline float move_s = 0;      // active moving seconds since boot (stops <=180 s count)
+inline float stop_s = 0;      // current stop duration (s)
+inline float ev_dist = 0;     // pure-EV km since boot (engine off + moving)
 
 // Self-learning pack capacity via coulomb counting between SoC points (persisted).
 // capacity[Ah] = integral(I dt) / dSoC; learned by EWMA over many spans. kWh uses
@@ -570,11 +616,15 @@ inline float trip_fuel = 0;   // l since start
 inline float cap_ah = 0;        // learned capacity (Ah), EWMA
 inline uint32_t cap_n = 0;      // number of accepted spans
 inline float vl_avg = 0;        // EWMA of pack voltage VL (for kWh)
-inline float soc_anchor = NAN;  // SoC at span start (transient, not persisted)
-inline float charge_ah = 0;     // integrated charge since anchor (signed Ah, transient)
+// peak/trough window: the Prius keeps SoC in a narrow oscillating band, so a fixed
+// anchor rarely moves 10%. Track the running SoC min/max in a window and the charge
+// integral at each -> the peak-to-trough swing gives a usable span. (transient)
+inline float cap_smin = NAN, cap_smax = NAN;  // running SoC min/max in the window
+inline float cap_q_lo = 0, cap_q_hi = 0;      // charge integral at smin / smax
+inline float charge_ah = 0;                   // running charge integral (Ah)
 
 inline constexpr float    CAP_ALPHA    = 0.25f;  // EWMA weight over spans
-inline constexpr float    CAP_MIN_DSOC = 10.0f;  // % SoC change required for a span
+inline constexpr float    CAP_MIN_DSOC = 8.0f;   // % SoC swing required for a span
 inline constexpr float    CAP_MIN_AH   = 2.0f;   // plausibility window (reject glitches)
 inline constexpr float    CAP_MAX_AH   = 15.0f;
 
@@ -623,9 +673,11 @@ inline void compute_derived(uint32_t now_ms) {
   if (lz_n >= LRN_NMIN) {
     cw = learned;
   } else {
+    // data-informed fallback: a healthy pack spikes blkD to ~0.97 V under load, so
+    // the warn/error levels sit above that (avoids false alarms before maturity)
     cw = 0;
-    if (dload>=0.70f || drest>=0.20f) cw = 1;
-    if (dload>=1.10f || drest>=0.35f) cw = 2;
+    if (dload>=1.20f || drest>=0.40f) cw = 1;
+    if (dload>=1.60f || drest>=0.60f) cw = 2;
   }
   // coarse hard-safety overrides (slow, reliable signals) regardless of source:
   float mr = V[MAXR];
@@ -641,52 +693,75 @@ inline void compute_derived(uint32_t now_ms) {
   V[EOK] = (float)eng_ok;   // DEBUG: successful 2101 counter
   V[LOOPS] = (float)poll_cycle;  // how many full POLL cycles the scheduler went through
 
-  // capacity anchor + pack-voltage average (no dt needed -> also on the first call)
+  // pack-voltage average for the kWh conversion (no dt needed -> also on the first call)
   float so = V[SOC], vl = V[VL];
   if (!std::isnan(vl) && vl > 0) vl_avg = (vl_avg <= 0) ? vl : (0.99f*vl_avg + 0.01f*vl);
-  if (!std::isnan(so) && std::isnan(soc_anchor)) soc_anchor = so;
 
-  // trip integration since start, and pack-capacity charge integration (need dt)
+  // trip + moving time + pack-capacity coulomb counting (need dt)
   if (derive_init) {
     float dt_h = (float)(now_ms - derive_last_ms) / 3600000.0f;   // ms -> hours
+    float dt_s = dt_h * 3600.0f;
     float sp = V[SPD], fl = V[FUEL];
     if (!std::isnan(sp) && sp > 0) trip_dist += sp * dt_h;        // km
     if (!std::isnan(fl) && fl > 0) trip_fuel += fl * dt_h;        // l (fuel is l/h)
 
-    // pack capacity: coulomb counting between SoC points
-    float amps = V[HVA];
-    if (!std::isnan(so) && !std::isnan(amps) && !std::isnan(soc_anchor)) {
-      charge_ah += amps * dt_h;                          // signed Ah (charge +, discharge -)
-      if (fabsf(so - soc_anchor) >= CAP_MIN_DSOC) {
-        float span = charge_ah / ((so - soc_anchor) / 100.0f);   // Ah (signs cancel -> +)
-        if (span >= CAP_MIN_AH && span <= CAP_MAX_AH) {
-          cap_ah = (cap_n == 0) ? span : (1.0f-CAP_ALPHA)*cap_ah + CAP_ALPHA*span;
-          cap_n++;
-        }
-        soc_anchor = so; charge_ah = 0;                  // start a new span
-      }
+    // active moving time since boot: stops up to 180 s still count as "moving"
+    if (!std::isnan(sp)) {
+      if (sp > 2.0f) { move_s += dt_s; stop_s = 0; }
+      else { stop_s += dt_s; if (stop_s <= 180.0f) move_s += dt_s; }
     }
+    // pure-EV distance: moving with the engine off (rpm < 100)
+    float rp = V[RPM];
+    if (!std::isnan(sp) && sp > 2.0f && !std::isnan(rp) && rp < 100.0f) ev_dist += sp * dt_h;
+
+    // running charge integral for the capacity estimate (needs dt)
+    float amps = V[HVA];
+    if (!std::isnan(amps)) charge_ah += amps * dt_h;     // signed Ah
   }
   derive_last_ms = now_ms;
   derive_init = true;
+
+  // pack capacity: SoC peak-to-trough swing vs the charge integral (runs each call so
+  // the very first SoC extreme is captured before it moves)
+  if (!std::isnan(so)) {
+    if (std::isnan(cap_smin)) { cap_smin = cap_smax = so; cap_q_lo = cap_q_hi = charge_ah; }
+    if (so > cap_smax) { cap_smax = so; cap_q_hi = charge_ah; }
+    if (so < cap_smin) { cap_smin = so; cap_q_lo = charge_ah; }
+    if (cap_smax - cap_smin >= CAP_MIN_DSOC) {
+      float span = fabsf(cap_q_hi - cap_q_lo) / ((cap_smax - cap_smin) / 100.0f);  // Ah
+      if (span >= CAP_MIN_AH && span <= CAP_MAX_AH) {
+        cap_ah = (cap_n == 0) ? span : (1.0f-CAP_ALPHA)*cap_ah + CAP_ALPHA*span;
+        cap_n++;
+      }
+      cap_smin = cap_smax = so; cap_q_lo = cap_q_hi = charge_ah;   // reset window
+    }
+  }
   V[TDIST] = trip_dist;
   V[TFUEL] = trip_fuel;
   V[TAVG]  = (trip_dist > 0.1f) ? (trip_fuel / trip_dist * 100.0f) : NAN;  // l/100km
   V[CAPAH]  = (cap_n > 0) ? cap_ah : NAN;
   V[CAPKWH] = (cap_n > 0 && vl_avg > 0) ? (cap_ah * vl_avg / 1000.0f) : NAN;
+  V[TMOVE] = move_s;
+  V[TSPD]  = (move_s > 5.0f) ? (trip_dist / (move_s / 3600.0f)) : NAN;   // km/h since boot
+  V[TEV]   = ev_dist;
 
-  // refuel detection: fuelIn (0x5A4) jumps up while parked -> record the time
+  // refuel detection: fuelIn (%) jumps up significantly while parked -> record the time
   float fin = V[FUELIN], sp2 = V[SPD];
   if (!std::isnan(fin)) {
     if (fuel_ref < 0) fuel_ref = fin;
     bool parked = std::isnan(sp2) || sp2 < 3.0f;
     if (parked && fin - fuel_ref >= REFUEL_DELTA) {
-      if (host_time_set) { last_refuel_epoch = cur_epoch(now_ms); refuel_pending = false; }
-      else { last_refuel_ms = now_ms; refuel_pending = true; }   // correct later (#4)
-      refuel_dirty = true;
-      fuel_ref = fin;
+      // up-jump seen; require it to PERSIST >=1.5 s so a 1-sample spike does not trigger
+      if (refuel_seen_ms == 0) refuel_seen_ms = now_ms;
+      else if (now_ms - refuel_seen_ms >= 1500) {
+        if (host_time_set) { last_refuel_epoch = cur_epoch(now_ms); refuel_pending = false; }
+        else { last_refuel_ms = now_ms; refuel_pending = true; }   // correct later (#4)
+        refuel_dirty = true;
+        fuel_ref = fin; refuel_seen_ms = 0;
+      }
     } else {
-      fuel_ref += 0.01f * (fin - fuel_ref);   // slow follow (consumption + noise)
+      refuel_seen_ms = 0;                       // dropped back -> it was a transient spike
+      fuel_ref += 0.01f * (fin - fuel_ref);     // slow follow (consumption + noise)
     }
   }
 }
@@ -731,6 +806,8 @@ inline const Field FIELDS[] = {
   {CWL,"\"cwL\":",6,0}, {WBLK,"\"wblk\":",7,0}, {WZ,"\"wz\":",5,2},
   {TDIST,"\"tDist\":",8,1}, {TFUEL,"\"tFuel\":",8,2}, {TAVG,"\"tAvg\":",7,1},
   {CAPAH,"\"capAh\":",8,2}, {CAPKWH,"\"capKwh\":",9,2},
+  {TMOVE,"\"tMove\":",8,0}, {TSPD,"\"tSpd\":",7,0}, {TEV,"\"tEv\":",6,1},
+  {ODO,"\"odo\":",6,0}, {YAW,"\"yaw\":",6,0},
 };
 inline const int FIELDS_N = sizeof(FIELDS) / sizeof(FIELDS[0]);
 
@@ -777,6 +854,7 @@ inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
   // wall-clock epoch + last-refuel epoch as INTEGERS (a float can't hold them)
   std::memcpy(p, "\"epoch\":", 8); p += 8; put_uint(p, cur_epoch(now_ms)); *p++ = ',';
   std::memcpy(p, "\"fuelTs\":", 9); p += 9; put_uint(p, last_refuel_epoch); *p++ = ',';
+  std::memcpy(p, "\"fw\":", 5); p += 5; put_uint(p, (uint32_t)FW_VERSION); *p++ = ',';
   if (door_cruise_extra) {       // passed in by the YAML: "door":..,"cruise":..
     size_t n = std::strlen(door_cruise_extra);
     std::memcpy(p, door_cruise_extra, n); p += n;
