@@ -146,7 +146,7 @@
     <string name="f_wDif">Różnica kół przednich</string>
     <string name="f_gLat">Przyspieszenie boczne G</string>
     <string name="f_gFwd">Przyspieszenie wzdłużne G</string>
-    <string name="f_yaw">Odchylenie / boczne (surowe)</string>
+    <string name="f_gasB">Gaz</string>
     <string name="f_steer">Kąt skrętu kierownicy</string>
     <string name="f_brkP">Ciśnienie hamowania</string>
 
@@ -251,4 +251,19 @@
     <string name="display_title">Wyświetlanie</string>
     <string name="theme_auto_car">Tryb ciemny wg czujnika światła auta</string>
     <string name="dump_unknown">Tylko nieznane ramki (wykrywanie)</string>
+    <string name="r_distances">Odległości</string>
+    <string name="sl_odo">Licznik km</string>
+    <string name="sl_oil">Wymiana oleju</string>
+    <string name="sl_trip">Trip %1$s</string>
+    <string name="btn_reset">Zeruj</string>
+    <string name="r_regen">Udział rekup.</string>
+    <string name="trip_boot">Od startu</string>
+    <string name="trip_home">Z domu</string>
+    <string name="trip_tank">Tankowanie</string>
+    <string name="trip_oil">Wymiana oleju</string>
+    <string name="trip_life">Całość</string>
+    <string name="tab_tpms">Opony</string>
+    <string name="trip_hold">Przytrzymaj, by zerować</string>
+    <string name="trip_at">przy %1$s km</string>
+    <string name="trip_need_fw">Wymagana aktualizacja firmware (v3.0)</string>
 </resources>

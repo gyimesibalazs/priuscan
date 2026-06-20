@@ -42,7 +42,7 @@ enum VKey {
   TMOVE, TSPD,                  // since boot: active moving time (s) / avg speed (km/h)
   TEV,                          // since boot: pure-EV distance (km, engine off + moving)
   ODO,                          // odometer (km), from 0x611 broadcast bytes[5..7]
-  YAW,                          // VSC yaw/lateral signal, RAW signed16 from 0x4A1 b0-1 (TBD)
+  GASB,                         // gas pedal %, from 0x245 b2 (0..200 -> /2 = 0..100)
   N_JSON,                       // number of fields that go into the JSON (length of FIELDS)
   RAW0 = N_JSON, RAW1, RAW2, RAW3, RAW4, RAW5, RAW6, RAW7,
   V_COUNT
@@ -71,7 +71,7 @@ inline const char *KEYS[V_COUNT] = {
   "tDist","tFuel","tAvg",
   "capAh","capKwh",
   "tMove","tSpd","tEv",
-  "odo","yaw",
+  "odo","gasB",
   "raw0","raw1","raw2","raw3","raw4","raw5","raw6","raw7",
 };
 
@@ -111,7 +111,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 207;   // encoded major*100+minor -> 2.7
+inline constexpr int FW_VERSION = 300;   // encoded major*100+minor -> 3.0 (unified trip-slot model + new UI)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -129,7 +129,8 @@ inline void dump_clear() { dump_last.clear(); }
 inline bool dump_is_known(uint16_t id) {
   switch (id) {
     case 0x1C4: case 0x0B4: case 0x127: case 0x614: case 0x1D3: case 0x5C8:
-    case 0x5A4: case 0x610: case 0x611: case 0x612: case 0x620: case 0x626: case 0x4A1:  // decoded broadcasts
+    case 0x5A4: case 0x610: case 0x611: case 0x612: case 0x620: case 0x626:
+    case 0x4A1: case 0x320: case 0x245: case 0x025:  // decoded broadcasts
     case 0x7DF: case 0x7E0: case 0x7E2: case 0x7C4: case 0x7B0: case 0x7C0:  // our requests
     case 0x7E8: case 0x7EA: case 0x7CC: case 0x7B8: case 0x7C8:              // diag responses
       return true;
@@ -154,6 +155,20 @@ inline void dump_frame(uint16_t id, const uint8_t *d, int n) {
 // before the host-time block because parse_host_line back-corrects these (#4).
 inline float fuel_ref = -1;             // slow-tracked fuel-level baseline
 inline uint32_t last_refuel_epoch = 0;  // unix seconds of the last detected refuel
+
+// ===== Power-off (ignition) detection + NVS persistence =====
+// TEST stage: on ignition-off we save only the shutdown epoch + a save counter, so the
+// Android side can validate persistence (offTs ~= when it was switched off, offN grows
+// every power-cycle). Detector = bus-silence: the fast powertrain frame (0x1C4) stops
+// within ~1 s of ignition-off. Real learned data will be added once persistence is proven.
+inline uint32_t last_pwr_ms = 0;        // millis() of the last 0x1C4 (fast powertrain) frame
+inline bool     persist_done = false;   // one save per power-down (re-armed when bus is alive)
+inline uint32_t boot_off_epoch = 0;     // restored last-shutdown epoch  -> JSON "offTs"
+inline uint32_t boot_off_n = 0;         // restored save counter         -> JSON "offN"
+inline bool     hist_request = false;   // app sent "H"  -> emit refuel history (YAML consumes)
+inline bool     ohist_request = false;  // app sent "HO" -> emit oil-change history
+inline int      reset_req = -1;         // app sent "R<i>" -> reset slot i (YAML consumes)
+inline bool     persist_loaded = false; // true after the boot NVS read -> only THEN may we write
 inline uint32_t last_refuel_ms = 0;     // millis() at refuel (for pending correction)
 inline uint32_t refuel_seen_ms = 0;     // when fin first crossed the up-jump (confirm window)
 inline bool refuel_pending = false;     // refuel seen BEFORE host time was known -> correct later
@@ -185,6 +200,12 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
       if (sscanf(line + 2, " %x %x", &lo, &hi) == 2) { dump_lo = (uint16_t)lo; dump_hi = (uint16_t)hi; }
       else { dump_lo = 0x500; dump_hi = 0x6FF; }
     }
+    return;
+  }
+  if (line[0] == 'H') { if (line[1] == 'O') ohist_request = true; else hist_request = true; return; }  // H/HO history
+  if (line[0] == 'R') {                                   // reset distance slot: "R<1..4>"
+    int i = line[1] - '0';
+    if (i >= 2 && i <= 6) reset_req = i;
     return;
   }
   if (line[0] != 'T') return;
@@ -417,10 +438,8 @@ inline void parse_payload(uint16_t resp_id, const uint8_t *p, int n) {
         return;
       case 0x47:
         if (dn < 5) return;
-        V[GLAT] = d[0]*50.02f/255.0f-25.11f;
-        V[GFWD] = d[1]*50.02f/255.0f-25.11f;
-        V[STEER] = u16(d,3)/10.0f-3276.8f;
-        // DEBUG: raw bytes d[0..7] -> raw0..raw7 visible on the web UI
+        // OLD G/steer source (saturated, replaced): lateral=0x4A1, longitudinal=0x320 b4,
+        // steering=0x025 broadcast. Keep only the raw0..raw7 debug dump here.
         for (int i=0; i<8 && i<dn; i++)
           V[RAW0 + i] = (float)d[i];
         return;
@@ -443,7 +462,9 @@ inline void parse_payload(uint16_t resp_id, const uint8_t *p, int n) {
 // (JSON null) -> the addition is non-destructive. Source of the bit offsets:
 // commaai/opendbc "toyota_prius_2010_pt.dbc" (Gen3/XW30). There is no send_data
 // here, this is a pure decoder (ESPHome-free).
+inline volatile bool can_paused = false;   // set on OTA start: stop all CAN processing
 inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
+  if (can_paused) return;                   // OTA in progress -> free the CPU for the flash
   switch (id) {
     case 0x1C4:  // POWERTRAIN: ENGINE_RPM (fast rpm, instead of/alongside the slow 7E0/2101)
       if (x.size() >= 2) V[RPM] = (float)((x[0] << 8) | x[1]);
@@ -460,14 +481,27 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
     case 0x1D3:  // PCM_CRUISE_2: SET_SPEED (kph)
       if (x.size() >= 3) V[SETSPD] = (float)x[2];
       return;
-    case 0x4A1:  // VSC skid-control: yaw/lateral signal, byte[0..1] signed16 BE (RAW, TBD)
-      if (x.size() >= 2) V[YAW] = (float)(int16_t)(((uint16_t)x[0] << 8) | x[1]);
+    case 0x4A1:  // VSC: LATERAL acceleration, byte[0..1] signed16 BE (RAW; calibrate -> m/s2)
+      if (x.size() >= 2) V[GLAT] = (float)(int16_t)(((uint16_t)x[0] << 8) | x[1]);
+      return;
+    case 0x320:  // VSC: LONGITUDINAL acceleration, byte[4] (RAW; ~154 = 0g, drops on accel ->
+      // store as (center - b4) so positive = forward accel. Calibrate center+scale -> m/s2.
+      if (x.size() >= 5) V[GFWD] = 154.0f - (float)x[4];
+      return;
+    case 0x245:  // gas pedal: byte[2] is 0..200 -> /2 = 0..100 %
+      if (x.size() >= 3) V[GASB] = (float)x[2] * 0.5f;
+      return;
+    case 0x025:  // steering angle: byte[0..1] 12-bit, 2048 = centre, ~0.245 deg/count
+      if (x.size() >= 2) V[STEER] = (float)((int)(((x[0] & 0x0F) << 8) | x[1]) - 2048) * 0.245f;
       return;
     case 0x611:  // Combination meter: odometer in km, bytes[5..7] (24-bit)
       if (x.size() >= 8) V[ODO] = (float)(((uint32_t)x[5] << 16) | ((uint32_t)x[6] << 8) | x[7]);
       return;
     case 0x612:  // Combination meter: fuel level = byte[5] as % (b5/255*100). Calibrated
       // from dumps: 5/10 gauge segments = b5 129 ~= 50% -> linear 0..255 = empty..full.
+      // NB: 0xFF is a real "full tank" value, so we DON'T drop it here; the boot-transient
+      // false refuel (b5 bouncing 0<->255 for ~1 min) is handled by a warm-up gate in
+      // compute_derived instead, so a genuinely full tank still reads 100%.
       if (x.size() >= 6) V[FUELIN] = (float)x[5] * 100.0f / 255.0f;
       return;
   }
@@ -475,7 +509,7 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
 
 // Return: if >0, the YAML should send flow control to the (returned - 8) ID.
 inline uint16_t on_can_frame(uint16_t resp_id, const std::vector<uint8_t> &x, uint32_t now_ms) {
-  if (x.empty()) return 0;
+  if (can_paused || x.empty()) return 0;    // OTA in progress -> stop ISO-TP/diag processing
   uint8_t pci = x[0] >> 4;
   if (pci == 0x0) {
     uint8_t len = x[0] & 0x0F;
@@ -602,11 +636,46 @@ inline void learn_import(const float *in) {
 // stays ESPHome-free; dt comes from the real timestamp (robust to interval jitter).
 inline uint32_t derive_last_ms = 0;
 inline bool derive_init = false;
-inline float trip_dist = 0;   // km since start
-inline float trip_fuel = 0;   // l since start
-inline float move_s = 0;      // active moving seconds since boot (stops <=180 s count)
-inline float stop_s = 0;      // current stop duration (s)
-inline float ev_dist = 0;     // pure-EV km since boot (engine off + moving)
+inline float trap_sp = NAN;   // previous speed/fuel-rate for trapezoidal integration
+inline float trap_fl = NAN;
+// current stop duration (s), shared by all slots (the "stops <=180 s still count as moving"
+// bridge for traffic lights). Starts HIGH so a just-started, still-standing car does NOT count
+// moving time until it actually moves once (then a move resets it to 0 and the bridge applies).
+inline float stop_s = 1000.0f;
+
+// ===== Unified trip slots (firmware-owned). ONE record type for every counter. =====
+struct TripSlot {
+  uint32_t epoch;   // start time (unix s)
+  uint32_t odo;     // odometer (km) at start  -> absolute reference
+  float dist;       // km
+  float ev;         // pure-EV km
+  float fuel;       // l
+  float move_s;     // active moving seconds (stops <=180 s count)
+  float regen_e;    // J recovered into the pack while braking
+  float brake_e;    // J of kinetic energy shed while braking (ratio = regen_e/brake_e)
+};
+inline TripSlot boot_slot = {};        // SINCE BOOT — memory only, NOT persisted
+inline TripSlot slot[7] = {};          // PERSISTED: [0]=lifetime(never reset) [1]=tank
+                                       // [2]=oil-service [3..5]=user [6]=home-departure(app auto-reset)
+inline constexpr int NSLOT = 7;
+inline constexpr int HISTN = 50;       // rotating history depth (refuel + oil-change)
+inline TripSlot rhist[HISTN] = {}; inline uint8_t rhist_n = 0, rhist_head = 0;  // refuel history
+inline TripSlot ohist[HISTN] = {}; inline uint8_t ohist_n = 0, ohist_head = 0;  // oil-change history
+inline bool persist_request = false;   // ask the YAML to flush NVS (refuel / reset)
+
+inline uint32_t cur_odo() { float o = V[ODO]; return std::isnan(o) ? 0u : (uint32_t)o; }
+inline void slot_start(TripSlot &s, uint32_t epoch, uint32_t odo) { s = {}; s.epoch = epoch; s.odo = odo; }
+inline void slot_add(TripSlot &s, float dd, float de, float df, float dm, float dre, float dbe) {
+  s.dist += dd; s.ev += de; s.fuel += df; s.move_s += dm; s.regen_e += dre; s.brake_e += dbe;
+}
+// reset a slot (2..5): oil-service (2) is pushed into the oil history first; 3..5 are user
+// trips. Slot 0 (lifetime) and 1 (tank, reset only on refuel) are not user-resettable here.
+inline void reset_slot(int i, uint32_t epoch) {
+  if (i < 2 || i > 6) return;        // [2]=oil [3..5]=user [6]=home; [0]/[1] not resettable here
+  if (i == 2) { ohist[ohist_head] = slot[2]; ohist_head = (ohist_head + 1) % HISTN; if (ohist_n < HISTN) ohist_n++; }
+  slot_start(slot[i], epoch, cur_odo());
+  persist_request = true;
+}
 
 // Self-learning pack capacity via coulomb counting between SoC points (persisted).
 // capacity[Ah] = integral(I dt) / dSoC; learned by EWMA over many spans. kWh uses
@@ -631,7 +700,9 @@ inline constexpr float    CAP_MAX_AH   = 15.0f;
 inline void cap_export(float *o) { o[0]=cap_ah; o[1]=(float)cap_n; o[2]=vl_avg; }
 inline void cap_import(const float *in) { cap_ah=in[0]; cap_n=(uint32_t)in[1]; vl_avg=in[2]; }
 
+inline uint32_t derive_boot_ms = 0;   // first compute_derived call (for the boot warm-up)
 inline void compute_derived(uint32_t now_ms) {
+  if (derive_boot_ms == 0) derive_boot_ms = now_ms;
   float maf = V[MAF], r = V[RPM];
   if (!std::isnan(maf))
     V[FUEL] = (r < 100) ? 0.0f : maf/14.7f*3600.0f/745.0f;
@@ -701,24 +772,48 @@ inline void compute_derived(uint32_t now_ms) {
   if (derive_init) {
     float dt_h = (float)(now_ms - derive_last_ms) / 3600000.0f;   // ms -> hours
     float dt_s = dt_h * 3600.0f;
-    float sp = V[SPD], fl = V[FUEL];
-    if (!std::isnan(sp) && sp > 0) trip_dist += sp * dt_h;        // km
-    if (!std::isnan(fl) && fl > 0) trip_fuel += fl * dt_h;        // l (fuel is l/h)
-
-    // active moving time since boot: stops up to 180 s still count as "moving"
+    float sp = V[SPD], fl = V[FUEL], amps = V[HVA];
+    // Compute the per-tick deltas ONCE, then add them to every slot (boot + 0..5). Trapezoidal
+    // (average prev+current rate) removes the left-Riemann lag on the ramping speed.
+    float d_dist = 0, d_fuel = 0, d_ev = 0, d_move = 0, d_re = 0, d_be = 0;
     if (!std::isnan(sp)) {
-      if (sp > 2.0f) { move_s += dt_s; stop_s = 0; }
-      else { stop_s += dt_s; if (stop_s <= 180.0f) move_s += dt_s; }
+      float a = ((std::isnan(trap_sp) ? sp : trap_sp) + sp) * 0.5f;
+      if (a > 0) d_dist = a * dt_h;                                       // km
+    }
+    if (!std::isnan(fl)) {
+      float a = ((std::isnan(trap_fl) ? fl : trap_fl) + fl) * 0.5f;
+      if (a > 0) d_fuel = a * dt_h;                                       // l
+    }
+    // active moving time: stops up to 180 s still count as "moving" (shared stop timer)
+    if (!std::isnan(sp)) {
+      if (sp > 2.0f) { stop_s = 0; d_move = dt_s; }
+      else { stop_s += dt_s; if (stop_s <= 180.0f) d_move = dt_s; }
     }
     // pure-EV distance: moving with the engine off (rpm < 100)
     float rp = V[RPM];
-    if (!std::isnan(sp) && sp > 2.0f && !std::isnan(rp) && rp < 100.0f) ev_dist += sp * dt_h;
+    if (!std::isnan(sp) && sp > 2.0f && !std::isnan(rp) && rp < 100.0f) d_ev = sp * dt_h;
+    // regen: while BRAKING (disc pressure up OR battery charging) AND decelerating, energy shed
+    // (1/2 m dv^2, m~1450 kg) and energy recovered into the pack (-hvA*VL while hvA<0).
+    {
+      float brk = V[BRKP], vn = sp, vp = std::isnan(trap_sp) ? sp : trap_sp;
+      if (!std::isnan(vn) && !std::isnan(vp) && vn < vp && vn >= 0) {
+        bool braking = (!std::isnan(brk) && brk > 0.55f) || (!std::isnan(amps) && amps < -5.0f);
+        if (braking) {
+          float vpm = vp / 3.6f, vnm = vn / 3.6f;
+          d_be = 0.5f * 1450.0f * (vpm*vpm - vnm*vnm);                    // J shed
+          if (!std::isnan(amps) && amps < 0 && !std::isnan(vl) && vl > 0) d_re = (-amps * vl) * dt_s;  // J recovered
+        }
+      }
+    }
+    // accumulate into every slot (the only difference between slots is WHEN they reset)
+    slot_add(boot_slot, d_dist, d_ev, d_fuel, d_move, d_re, d_be);
+    for (int i = 0; i < NSLOT; i++) slot_add(slot[i], d_dist, d_ev, d_fuel, d_move, d_re, d_be);
 
     // running charge integral for the capacity estimate (needs dt)
-    float amps = V[HVA];
     if (!std::isnan(amps)) charge_ah += amps * dt_h;     // signed Ah
   }
   derive_last_ms = now_ms;
+  trap_sp = V[SPD]; trap_fl = V[FUEL];   // remember for the next trapezoid step
   derive_init = true;
 
   // pack capacity: SoC peak-to-trough swing vs the charge integral (runs each call so
@@ -736,27 +831,37 @@ inline void compute_derived(uint32_t now_ms) {
       cap_smin = cap_smax = so; cap_q_lo = cap_q_hi = charge_ah;   // reset window
     }
   }
-  V[TDIST] = trip_dist;
-  V[TFUEL] = trip_fuel;
-  V[TAVG]  = (trip_dist > 0.1f) ? (trip_fuel / trip_dist * 100.0f) : NAN;  // l/100km
+  // dashboard "trip computer" = SINCE BOOT (boot_slot, not persisted)
+  V[TDIST] = boot_slot.dist;
+  V[TFUEL] = boot_slot.fuel;
+  V[TAVG]  = (boot_slot.dist > 0.1f) ? (boot_slot.fuel / boot_slot.dist * 100.0f) : NAN;  // l/100km
   V[CAPAH]  = (cap_n > 0) ? cap_ah : NAN;
   V[CAPKWH] = (cap_n > 0 && vl_avg > 0) ? (cap_ah * vl_avg / 1000.0f) : NAN;
-  V[TMOVE] = move_s;
-  V[TSPD]  = (move_s > 5.0f) ? (trip_dist / (move_s / 3600.0f)) : NAN;   // km/h since boot
-  V[TEV]   = ev_dist;
+  V[TMOVE] = boot_slot.move_s;
+  V[TSPD]  = (boot_slot.move_s > 5.0f) ? (boot_slot.dist / (boot_slot.move_s / 3600.0f)) : NAN;   // km/h since boot
+  V[TEV]   = boot_slot.ev;
 
   // refuel detection: fuelIn (%) jumps up significantly while parked -> record the time
   float fin = V[FUELIN], sp2 = V[SPD];
   if (!std::isnan(fin)) {
     if (fuel_ref < 0) fuel_ref = fin;
     bool parked = std::isnan(sp2) || sp2 < 3.0f;
-    if (parked && fin - fuel_ref >= REFUEL_DELTA) {
+    // boot warm-up: the meter ECU bounces fuelIn 0%<->100% (b5 0x00/0xFF) for ~1 min after
+    // power-up; suppress refuel detection until it settles so we don't log a false refuel.
+    bool warmup = (now_ms - derive_boot_ms) < 60000u;
+    if (!warmup && parked && fin - fuel_ref >= REFUEL_DELTA) {
       // up-jump seen; require it to PERSIST >=1.5 s so a 1-sample spike does not trigger
       if (refuel_seen_ms == 0) refuel_seen_ms = now_ms;
       else if (now_ms - refuel_seen_ms >= 1500) {
-        if (host_time_set) { last_refuel_epoch = cur_epoch(now_ms); refuel_pending = false; }
+        // push the just-finished tank (slot[1]) into the rotating refuel history, then restart it
+        rhist[rhist_head] = slot[1];
+        rhist_head = (rhist_head + 1) % HISTN;
+        if (rhist_n < HISTN) rhist_n++;
+        uint32_t ep = host_time_set ? cur_epoch(now_ms) : 0u;
+        slot_start(slot[1], ep, cur_odo());                        // new tank starts now
+        if (host_time_set) { last_refuel_epoch = ep; refuel_pending = false; }
         else { last_refuel_ms = now_ms; refuel_pending = true; }   // correct later (#4)
-        refuel_dirty = true;
+        refuel_dirty = true; persist_request = true;               // flush NVS on refuel
         fuel_ref = fin; refuel_seen_ms = 0;
       }
     } else {
@@ -804,10 +909,9 @@ inline const Field FIELDS[] = {
   {ELEN,"\"eLen\":",7,2}, {EFF,"\"eFF\":",6,2}, {EOK,"\"eOK\":",6,2}, {LOOPS,"\"loops\":",8,2},
   {GEAR,"\"gear\":",7,0}, {TURN,"\"turn\":",7,0}, {SETSPD,"\"setSpd\":",9,0},
   {CWL,"\"cwL\":",6,0}, {WBLK,"\"wblk\":",7,0}, {WZ,"\"wz\":",5,2},
-  {TDIST,"\"tDist\":",8,1}, {TFUEL,"\"tFuel\":",8,2}, {TAVG,"\"tAvg\":",7,1},
+  // trip computer / slots are NOT flat fields anymore -> emitted as the "slots" array below
   {CAPAH,"\"capAh\":",8,2}, {CAPKWH,"\"capKwh\":",9,2},
-  {TMOVE,"\"tMove\":",8,0}, {TSPD,"\"tSpd\":",7,0}, {TEV,"\"tEv\":",6,1},
-  {ODO,"\"odo\":",6,0}, {YAW,"\"yaw\":",6,0},
+  {ODO,"\"odo\":",6,0}, {GASB,"\"gasB\":",7,0},
 };
 inline const int FIELDS_N = sizeof(FIELDS) / sizeof(FIELDS[0]);
 
@@ -841,8 +945,21 @@ inline void put_uint(char *&p, uint32_t v) {
   while (n > 0) *p++ = tmp[--n];
 }
 
+// One TripSlot as compact JSON, using the integer formatters (NO dtoa -> hot-path safe):
+// {"e":epoch,"o":odo,"d":dist,"v":ev,"f":fuel,"m":move_s,"r":regen%}
+inline void put_slot(char *&p, const TripSlot &s) {
+  std::memcpy(p, "{\"e\":", 5); p += 5; put_uint(p, s.epoch);
+  std::memcpy(p, ",\"o\":", 5); p += 5; put_uint(p, s.odo);
+  std::memcpy(p, ",\"d\":", 5); p += 5; put_num(p, s.dist, 1);
+  std::memcpy(p, ",\"v\":", 5); p += 5; put_num(p, s.ev, 1);
+  std::memcpy(p, ",\"f\":", 5); p += 5; put_num(p, s.fuel, 2);
+  std::memcpy(p, ",\"m\":", 5); p += 5; put_num(p, s.move_s, 0);
+  std::memcpy(p, ",\"r\":", 5); p += 5; put_num(p, s.brake_e > 1.0f ? (s.regen_e / s.brake_e * 100.0f) : 0.0f, 0);
+  *p++ = '}';
+}
+
 inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
-  char buf[2048];
+  char buf[3072];   // worst-case line is ~2 KB now (many fields) -> headroom against overflow
   char *p = buf;
   *p++ = '{';
   for (int i = 0; i < FIELDS_N; i++) {
@@ -855,6 +972,17 @@ inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
   std::memcpy(p, "\"epoch\":", 8); p += 8; put_uint(p, cur_epoch(now_ms)); *p++ = ',';
   std::memcpy(p, "\"fuelTs\":", 9); p += 9; put_uint(p, last_refuel_epoch); *p++ = ',';
   std::memcpy(p, "\"fw\":", 5); p += 5; put_uint(p, (uint32_t)FW_VERSION); *p++ = ',';
+  std::memcpy(p, "\"offTs\":", 8); p += 8; put_uint(p, boot_off_epoch); *p++ = ',';
+  std::memcpy(p, "\"offN\":", 7); p += 7; put_uint(p, boot_off_n); *p++ = ',';
+  // ALL live slots in one array (the app derives everything). Order: [0]=since-boot,
+  // [1]=lifetime, [2]=tank, [3]=oil, [4..6]=Trip A/B/C. History records are on-demand ("H");
+  // here we only send their COUNTS (rhN/ohN) so the UI knows whether data exists.
+  std::memcpy(p, "\"slots\":[", 9); p += 9;
+  put_slot(p, boot_slot);
+  for (int i = 0; i < NSLOT; i++) { *p++ = ','; put_slot(p, slot[i]); }
+  *p++ = ']'; *p++ = ',';
+  std::memcpy(p, "\"rhN\":", 6); p += 6; put_uint(p, rhist_n); *p++ = ',';
+  std::memcpy(p, "\"ohN\":", 6); p += 6; put_uint(p, ohist_n); *p++ = ',';
   if (door_cruise_extra) {       // passed in by the YAML: "door":..,"cruise":..
     size_t n = std::strlen(door_cruise_extra);
     std::memcpy(p, door_cruise_extra, n); p += n;
@@ -863,5 +991,31 @@ inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
   *p++ = '\n';
   out_write(buf, (int)(p - buf));
 }
+
+// one TripSlot as JSON: e=epoch o=odo d=dist v=ev f=fuel m=move_s r=regen%
+inline void emit_slot_json(char *&p, char *end, const TripSlot &s) {
+  float r = s.brake_e > 1.0f ? (s.regen_e / s.brake_e * 100.0f) : 0.0f;
+  p += snprintf(p, end - p, "{\"e\":%u,\"o\":%u,\"d\":%.1f,\"v\":%.1f,\"f\":%.2f,\"m\":%.0f,\"r\":%.0f}",
+                (unsigned)s.epoch, (unsigned)s.odo, s.dist, s.ev, s.fuel, s.move_s, r);
+}
+// On-demand history dump: ONE array (50 records max ~4.3 KB) so a single response never
+// blows the buffer. The live slots (with their epochs) come from the regular line, so the
+// history responses carry only the records. "H" -> refuel history, "HO" -> oil-change history.
+inline void emit_hist_array(const char *key, const TripSlot *arr, uint8_t n, uint8_t head) {
+  static char buf[6144]; char *p = buf; char *end = buf + sizeof(buf);
+  p += snprintf(p, end - p, "{\"%s\":[", key);
+  for (uint8_t k = 0; k < n && p < end - 120; k++) {
+    if (k) *p++ = ',';
+    emit_slot_json(p, end, arr[(uint8_t)((head + HISTN - n + k) % HISTN)]);   // oldest first
+  }
+  p += snprintf(p, end - p, "]}\n");
+  int total = (int)(p - buf), off = 0;
+  for (int tries = 0; off < total && tries < 200000; tries++) {
+    int w = write(1, buf + off, total - off);
+    if (w > 0) off += w;
+  }
+}
+inline void emit_history() { emit_hist_array("rhist", rhist, rhist_n, rhist_head); }
+inline void emit_ohist()   { emit_hist_array("ohist", ohist, ohist_n, ohist_head); }
 
 } // namespace prius

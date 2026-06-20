@@ -145,7 +145,7 @@
     <string name="f_wDif">Différence roues avant</string>
     <string name="f_gLat">G latéral</string>
     <string name="f_gFwd">G longitudinal</string>
-    <string name="f_yaw">Lacet / latéral (brut)</string>
+    <string name="f_gasB">Gaz</string>
     <string name="f_steer">Angle de braquage</string>
     <string name="f_brkP">Pression de freinage</string>
 
@@ -250,4 +250,19 @@
     <string name="display_title">Affichage</string>
     <string name="theme_auto_car">Mode sombre via le capteur de lumière de la voiture</string>
     <string name="dump_unknown">Trames inconnues seulement (découverte)</string>
+    <string name="r_distances">Distances</string>
+    <string name="sl_odo">Odomètre</string>
+    <string name="sl_oil">Vidange</string>
+    <string name="sl_trip">Trip %1$s</string>
+    <string name="btn_reset">Réinit.</string>
+    <string name="r_regen">Taux régén.</string>
+    <string name="trip_boot">Depuis démarrage</string>
+    <string name="trip_home">Depuis maison</string>
+    <string name="trip_tank">Plein</string>
+    <string name="trip_oil">Vidange</string>
+    <string name="trip_life">Total</string>
+    <string name="tab_tpms">Pneus</string>
+    <string name="trip_hold">Maintenir pour réinit.</string>
+    <string name="trip_at">à %1$s km</string>
+    <string name="trip_need_fw">Mise à jour firmware requise (v3.0)</string>
 </resources>

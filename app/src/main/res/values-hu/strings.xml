@@ -145,7 +145,7 @@
     <string name="f_wDif">Első kerék eltérés</string>
     <string name="f_gLat">Oldalgyorsulás</string>
     <string name="f_gFwd">Hosszgyorsulás</string>
-    <string name="f_yaw">Yaw / oldal (nyers)</string>
+    <string name="f_gasB">Gáz</string>
     <string name="f_steer">Kormányszög</string>
     <string name="f_brkP">Féknyomás</string>
 
@@ -250,4 +250,19 @@
     <string name="display_title">Megjelenítés</string>
     <string name="theme_auto_car">Sötét mód az autó fényszenzora szerint</string>
     <string name="dump_unknown">Csak ismeretlen frame-ek (felderítés)</string>
+    <string name="r_distances">Távolságok</string>
+    <string name="sl_odo">Kilométeróra</string>
+    <string name="sl_oil">Olajcsere</string>
+    <string name="sl_trip">Trip %1$s</string>
+    <string name="btn_reset">Nullázás</string>
+    <string name="r_regen">Regen arány</string>
+    <string name="trip_boot">Indítás óta</string>
+    <string name="trip_home">Otthonról</string>
+    <string name="trip_tank">Tankolás</string>
+    <string name="trip_oil">Olajcsere</string>
+    <string name="trip_life">Élettartam</string>
+    <string name="tab_tpms">Keréknyomás</string>
+    <string name="trip_hold">Tartsd nyomva a resethez</string>
+    <string name="trip_at">%1$s km-nél</string>
+    <string name="trip_need_fw">Firmware frissítés kell (v3.0)</string>
 </resources>

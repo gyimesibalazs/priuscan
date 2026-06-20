@@ -145,7 +145,7 @@
     <string name="f_wDif">Diferencial das rodas dianteiras</string>
     <string name="f_gLat">G lateral</string>
     <string name="f_gFwd">G longitudinal</string>
-    <string name="f_yaw">Guinada / lateral (bruto)</string>
+    <string name="f_gasB">Gás</string>
     <string name="f_steer">Ângulo de direção</string>
     <string name="f_brkP">Pressão dos travões</string>
 
@@ -251,4 +251,19 @@
     <string name="display_title">Ecrã</string>
     <string name="theme_auto_car">Modo escuro pelo sensor de luz do carro</string>
     <string name="dump_unknown">Só tramas desconhecidas (descoberta)</string>
+    <string name="r_distances">Distâncias</string>
+    <string name="sl_odo">Odómetro</string>
+    <string name="sl_oil">Mudança óleo</string>
+    <string name="sl_trip">Trip %1$s</string>
+    <string name="btn_reset">Repor</string>
+    <string name="r_regen">Rácio regen.</string>
+    <string name="trip_boot">Desde arranque</string>
+    <string name="trip_home">De casa</string>
+    <string name="trip_tank">Depósito</string>
+    <string name="trip_oil">Mudança óleo</string>
+    <string name="trip_life">Total</string>
+    <string name="tab_tpms">Pneus</string>
+    <string name="trip_hold">Manter para repor</string>
+    <string name="trip_at">a %1$s km</string>
+    <string name="trip_need_fw">Atualização de firmware necessária (v3.0)</string>
 </resources>

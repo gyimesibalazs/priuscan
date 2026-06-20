@@ -198,7 +198,7 @@
     <string name="f_gLat">Lateral G</string>
     <string name="f_gFwd">Longitudinal G</string>
     <string name="f_steer">Steering angle</string>
-    <string name="f_yaw">Yaw / lateral (raw)</string>
+    <string name="f_gasB">Gas</string>
     <string name="f_brkP">Brake pressure</string>
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
@@ -252,4 +252,19 @@
     <string name="f_eOK">2101 successful</string>
     <string name="f_eLen">last response length</string>
 
+    <string name="r_distances">Distances</string>
+    <string name="sl_odo">Odometer</string>
+    <string name="sl_oil">Oil service</string>
+    <string name="sl_trip">Trip %1$s</string>
+    <string name="btn_reset">Reset</string>
+    <string name="r_regen">Regen ratio</string>
+    <string name="trip_boot">Since start</string>
+    <string name="trip_home">From home</string>
+    <string name="trip_tank">Tank</string>
+    <string name="trip_oil">Oil change</string>
+    <string name="trip_life">Lifetime</string>
+    <string name="tab_tpms">Tyres</string>
+    <string name="trip_hold">Hold to reset</string>
+    <string name="trip_at">at %1$s km</string>
+    <string name="trip_need_fw">Firmware update needed (v3.0)</string>
 </resources>

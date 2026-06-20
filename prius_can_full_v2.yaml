@@ -22,10 +22,11 @@ esphome:
   includes:
     - prius_parse.h
     - prius_ota.h
+    - prius_persist.h
   on_boot:
     priority: -100   # the globals have been restored by then
     then:
-      - lambda: 'prius::learn_import(id(learn_state).data()); prius::cap_import(id(cap_state).data()); prius::last_refuel_epoch = id(refuel_epoch);'
+      - lambda: 'prius::learn_import(id(learn_state).data()); prius::cap_import(id(cap_state).data()); prius::last_refuel_epoch = id(refuel_epoch); prius_persist_load();'
 
 # Persistent storage of the self-learning weak-block baseline (lz[14] + sample count).
 # restore_value: restored on boot, periodically flushed to flash (the YAML
@@ -961,8 +962,8 @@ canbus:
       # ---------- passive broadcast values (opendbc Gen3 DBC) ----------
       # No request, high rate. The header on_broadcast() writes into prius::V[];
       # if some ID is not on our bus, the value stays null (non-destructive).
-      - can_id: 0x1C4   # POWERTRAIN: fast ENGINE_RPM
-        then: { lambda: 'prius::on_broadcast(0x1C4, x);' }
+      - can_id: 0x1C4   # POWERTRAIN: fast ENGINE_RPM (also our "bus alive" heartbeat)
+        then: { lambda: 'prius::on_broadcast(0x1C4, x); prius::last_pwr_ms = millis();' }
       - can_id: 0x0B4   # SPEED: vehicle speed
         then: { lambda: 'prius::on_broadcast(0x0B4, x);' }
       - can_id: 0x127   # GEAR_PACKET: gear position
@@ -975,8 +976,14 @@ canbus:
         then: { lambda: 'prius::on_broadcast(0x612, x);' }
       - can_id: 0x611   # Combination meter: odometer (km)
         then: { lambda: 'prius::on_broadcast(0x611, x);' }
-      - can_id: 0x4A1   # VSC skid-control: yaw/lateral (raw, TBD)
+      - can_id: 0x4A1   # VSC: lateral acceleration -> gLat (raw, calibrate)
         then: { lambda: 'prius::on_broadcast(0x4A1, x);' }
+      - can_id: 0x320   # VSC: longitudinal acceleration -> gFwd (raw, calibrate)
+        then: { lambda: 'prius::on_broadcast(0x320, x);' }
+      - can_id: 0x245   # gas pedal % broadcast
+        then: { lambda: 'prius::on_broadcast(0x245, x);' }
+      - can_id: 0x025   # steering angle broadcast
+        then: { lambda: 'prius::on_broadcast(0x025, x);' }
 
       # ---------- ISO-TP diag responses (all four ECUs) ----------
       - can_id: 0x7E8
@@ -1030,8 +1037,26 @@ interval:
           }
           if (prius::ota_request) {            // app asked to flash -> spawn the OTA task
             prius::ota_request = false;
+            prius::can_paused = true;          // stop CAN processing immediately -> free CPU for the flash
             prius_ota_begin(prius::ota_size);
           }
+          // ignition-off = the fast powertrain heartbeat (0x1C4) went quiet > 0.8 s.
+          // Flush the full state to NVS ONCE on power-down; re-arm when the bus is alive.
+          {
+            uint32_t nm = millis();
+            bool quiet = !ota_active && prius::last_pwr_ms != 0 && (nm - prius::last_pwr_ms) > 800;
+            if (quiet) {
+              if (!prius::persist_done) { prius::persist_done = true; prius_persist_save(prius::cur_epoch(nm)); }
+            } else {
+              prius::persist_done = false;
+            }
+          }
+          // app commands: reset a distance slot ("R<i>"), dump the refuel history ("H"),
+          // and flush NVS on a refuel / slot-reset event (persist_request).
+          if (prius::reset_req >= 0) { prius::reset_slot(prius::reset_req, prius::cur_epoch(millis())); prius::reset_req = -1; }
+          if (prius::hist_request) { prius::hist_request = false; prius::emit_history(); }
+          if (prius::ohist_request) { prius::ohist_request = false; prius::emit_ohist(); }
+          if (prius::persist_request) { prius::persist_request = false; prius_persist_save(prius::cur_epoch(millis())); }
 
   # Calculated fuel consumption + warnings every 500 ms (fuel = computed from maf,
   # so the derived values also keep pace with the fast 7E0/2101 poll)

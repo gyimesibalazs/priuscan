@@ -90,6 +90,7 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
     val dumpFile by CanService.dumpFile.collectAsState()
     val fwRun by CanService.fwRunning.collectAsState()
     val flSt by CanService.flashState.collectAsState()
+    val canState by CanService.state.collectAsState()
     val flPct by CanService.flashProgress.collectAsState()
     val flMsg by CanService.flashMsg.collectAsState()
     val tpmsWheels = listOf(
@@ -226,6 +227,17 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
             "ESP: " + CanService.fmtFw(fwRun ?: 0) + "  /  v" + CanService.fmtFw(CanService.BUNDLED_FW),
             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // NVS persistence test: restored shutdown epoch (offTs) + save counter (offN)
+        run {
+            val offN = canState.i("offN")
+            val offTs = canState.d("offTs")?.toLong() ?: 0L
+            val tsTxt = if (offTs > 0)
+                java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(offTs * 1000))
+            else "—"
+            Text("NVS: mentések=$offN, utolsó kikapcsolás=$tsTxt",
+                fontSize = 13.sp,
+                color = if (offN > 0) Color(0xFF7CFC00) else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         when (flSt) {
             FlashState.FLASHING -> {
                 Text(flMsg, color = MaterialTheme.colorScheme.onBackground)

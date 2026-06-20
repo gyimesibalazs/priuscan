@@ -1,5 +1,13 @@
 package hu.codingo.priuscan
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -29,6 +37,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
@@ -37,9 +46,11 @@ import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,8 +100,8 @@ fun MainScreen(prefs: Prefs) {
     val titles = buildList {
         add(stringResource(R.string.tab_dashboard))
         groups.forEach { add(stringResource(it.first)) }
+        add(stringResource(R.string.tab_tpms))
         add(stringResource(R.string.gps_title))
-        add(stringResource(R.string.tab_refuel))
         add(stringResource(R.string.settings_title))
     }
 
@@ -107,14 +118,14 @@ fun MainScreen(prefs: Prefs) {
             }
         }
         when (tab) {
-            0 -> DashboardTab(state, tpmsReadings)
+            0 -> DashboardTab(state)
             in 1..groups.size -> {
                 val (titleRes, fields) = groups[tab - 1]
                 if (titleRes == R.string.grp_hybrid_batt) HybridBatteryTab(state, fields, prefs.batteryRefAh)
                 else GroupTab(state, fields)
             }
-            groups.size + 1 -> GpsTab(gpsLoc)
-            groups.size + 2 -> RefuelTab()
+            groups.size + 1 -> TpmsTab(tpmsReadings)
+            groups.size + 2 -> GpsTab(gpsLoc)
             else -> SettingsScreen(prefs) { tab = 0 }
         }
     }
@@ -136,17 +147,18 @@ private fun tabColumn(content: androidx.compose.foundation.lazy.LazyListScope.()
     }
 }
 
-/** Tab 1: glance dashboard - coolant/gear/rpm/consumption + trip + car & tyres. */
+/** Tab 1: glance dashboard - header + odometer + fuel level + the trip switcher. */
 @Composable
-private fun DashboardTab(state: CanState, tpms: Map<Wheel, TireReading>) = tabColumn {
+private fun DashboardTab(state: CanState) = tabColumn {
     item { Header(state) }
-    // trip summary on the first screen (since ESP boot): odo / fuel / dist / EV / avg
-    item { GroupTitle(stringResource(R.string.grp_trip)) }
-    itemsIndexed(Fields.trip) { _, f ->
-        SensorRow(stringResource(f.labelRes), format(state.d(f.key), f.decimals, f.unit))
-    }
-    // active moving time since ESP boot (computed in firmware)
-    item { SensorRow(stringResource(R.string.r_movetime), fmtDur(state.d("tMove")?.toLong() ?: 0L)) }
+    item { SensorRow(stringResource(R.string.f_odo), format(state.d("odo"), 0, "km")) }
+    item { SensorRow(stringResource(R.string.f_fuelIn), format(state.d("fuelIn"), 0, "%")) }
+    item { TripSection() }
+}
+
+/** Tyre pressure on its own big tab. */
+@Composable
+private fun TpmsTab(tpms: Map<Wheel, TireReading>) = tabColumn {
     item { GroupTitle(stringResource(R.string.tpms_title)) }
     item { TpmsCarView(tpms) }
 }
@@ -183,28 +195,111 @@ private fun HybridBatteryTab(state: CanState, fields: List<Field>, refAh: Float)
     }
 }
 
+// Trip switcher definitions. idx = position in the firmware "slots" array
+// [boot, lifetime, tank, oil, A, B, C, home]; resetCmd = "R<n>" (0 = not resettable);
+// hist = 0 none / 1 refuel / 2 oil.
+private data class TripDef(val labelRes: Int, val arg: String?, val idx: Int, val resetCmd: Int, val hist: Int)
+private val TRIPS = listOf(
+    TripDef(R.string.trip_boot, null, 0, 0, 0),
+    TripDef(R.string.trip_home, null, 7, 6, 0),
+    TripDef(R.string.sl_trip, "A", 4, 3, 0),
+    TripDef(R.string.sl_trip, "B", 5, 4, 0),
+    TripDef(R.string.sl_trip, "C", 6, 5, 0),
+    TripDef(R.string.trip_tank, null, 2, 0, 1),
+    TripDef(R.string.trip_oil, null, 3, 2, 2),
+    TripDef(R.string.trip_life, null, 1, 0, 0),
+)
+
+/** The dashboard trip switcher: scrollable chips + the selected trip's stats, a long-press
+ *  reset (with circular progress) for resettable trips, and history for Tank/Oil. */
 @Composable
-private fun RefuelTab() {
-    val live by CanService.tripLive.collectAsState()
-    val hist by CanService.tripHistory.collectAsState()
-    tabColumn {
-        item { GroupTitle(stringResource(R.string.r_since_refuel)) }
-        item { SensorRow(stringResource(R.string.r_time), fmtDur(live.elapsedS)) }
-        item { SensorRow(stringResource(R.string.r_dist), "%.1f km".format(live.distKm)) }
-        item { SensorRow(stringResource(R.string.f_tEv), "%.1f km".format(live.evKm)) }
-        item { SensorRow(stringResource(R.string.r_avgspeed), "%.0f km/h".format(live.avgKmh)) }
-        item { SensorRow(stringResource(R.string.r_fuelused), "%.2f L".format(live.fuelL)) }
-        item { SensorRow(stringResource(R.string.r_avgcons), "%.1f l/100km".format(live.avgCons)) }
-        item { GroupTitle(stringResource(R.string.r_history)) }
-        if (hist.isEmpty()) {
-            item { Text(stringResource(R.string.r_none), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp) }
+private fun TripSection() {
+    val slots by CanService.tripSlots.collectAsState()
+    val refuelHist by CanService.refuelHist.collectAsState()
+    val oilHist by CanService.oilHist.collectAsState()
+    var sel by remember { mutableStateOf(0) }
+    val def = TRIPS[sel]
+
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            TRIPS.forEachIndexed { i, t ->
+                val label = if (t.arg != null) stringResource(t.labelRes, t.arg) else stringResource(t.labelRes)
+                FilterChip(selected = i == sel, onClick = { sel = i }, label = { Text(label, fontSize = 12.sp) })
+            }
         }
-        itemsIndexed(hist) { _, r ->
-            SensorRow(
-                fmtDate(r.epoch),
-                "%.0f km (%.0f EV) · %.0f km/h · %.1f L · %.1f l/100km".format(r.distKm, r.evKm, r.avgKmh, r.fuelL, r.avgCons),
+        Spacer(Modifier.height(6.dp))
+        if (slots.isEmpty()) {
+            Text(stringResource(R.string.trip_need_fw), color = Color(0xFFFFB74D), fontSize = 14.sp)
+            return@Column
+        }
+        val s = slots.getOrNull(def.idx) ?: TripSlot.EMPTY
+        SensorRow(stringResource(R.string.r_dist), "%.1f km".format(s.dist))
+        SensorRow(stringResource(R.string.f_tEv), "%.1f km".format(s.ev))
+        SensorRow(stringResource(R.string.r_avgcons), "%.1f l/100km".format(s.avgCons))
+        SensorRow(stringResource(R.string.r_avgspeed), "%.0f km/h".format(s.avgKmh))
+        SensorRow(stringResource(R.string.r_regen), "%.0f %%".format(s.regen))
+        if (s.epoch > 0) {
+            Text(
+                fmtDate(s.epoch) + (if (s.odo > 0) "  ·  " + stringResource(R.string.trip_at, "%,d".format(s.odo)) else ""),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
             )
         }
+        if (def.resetCmd > 0) {
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ResetHoldButton {
+                    CanService.resetSlot(def.resetCmd)
+                    if (def.hist == 2) CanService.fetchOilHistory()
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(stringResource(R.string.trip_hold), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
+        }
+        if (def.hist != 0) {
+            LaunchedEffect(sel) { if (def.hist == 1) CanService.fetchRefuelHistory() else CanService.fetchOilHistory() }
+            val h = if (def.hist == 1) refuelHist else oilHist
+            Spacer(Modifier.height(8.dp))
+            GroupTitle(stringResource(R.string.r_history))
+            if (h.isEmpty()) {
+                Text(stringResource(R.string.r_none), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+            } else {
+                h.asReversed().forEach { r ->   // newest first
+                    SensorRow(
+                        fmtDate(r.epoch),
+                        "%.0f km · %.0f EV · %.1f l/100km · %.0f%% regen".format(r.dist, r.ev, r.avgCons, r.regen),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Press-and-hold (~1.3 s) to reset, with a circular progress around the button. */
+@Composable
+private fun ResetHoldButton(onReset: () -> Unit) {
+    var holding by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0f) }
+    LaunchedEffect(holding) {
+        if (!holding) { progress = 0f; return@LaunchedEffect }
+        val start = withFrameNanos { it }
+        while (holding) {
+            val now = withFrameNanos { it }
+            progress = ((now - start) / 1_300_000_000f).coerceAtMost(1f)
+            if (progress >= 1f) { onReset(); holding = false; break }
+        }
+    }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(52.dp).pointerInput(Unit) {
+            detectTapGestures(onPress = { holding = true; tryAwaitRelease(); holding = false })
+        },
+    ) {
+        if (progress > 0f)
+            CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(52.dp), strokeWidth = 3.dp)
+        Text("⟲", fontSize = 22.sp, color = MaterialTheme.colorScheme.onBackground)
     }
 }
 

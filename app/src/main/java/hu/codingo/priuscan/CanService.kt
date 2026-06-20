@@ -65,12 +65,19 @@ class CanService : Service() {
         // ---- Dark mode driven by the car's solar (sun-load) sensor ----
         val carDark = MutableStateFlow(false)   // true = dark (low ambient light)
 
-        // ---- Trip stats since last refuel + refuel history (app-side) ----
-        val tripLive = MutableStateFlow(TripLive(0, 0.0, 0.0, 0.0, 0.0, 0.0))
-        val tripHistory = MutableStateFlow<List<RefuelRecord>>(emptyList())
+        // ---- Trip slots: firmware-owned, the app only displays. The regular line carries the 8
+        // live slots [boot, lifetime, tank, oil, A, B, C, home]; histories fetched on demand.
+        val tripSlots = MutableStateFlow<List<TripSlot>>(emptyList())   // 8 live slots
+        val refuelHist = MutableStateFlow<List<TripSlot>>(emptyList())  // <- "H"
+        val oilHist = MutableStateFlow<List<TripSlot>>(emptyList())     // <- "HO"
+        val histCount = MutableStateFlow(0 to 0)                        // (refuel, oil) entry counts
+        fun fetchRefuelHistory() = sendCommand("H")
+        fun fetchOilHistory() = sendCommand("HO")
+        /** Reset a slot: 2=Oil(=oil change) 3=A 4=B 5=C 6=Home. (boot/lifetime/tank not here) */
+        fun resetSlot(cmd: Int) { if (cmd in 2..6) sendCommand("R$cmd") }
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 207                        // bundled firmware version (major*100+minor -> 2.7)
+        const val BUNDLED_FW = 300                        // bundled firmware version (major*100+minor -> 3.0)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
@@ -108,6 +115,8 @@ class CanService : Service() {
 
         private const val CHANNEL = "priuscan"
         private const val NOTIF_ID = 1
+        // lenient JSON recovery: matches "key":number|null, ignoring malformed segments
+        private val FIELD_RE = Regex("\"([A-Za-z0-9_]+)\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?|null)")
 
         fun start(ctx: Context) {
             ctx.startForegroundService(Intent(ctx, CanService::class.java))
@@ -194,7 +203,6 @@ class CanService : Service() {
 
     private val logger by lazy { DataLogger(this) }
     private val dumpLogger by lazy { DumpLogger(this) }
-    private val tripTracker by lazy { TripTracker(prefs, tripLive, tripHistory) }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -489,16 +497,26 @@ class CanService : Service() {
         if (s.startsWith("#")) { if (dumpActive.value) dumpLogger.write(s); return false }
         if (!dumpActive.value && dumpLogger.isOpen) dumpLogger.stop()   // dump turned off -> close file
         if (!s.startsWith("{")) return false   // drop log/other lines
-        val json = try { JSONObject(s) } catch (_: Exception) { return false }
+        // Fast path: strict JSON. Fallback: lenient field-by-field recovery so a single
+        // malformed field (e.g. a firmware emit bug) doesn't drop the whole line.
+        var recovered = false
+        val json = try { JSONObject(s) } catch (_: Exception) {
+            recovered = true; lenientJson(s) ?: return false
+        }
+        // firmware history responses (on demand): "H" -> rhist, "HO" -> ohist
+        if (json.has("rhist")) { refuelHist.value = TripSlot.list(json.optJSONArray("rhist")); return false }
+        if (json.has("ohist")) { oilHist.value = TripSlot.list(json.optJSONArray("ohist")); return false }
         // PriusCAN signature: every emit_json line contains the door+cruise
         // fields -> this is how we tell it apart from another ESP/TPMS's data
         if (!json.has("door") || !json.has("cruise")) return false
         if (json.has("fw")) fwRunning.value = json.optInt("fw")
-        if (prefs.logEnabled && s.endsWith("}")) {
+        // log a clean, parseable line: the raw line if it was valid, else the recovered JSON
+        val logSrc = if (recovered) json.toString() else s
+        if (prefs.logEnabled && logSrc.endsWith("}")) {
             // append a timestamp (epoch ms) + the latest GPS fix to the logged line, so
             // the JSONL is usable for time-based offline analysis (capacity, etc.).
-            val sb = StringBuilder(s.length + 96)
-            sb.append(s, 0, s.length - 1)                 // drop the closing '}'
+            val sb = StringBuilder(logSrc.length + 96)
+            sb.append(logSrc, 0, logSrc.length - 1)       // drop the closing '}'
             sb.append(",\"ts\":").append(System.currentTimeMillis())
             lastLoc?.let { loc ->
                 sb.append(String.format(
@@ -510,12 +528,27 @@ class CanService : Service() {
             sb.append("}")
             logger.log(sb.toString())
         } else if (prefs.logEnabled) {
-            logger.log(s)
+            logger.log(logSrc)
         }
+        // trip slots (8) + history counts come on the regular line
+        json.optJSONArray("slots")?.let { tripSlots.value = TripSlot.list(it) }
+        if (json.has("rhN") || json.has("ohN"))
+            histCount.value = json.optInt("rhN", histCount.value.first) to json.optInt("ohN", histCount.value.second)
         val st = CanState(json)
         state.value = st
         main.post { onState(st) }
         return true
+    }
+
+    /** Lenient recovery: extract every well-formed "key":number pair, skipping any
+     *  malformed segment. So one broken field can't drop the whole line. */
+    private fun lenientJson(s: String): JSONObject? {
+        val o = JSONObject()
+        for (m in FIELD_RE.findAll(s)) {
+            val v = m.groupValues[2]
+            if (v != "null") o.put(m.groupValues[1], v.toDouble())
+        }
+        return if (o.length() > 0) o else null
     }
 
     // ---------------- state reactions (on the main thread) ----------------
@@ -523,7 +556,6 @@ class CanService : Service() {
     private fun onState(s: CanState) {
         updateNotifications(s)
         updateStatusStrip(s)
-        tripTracker.onState(s)
 
         // dark/light from the car's solar (sun-load) sensor, with hysteresis to avoid flicker
         s.d("solar")?.let { sol ->

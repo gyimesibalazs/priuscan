@@ -146,7 +146,7 @@
     <string name="f_wDif">Verschil voorwielen</string>
     <string name="f_gLat">Laterale G</string>
     <string name="f_gFwd">Longitudinale G</string>
-    <string name="f_yaw">Gier / lateraal (ruw)</string>
+    <string name="f_gasB">Gas</string>
     <string name="f_steer">Stuurhoek</string>
     <string name="f_brkP">Remdruk</string>
 
@@ -252,4 +252,19 @@
     <string name="display_title">Weergave</string>
     <string name="theme_auto_car">Donkere modus via lichtsensor van de auto</string>
     <string name="dump_unknown">Alleen onbekende frames (ontdekking)</string>
+    <string name="r_distances">Afstanden</string>
+    <string name="sl_odo">Kilometerteller</string>
+    <string name="sl_oil">Olieservice</string>
+    <string name="sl_trip">Trip %1$s</string>
+    <string name="btn_reset">Reset</string>
+    <string name="r_regen">Regen-ratio</string>
+    <string name="trip_boot">Sinds start</string>
+    <string name="trip_home">Vanaf thuis</string>
+    <string name="trip_tank">Tank</string>
+    <string name="trip_oil">Oliebeurt</string>
+    <string name="trip_life">Levensduur</string>
+    <string name="tab_tpms">Banden</string>
+    <string name="trip_hold">Houd vast om te resetten</string>
+    <string name="trip_at">bij %1$s km</string>
+    <string name="trip_need_fw">Firmware-update nodig (v3.0)</string>
 </resources>

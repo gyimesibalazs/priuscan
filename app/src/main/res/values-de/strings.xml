@@ -146,7 +146,7 @@
     <string name="f_wDif">Vorderrad-Differenz</string>
     <string name="f_gLat">Querbeschleunigung</string>
     <string name="f_gFwd">Längsbeschleunigung</string>
-    <string name="f_yaw">Gier / quer (roh)</string>
+    <string name="f_gasB">Gas</string>
     <string name="f_steer">Lenkwinkel</string>
     <string name="f_brkP">Bremsdruck</string>
 
@@ -250,4 +250,19 @@
     <string name="display_title">Anzeige</string>
     <string name="theme_auto_car">Dunkelmodus per Auto-Lichtsensor</string>
     <string name="dump_unknown">Nur unbekannte Frames (Erkundung)</string>
+    <string name="r_distances">Distanzen</string>
+    <string name="sl_odo">Kilometerzähler</string>
+    <string name="sl_oil">Ölservice</string>
+    <string name="sl_trip">Trip %1$s</string>
+    <string name="btn_reset">Zurücksetzen</string>
+    <string name="r_regen">Rekuperationsquote</string>
+    <string name="trip_boot">Seit Start</string>
+    <string name="trip_home">Von zuhause</string>
+    <string name="trip_tank">Tank</string>
+    <string name="trip_oil">Ölwechsel</string>
+    <string name="trip_life">Lebensdauer</string>
+    <string name="tab_tpms">Reifen</string>
+    <string name="trip_hold">Halten zum Reset</string>
+    <string name="trip_at">bei %1$s km</string>
+    <string name="trip_need_fw">Firmware-Update nötig (v3.0)</string>
 </resources>
