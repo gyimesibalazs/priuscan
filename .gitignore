@@ -20,3 +20,7 @@ carlogs/
 # stray captures / Windows artifacts
 /logs*.txt
 *:Zone.Identifier
+
+# Python
+__pycache__/
+*.pyc

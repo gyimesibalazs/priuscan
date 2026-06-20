@@ -162,27 +162,66 @@ Battery:  hvA hvdis hvchg bmin bmax blkD weakB maxR tHot hvAir tb1 tb2 tb3
           b01..b14 (individual block voltages)
 A/C:      cabin setT comp evap solar acAmb blower acPress
 ABS:      wFL wFR wRL wRR wDif gLat gFwd steer brkP
-Body:     bodyV fuelIn oilDist
+Body:     bodyV fuelIn oilDist odo
 Fans/ECU: battFan ecuMode fanMode dtcCur dtcHist
 Derived:  ctR (coolant rate °C/min) fuel (l/h) wpW (water-pump warn 0/1/2)
           cellW (HV cell warn 0/1/2)
-State:    door (bitmask 0x80 drv / 0x40 pass / 0x08 rear-L / 0x04 rear-R / 0x01 trunk) cruise
-Debug:    raw0..raw7 (raw bytes of the 0x7B8/2147 response — G-sensor cal)
+Learned:  cwL (learned cell warn) wblk (weakest block #) wz (weak-block Z-score)
+          capAh capKwh (self-learned pack capacity, coulomb counting)
+Trip:     tDist tFuel tAvg (since boot) · tMove (moving s) tSpd (avg km/h) tEv (EV km)
+Integers: epoch (unix s, host time) fuelTs (last-refuel epoch) fw (firmware version, major*100+minor)
+State:    door (bitmask 0x80 drv / 0x40 pass / 0x08 rear-L / 0x04 rear-R / 0x01 trunk) cruise belt
+Debug:    eFF eOK eLen loops · raw0..raw7 (0x7B8/2147 response — G-sensor cal)
 ```
+
+`epoch`, `fuelTs`, `fw` are appended by `emit_json` as **integers** (a unix epoch /
+version does not fit a 24-bit-mantissa float, so they bypass the float `V[]` store).
+
+Signals reverse-engineered from passive 0x6xx broadcasts (see §9): `fuelIn` (fuel %,
+from `0x612` byte[5] /255×100), `odo` (km, `0x611` bytes[5..7]), rear doors (`0x620`
+byte[5] / `0x626` byte[2]).
 
 ### Derived values & warnings (`compute_derived`)
 * **fuel** (l/h) = `maf / 14.7 * 3600 / 745` (stoichiometric AFR, petrol density);
   0 when rpm < 100 (engine off / EV mode).
 * **wpW** (water-pump warning, 0/1/2): coolant absolute thresholds + coolant
   rise-rate (`ctR`) + the direct `wpRun` pump-running bit.
-* **cellW** (HV cell warning, 0/1/2): block delta under load vs rest +
-  internal resistance (`maxR`, mΩ thresholds 40/60) + battery temperature spread.
+* **cellW** (HV cell warning, 0/1/2): **the self-learning layer is the primary
+  detector once mature** (`lz_n ≥ 300` under-load samples → `cellW = learned`); before
+  maturity it falls back to data-informed fixed block-delta thresholds (warn 1.20 /
+  err 1.60 V dload). Coarse hard-safety always overrides: `maxR ≥ 40/60` mΩ, `tb ≥ 55 °C`.
+  Validated against a real drive log where the old fixed thresholds false-alarmed while
+  the learned layer (and `maxR ≤ 25` mΩ) correctly read healthy. See §8.
+* **capAh / capKwh** (self-learned capacity): coulomb counting over the SoC
+  **peak↔trough** swing (a fixed anchor never moves 10 % on the Prius's narrow
+  oscillating SoC band — the running min/max + the charge integral at each does).
+  kWh uses the averaged pack voltage `vl`. Estimate, improves over drives; NiMH/Li
+  charge-efficiency biases it. Persisted in NVS.
+* **Trip / EV** (since ESP boot): `tDist`/`tFuel`/`tAvg`; `tMove` = active moving
+  time (stops ≤180 s still count); `tSpd` = `tDist / tMove`; `tEv` = distance with the
+  engine off (rpm<100). The **since-refuel** equivalents are computed app-side
+  (`TripTracker`) with a 50-entry history.
+* **Refuel** (`fuelTs`): `fuelIn` jump while parked → records `cur_epoch` (host time);
+  if no host time yet, stamps `millis()` and back-corrects when the time arrives.
 
-### Dump mode
-`prius_dump.yaml` is a separate, standalone config (no parser header) for
-reverse-engineering passive broadcast frames. It prints only 0x500–0x6FF frames
-and only when their content **changes**, so opening a door makes exactly the
-relevant frame pop out. This is how the 0x620 door mapping was found.
+### Serial command protocol (app/PC → ESP)
+The firmware reads `\n`-terminated text commands from the USB-Serial/JTAG console
+(`read_host_serial`, non-blocking) and acts on them:
+
+| cmd | meaning |
+|-----|---------|
+| `T<unix>\n` | head-unit wall-clock time (no Wi-Fi/NTP → the head unit is the only time source) |
+| `D1\n` / `D1 <lo> <hi>\n` | CAN dump on (default filter 0x500–0x6FF + dedup, or a custom range) |
+| `D2\n` | CAN dump on, **unknown frames only** — every ID we don't already decode (`dump_is_known`), deduped. One discovery capture surfaces all still-unknown signals (lights/turn/brake/L-R doors…). |
+| `D0\n` | CAN dump off |
+| `O<size>\n` | begin serial OTA of a `size`-byte image (see §10) |
+
+CAN dump emits `#XXX [len] BB BB..\n` lines for frames in `[lo,hi]`, **deduped**
+(only on change) → opening a door makes the relevant frame pop out (how the 0x620
+door / 0x611 odo / 0x612 fuel signals were found). The output path (`out_write`) and
+`emit_json` are non-blocking so a backed-up host never stalls the main loop;
+overflow is counted in `out_dropped`. `prius_dump.yaml` remains as a standalone
+fallback dumper.
 
 ---
 
@@ -357,3 +396,78 @@ log (§4) before tuning the thresholds.
 not NiMH — the math transfers but the numeric thresholds must be re-tuned for
 NiMH (flat plateau, memory-effect voltage depression, temperature sensitivity).
 ICA/DVA is likely unusable on NiMH (flat plateau suppresses dQ/dV peaks).
+
+---
+
+## 9. Body / comfort broadcasts (0x6xx) — reverse-engineered
+
+Decoded passively (no poll) via the app-controlled CAN dump (§3). Decoders live in
+`on_broadcast()` and the YAML `canbus on_frame` list.
+
+| ID | byte(s) | signal | notes |
+|----|---------|--------|-------|
+| `0x611` | 5..7 (24-bit) | **odometer (km)** | exact match: `0x0676D0 = 423632 km` |
+| `0x612` | 5 | **fuel level** | `% = b5/255×100`; calibrated: 5/10 dash segments = b5≈129 ≈ 50 % → linear 0..255 |
+| `0x620` | 5 (`0x0C`) | **rear door open** | toggles with a rear door; L/R not yet split |
+| `0x626` | 2 (`0x30`) | rear door (mirror) | changes in lockstep with `0x620` b5 |
+| `0x63B`,`0x619` | b5..7 | trip/odo fine counters | fast-rising while moving |
+| `0x610` | 2 | speed-like | 0 parked, ~100 cruising (redundant with the 0x0B4 broadcast) |
+
+`0x5A4` (the "gas gauge" some sources cite) is **NOT present** on this car's powertrain
+segment — fuel had to come from the instrument-cluster `0x612`. The car's **`solar`**
+(A/C sun-load sensor, climate ECU `0x7CC` PID `0x24`) is the ambient-light signal used
+for auto dark mode (§11). `byte[1]` of the cluster frames is an alive/rolling bit, not data.
+
+**Still open:** rear door L/R split, lights/turn/brake (need a targeted one-thing-at-a-time
+dump — none were actuated in the daytime drives captured so far).
+
+## 10. Serial OTA & app-driven firmware update
+
+The head-unit app can flash the ESP over the **same USB link** (no Wi-Fi/OTA, no
+download mode, no re-enumeration), and it **preserves NVS** (only the inactive OTA
+partition + otadata are written by `esp_ota_*`).
+
+**Versioning.** `FW_VERSION` (in `prius_parse.h`) is `major*100+minor` (e.g. `204` =
+v2.4), emitted as the integer `fw` in the JSON. The APK bundles `assets/firmware.bin`
+(the ESPHome app image) + a `BUNDLED_FW` constant (`CanService`); the app offers an
+update when `fw < BUNDLED_FW`. **Bump both together** when shipping new firmware in the app.
+
+**Protocol** (app `doSerialOta` ↔ firmware `prius_ota.h`):
+```
+app  O<size>\n              ; size = raw image bytes
+ESP  K\n                    ; esp_ota_begin done (inactive partition erased)
+app  <base64 of ≤600 raw bytes>\n   ; per chunk
+ESP  A\n                    ; ack -> next chunk     (E\n on error)
+...
+ESP  D\n                    ; esp_ota_end + set_boot_partition done -> reboot
+```
+**Why base64 + a dedicated task:** the USB-Serial/JTAG **console mangles raw binary**
+(control bytes break `read()`), so the image is sent as base64 text lines. The receiver
+runs in a **dedicated FreeRTOS task** using the `usb_serial_jtag_read_bytes()` driver
+API — a loop-based receiver failed because `esp_ota_begin`'s erase + main-loop stalls
+starved the VFS `read()`. During OTA the main loop's `read_host_serial` and `emit_json`
+are gated off (`ota_active`).
+
+**Bootstrap:** the *running* firmware must already contain the OTA receiver, so the
+first OTA-capable build is flashed once from a PC (`esphome run`). From then on the app
+flashes new versions over serial.
+
+**PC test tool:** `tools/serial_ota.py` mirrors `doSerialOta` exactly, so the firmware
+receiver can be tested from Windows/WSL without the app:
+`python serial_ota.py <PORT> .esphome/build/prius-can/.pioenvs/prius-can/firmware.bin`.
+
+## 11. Theme: light/dark + car-driven dark mode
+
+The app follows the **system** light/dark by default (`PriusTheme` +
+`isSystemInDarkTheme`); background/text use `MaterialTheme.colorScheme.*`
+(`onBackground`/`onSurfaceVariant`), accent/status colors stay fixed.
+
+Optionally (Settings → Display) the dark/light state is driven by the **car's own
+`solar` sun-load sensor** (not an Android light sensor): `CanService` sets `carDark`
+with hysteresis (dark `solar<6`, light `solar>20`). When enabled it also attempts a
+**device-wide** night mode (`UiModeManager.setNightMode` + `Settings.Secure ui_night_mode`)
+which needs a one-time grant:
+```
+adb shell pm grant hu.codingo.priuscan android.permission.WRITE_SECURE_SETTINGS
+```
+If the grant/permission isn't honored the in-app theme still follows `carDark`.
