@@ -145,6 +145,7 @@
     <string name="f_wDif">Első kerék eltérés</string>
     <string name="f_gLat">Oldalgyorsulás</string>
     <string name="f_gFwd">Hosszgyorsulás</string>
+    <string name="f_yaw">Yaw / oldal (nyers)</string>
     <string name="f_steer">Kormányszög</string>
     <string name="f_brkP">Féknyomás</string>
 
@@ -205,6 +206,7 @@
     <string name="permissions_title">Engedélyek</string>
     <!-- trip -->
     <string name="grp_trip">Út</string>
+    <string name="f_odo">Kilométeróra</string>
     <string name="f_tDist">Táv</string>
     <string name="f_tFuel">Elfogyott üzemanyag</string>
     <string name="f_tAvg">Átlag</string>
@@ -228,4 +230,24 @@
     <string name="dump_desc">Nyers CAN-frame-ek rögzítése (szűrt 0x500–0x6FF, deduplikált) fájlba diagnosztikához. A szenzor-napló érintetlen. Auto-stop 10 perc / 50 MB után.</string>
     <string name="dump_enabled">CAN dump</string>
     <string name="dump_share">Dump megosztása</string>
+    <string name="r_fuelused">Elfogyasztott üzemanyag</string>
+    <string name="r_movetime">Mozgásidő</string>
+    <string name="f_tEv">EV táv</string>
+    <string name="f_tSpd">Átlagsebesség</string>
+    <!-- firmware update -->
+    <string name="flash_title">Firmware</string>
+    <string name="flash_running">ESP: v%1$d</string>
+    <string name="flash_update_btn">Firmware frissítése (v%1$s)</string>
+    <string name="flash_uptodate">Naprakész</string>
+    <string name="flash_warn">Frissítés alatt ne húzd ki az ESP-t és ne zárd be az appot.</string>
+    <string name="flash_wait">Újraindítás bootloaderbe…</string>
+    <string name="flash_no_dev">Az ESP nem található download módban</string>
+    <string name="flash_sync">Csatlakozás a bootloaderhez…</string>
+    <string name="flash_sync_fail">Bootloader szinkron sikertelen</string>
+    <string name="flash_writing">Firmware írása…</string>
+    <string name="flash_done">Firmware frissítve ✓</string>
+    <string name="flash_err">Flashelés sikertelen</string>
+    <string name="display_title">Megjelenítés</string>
+    <string name="theme_auto_car">Sötét mód az autó fényszenzora szerint</string>
+    <string name="dump_unknown">Csak ismeretlen frame-ek (felderítés)</string>
 </resources>

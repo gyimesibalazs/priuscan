@@ -146,6 +146,7 @@
     <string name="f_wDif">Verschil voorwielen</string>
     <string name="f_gLat">Laterale G</string>
     <string name="f_gFwd">Longitudinale G</string>
+    <string name="f_yaw">Gier / lateraal (ruw)</string>
     <string name="f_steer">Stuurhoek</string>
     <string name="f_brkP">Remdruk</string>
 
@@ -207,6 +208,7 @@
     <string name="permissions_title">Toestemmingen</string>
     <!-- trip -->
     <string name="grp_trip">Rit</string>
+    <string name="f_odo">Kilometerstand</string>
     <string name="f_tDist">Afstand</string>
     <string name="f_tFuel">Verbruikte brandstof</string>
     <string name="f_tAvg">Gemiddelde</string>
@@ -230,4 +232,24 @@
     <string name="dump_desc">Ruwe CAN-frames (gefilterd 0x500–0x6FF, ontdubbeld) opnemen in een bestand voor diagnose. Het sensorlog blijft ongemoeid. Stopt automatisch na 10 min / 50 MB.</string>
     <string name="dump_enabled">CAN-dump</string>
     <string name="dump_share">Dump delen</string>
+    <string name="r_fuelused">Verbruikte brandstof</string>
+    <string name="r_movetime">Rijtijd</string>
+    <string name="f_tEv">EV-afstand</string>
+    <string name="f_tSpd">Gem. snelheid</string>
+    <!-- firmware update -->
+    <string name="flash_title">Firmware</string>
+    <string name="flash_running">ESP: v%1$d</string>
+    <string name="flash_update_btn">Firmware bijwerken (v%1$s)</string>
+    <string name="flash_uptodate">Up-to-date</string>
+    <string name="flash_warn">Koppel de ESP niet los en sluit de app niet tijdens de update.</string>
+    <string name="flash_wait">Herstarten naar bootloader…</string>
+    <string name="flash_no_dev">ESP niet gevonden in downloadmodus</string>
+    <string name="flash_sync">Verbinden met bootloader…</string>
+    <string name="flash_sync_fail">Bootloader-sync mislukt</string>
+    <string name="flash_writing">Firmware schrijven…</string>
+    <string name="flash_done">Firmware bijgewerkt ✓</string>
+    <string name="flash_err">Flashen mislukt</string>
+    <string name="display_title">Weergave</string>
+    <string name="theme_auto_car">Donkere modus via lichtsensor van de auto</string>
+    <string name="dump_unknown">Alleen onbekende frames (ontdekking)</string>
 </resources>

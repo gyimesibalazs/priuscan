@@ -17,7 +17,11 @@ data class Field(
 object Fields {
     /** Shown on the dashboard only (not a tab). */
     val trip = listOf(
+        Field("odo", R.string.f_odo, "km", 0),
+        Field("fuelIn", R.string.f_fuelIn, "%", 0),
         Field("tDist", R.string.f_tDist, "km", 1),
+        Field("tEv", R.string.f_tEv, "km", 1),
+        Field("tSpd", R.string.f_tSpd, "km/h", 0),
         Field("tFuel", R.string.f_tFuel, "L", 2),
         Field("tAvg", R.string.f_tAvg, "l/100km", 1),
     )
@@ -98,6 +102,7 @@ object Fields {
             Field("gFwd", R.string.f_gFwd, "m/s²", 2),
             Field("steer", R.string.f_steer, "°"),
             Field("brkP", R.string.f_brkP, "V", 2),
+            Field("yaw", R.string.f_yaw, "", 0),
         ),
     )
 }

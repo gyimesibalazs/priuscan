@@ -146,6 +146,7 @@
     <string name="f_wDif">Vorderrad-Differenz</string>
     <string name="f_gLat">Querbeschleunigung</string>
     <string name="f_gFwd">Längsbeschleunigung</string>
+    <string name="f_yaw">Gier / quer (roh)</string>
     <string name="f_steer">Lenkwinkel</string>
     <string name="f_brkP">Bremsdruck</string>
 
@@ -205,6 +206,7 @@
     <string name="permissions_title">Berechtigungen</string>
     <!-- trip -->
     <string name="grp_trip">Fahrt</string>
+    <string name="f_odo">Kilometerstand</string>
     <string name="f_tDist">Distanz</string>
     <string name="f_tFuel">Verbrauchter Kraftstoff</string>
     <string name="f_tAvg">Durchschnitt</string>
@@ -228,4 +230,24 @@
     <string name="dump_desc">Rohe CAN-Frames (gefiltert 0x500–0x6FF, dedupliziert) zur Diagnose in eine Datei aufzeichnen. Das Sensor-Log bleibt unberührt. Auto-Stopp nach 10 Min / 50 MB.</string>
     <string name="dump_enabled">CAN-Dump</string>
     <string name="dump_share">Dump teilen</string>
+    <string name="r_fuelused">Verbrauchter Kraftstoff</string>
+    <string name="r_movetime">Fahrzeit</string>
+    <string name="f_tEv">EV-Distanz</string>
+    <string name="f_tSpd">Ø Geschwindigkeit</string>
+    <!-- firmware update -->
+    <string name="flash_title">Firmware</string>
+    <string name="flash_running">ESP: v%1$d</string>
+    <string name="flash_update_btn">Firmware aktualisieren (v%1$s)</string>
+    <string name="flash_uptodate">Aktuell</string>
+    <string name="flash_warn">Während des Updates den ESP nicht trennen und die App nicht schließen.</string>
+    <string name="flash_wait">Neustart in Bootloader…</string>
+    <string name="flash_no_dev">ESP im Download-Modus nicht gefunden</string>
+    <string name="flash_sync">Verbinde mit Bootloader…</string>
+    <string name="flash_sync_fail">Bootloader-Sync fehlgeschlagen</string>
+    <string name="flash_writing">Firmware wird geschrieben…</string>
+    <string name="flash_done">Firmware aktualisiert ✓</string>
+    <string name="flash_err">Flashen fehlgeschlagen</string>
+    <string name="display_title">Anzeige</string>
+    <string name="theme_auto_car">Dunkelmodus per Auto-Lichtsensor</string>
+    <string name="dump_unknown">Nur unbekannte Frames (Erkundung)</string>
 </resources>

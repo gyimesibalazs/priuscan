@@ -145,6 +145,7 @@
     <string name="f_wDif">Diferencial das rodas dianteiras</string>
     <string name="f_gLat">G lateral</string>
     <string name="f_gFwd">G longitudinal</string>
+    <string name="f_yaw">Guinada / lateral (bruto)</string>
     <string name="f_steer">Ângulo de direção</string>
     <string name="f_brkP">Pressão dos travões</string>
 
@@ -206,6 +207,7 @@
     <string name="permissions_title">Permissões</string>
     <!-- trip -->
     <string name="grp_trip">Viagem</string>
+    <string name="f_odo">Odómetro</string>
     <string name="f_tDist">Distância</string>
     <string name="f_tFuel">Combustível usado</string>
     <string name="f_tAvg">Média</string>
@@ -229,4 +231,24 @@
     <string name="dump_desc">Capturar tramas CAN brutas (filtradas 0x500–0x6FF, sem duplicados) num ficheiro para diagnóstico. O registo de sensores fica intacto. Paragem automática após 10 min / 50 MB.</string>
     <string name="dump_enabled">Captura CAN</string>
     <string name="dump_share">Partilhar captura</string>
+    <string name="r_fuelused">Combustível consumido</string>
+    <string name="r_movetime">Tempo em movimento</string>
+    <string name="f_tEv">Distância EV</string>
+    <string name="f_tSpd">Velocidade média</string>
+    <!-- firmware update -->
+    <string name="flash_title">Firmware</string>
+    <string name="flash_running">ESP: v%1$d</string>
+    <string name="flash_update_btn">Atualizar firmware (v%1$s)</string>
+    <string name="flash_uptodate">Atualizado</string>
+    <string name="flash_warn">Não desligue o ESP nem feche a app durante a atualização.</string>
+    <string name="flash_wait">A reiniciar no bootloader…</string>
+    <string name="flash_no_dev">ESP não encontrado em modo de download</string>
+    <string name="flash_sync">A ligar ao bootloader…</string>
+    <string name="flash_sync_fail">Falha de sincronização do bootloader</string>
+    <string name="flash_writing">A gravar firmware…</string>
+    <string name="flash_done">Firmware atualizado ✓</string>
+    <string name="flash_err">Falha ao gravar</string>
+    <string name="display_title">Ecrã</string>
+    <string name="theme_auto_car">Modo escuro pelo sensor de luz do carro</string>
+    <string name="dump_unknown">Só tramas desconhecidas (descoberta)</string>
 </resources>

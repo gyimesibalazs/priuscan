@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -69,7 +70,7 @@ fun TpmsCarView(readings: Map<Wheel, TireReading>, modifier: Modifier = Modifier
 @Composable
 private fun WheelChip(r: TireReading?, w: Wheel, now: Long, modifier: Modifier) {
     val stale = r == null || r.stale(now)
-    val color = if (stale) Color(0xFF5E7A8A) else Color.White
+    val color = if (stale) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onBackground
     val label = when (w) {
         Wheel.FL -> stringResource(R.string.tpms_fl)
         Wheel.FR -> stringResource(R.string.tpms_fr)
@@ -78,7 +79,7 @@ private fun WheelChip(r: TireReading?, w: Wheel, now: Long, modifier: Modifier) 
         Wheel.SPARE -> stringResource(R.string.tpms_spare)
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = Color(0xFF5E7A8A), fontSize = 10.sp)
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
         Text(
             if (r == null) "– bar" else "%.2f bar".format(r.bar),
             color = color, fontWeight = FontWeight.Bold, fontSize = 20.sp, fontFamily = FontFamily.Monospace,
@@ -100,7 +101,7 @@ private fun WheelChip(r: TireReading?, w: Wheel, now: Long, modifier: Modifier) 
         if (r != null && r.flags != 0) {
             Text(
                 "D2 0x%02X".format(r.flags),
-                color = Color(0xFF5E7A8A), fontSize = 9.sp, fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, fontFamily = FontFamily.Monospace,
             )
         }
     }

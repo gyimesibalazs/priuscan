@@ -63,8 +63,10 @@ class MainActivity : ComponentActivity() {
         CanService.start(this)   // the service also runs on USB attach / launcher start
         val prefs = Prefs(this)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                Surface(Modifier.fillMaxSize(), color = Color(0xFF0E1216)) {
+            val carDark by CanService.carDark.collectAsState()
+            val dark = if (prefs.autoDarkCar) carDark else androidx.compose.foundation.isSystemInDarkTheme()
+            PriusTheme(dark) {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     MainScreen(prefs = prefs)
                 }
             }
@@ -96,8 +98,8 @@ fun MainScreen(prefs: Prefs) {
         ScrollableTabRow(
             selectedTabIndex = tab.coerceIn(0, titles.size - 1),
             edgePadding = 8.dp,
-            containerColor = Color(0xFF0E1216),
-            contentColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.background,
+            contentColor = MaterialTheme.colorScheme.onBackground,
         ) {
             titles.forEachIndexed { i, t ->
                 Tab(selected = tab == i, onClick = { tab = i },
@@ -138,11 +140,13 @@ private fun tabColumn(content: androidx.compose.foundation.lazy.LazyListScope.()
 @Composable
 private fun DashboardTab(state: CanState, tpms: Map<Wheel, TireReading>) = tabColumn {
     item { Header(state) }
-    // trip summary on the first screen: distance / fuel used / average
+    // trip summary on the first screen (since ESP boot): odo / fuel / dist / EV / avg
     item { GroupTitle(stringResource(R.string.grp_trip)) }
     itemsIndexed(Fields.trip) { _, f ->
         SensorRow(stringResource(f.labelRes), format(state.d(f.key), f.decimals, f.unit))
     }
+    // active moving time since ESP boot (computed in firmware)
+    item { SensorRow(stringResource(R.string.r_movetime), fmtDur(state.d("tMove")?.toLong() ?: 0L)) }
     item { GroupTitle(stringResource(R.string.tpms_title)) }
     item { TpmsCarView(tpms) }
 }
@@ -187,16 +191,18 @@ private fun RefuelTab() {
         item { GroupTitle(stringResource(R.string.r_since_refuel)) }
         item { SensorRow(stringResource(R.string.r_time), fmtDur(live.elapsedS)) }
         item { SensorRow(stringResource(R.string.r_dist), "%.1f km".format(live.distKm)) }
+        item { SensorRow(stringResource(R.string.f_tEv), "%.1f km".format(live.evKm)) }
         item { SensorRow(stringResource(R.string.r_avgspeed), "%.0f km/h".format(live.avgKmh)) }
+        item { SensorRow(stringResource(R.string.r_fuelused), "%.2f L".format(live.fuelL)) }
         item { SensorRow(stringResource(R.string.r_avgcons), "%.1f l/100km".format(live.avgCons)) }
         item { GroupTitle(stringResource(R.string.r_history)) }
         if (hist.isEmpty()) {
-            item { Text(stringResource(R.string.r_none), color = Color(0xFF9EB6C3), fontSize = 14.sp) }
+            item { Text(stringResource(R.string.r_none), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp) }
         }
         itemsIndexed(hist) { _, r ->
             SensorRow(
                 fmtDate(r.epoch),
-                "%.0f km · %.0f km/h · %.1f L".format(r.distKm, r.avgKmh, r.avgCons),
+                "%.0f km (%.0f EV) · %.0f km/h · %.1f L · %.1f l/100km".format(r.distKm, r.evKm, r.avgKmh, r.fuelL, r.avgCons),
             )
         }
     }
@@ -223,13 +229,13 @@ private fun Header(s: CanState) {
             )
             Spacer(Modifier.size(16.dp))
             Column(Modifier.padding(bottom = 12.dp)) {
-                Text(stringResource(R.string.coolant_caption), color = Color(0xFF9EB6C3), fontSize = 13.sp)
+                Text(stringResource(R.string.coolant_caption), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 val gear = if (s.gear in 0..4) CanState.GEARS[s.gear] else "–"
                 val line = buildString {
                     append("$gear  •  ${s.d("rpm")?.toInt() ?: "–"} rpm  •  SoC ${s.d("soc")?.toInt() ?: "–"}%")
                     s.d("fuel")?.let { append("  •  %.1f l/h".format(it)) }   // consumption
                 }
-                Text(line, color = Color.White, fontSize = 16.sp)
+                Text(line, color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp)
             }
         }
         if (s.wpWarn > 0 || s.cellWarn > 0) {
@@ -254,7 +260,7 @@ private fun GroupTitle(t: String) {
     Text(
         t.uppercase(),
         Modifier.padding(top = 18.dp, bottom = 6.dp),
-        color = Color(0xFF5E7A8A), fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
         fontWeight = FontWeight.Bold, letterSpacing = 2.sp,
     )
 }
@@ -265,10 +271,10 @@ private fun SensorRow(label: String, value: String, highlight: Boolean = false) 
         Modifier.fillMaxWidth().padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(label, color = if (highlight) Color(0xFFFFB74D) else Color(0xFFB9C6CE), fontSize = 16.sp)
+        Text(label, color = if (highlight) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
         Text(
             value,
-            color = if (highlight) Color(0xFFFFB74D) else Color.White,
+            color = if (highlight) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onBackground,
             fontSize = 16.sp, fontFamily = FontFamily.Monospace,
         )
     }

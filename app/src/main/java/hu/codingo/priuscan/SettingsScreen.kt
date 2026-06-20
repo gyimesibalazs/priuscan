@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -60,6 +62,8 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
     var fontSize by remember { mutableStateOf(prefs.statusFontSize.toInt().toString()) }
     var refAh by remember { mutableStateOf(prefs.batteryRefAh.toString()) }
     var logEnabled by remember { mutableStateOf(prefs.logEnabled) }
+    var autoDark by remember { mutableStateOf(prefs.autoDarkCar) }
+    var dumpUnknown by remember { mutableStateOf(false) }
 
     val ctx = LocalContext.current
     val logTemplate = stringResource(R.string.log_info)
@@ -84,6 +88,10 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
     val dumpActive by CanService.dumpActive.collectAsState()
     val dumpBytes by CanService.dumpBytes.collectAsState()
     val dumpFile by CanService.dumpFile.collectAsState()
+    val fwRun by CanService.fwRunning.collectAsState()
+    val flSt by CanService.flashState.collectAsState()
+    val flPct by CanService.flashProgress.collectAsState()
+    val flMsg by CanService.flashMsg.collectAsState()
     val tpmsWheels = listOf(
         Wheel.FL to R.string.tpms_fl, Wheel.FR to R.string.tpms_fr,
         Wheel.RL to R.string.tpms_rl, Wheel.RR to R.string.tpms_rr,
@@ -101,15 +109,15 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(stringResource(R.string.settings_title), fontSize = 28.sp, color = Color.White)
+        Text(stringResource(R.string.settings_title), fontSize = 28.sp, color = MaterialTheme.colorScheme.onBackground)
 
         // ---- Connection status (ESP + TPMS) ----
-        Text(stringResource(R.string.connection_title), fontSize = 16.sp, color = Color.White)
+        Text(stringResource(R.string.connection_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
         StatusRow(espConnected, stringResource(if (espConnected) R.string.connected else R.string.disconnected), espDevice.takeIf { espConnected })
         StatusRow(tpmsConn, stringResource(if (tpmsConn) R.string.tpms_connected else R.string.tpms_no_signal), tpmsDev.takeIf { tpmsConn })
 
         // ---- Permissions ----
-        Text(stringResource(R.string.permissions_title), fontSize = 16.sp, color = Color.White)
+        Text(stringResource(R.string.permissions_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
         if (!overlayOk) {
             Button(
                 onClick = { ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}"))) },
@@ -136,10 +144,10 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
             ) { Text(stringResource(R.string.perm_location)) }
         }
 
-        Text(stringResource(R.string.status_items_title), fontSize = 16.sp, color = Color.White)
+        Text(stringResource(R.string.status_items_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
         Text(
             stringResource(R.string.status_items_desc),
-            fontSize = 13.sp, color = Color(0xFF9EB6C3),
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         statusOptions.forEach { (key, labelRes) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -149,7 +157,7 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
                         statusSel = if (it) statusSel + key else statusSel - key
                     },
                 )
-                Text(stringResource(labelRes), color = Color.White)
+                Text(stringResource(labelRes), color = MaterialTheme.colorScheme.onBackground)
             }
         }
 
@@ -162,15 +170,15 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
         }
 
         // ---- Local logging (without HA) ----
-        Text(stringResource(R.string.local_logging_title), fontSize = 16.sp, color = Color.White)
+        Text(stringResource(R.string.local_logging_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
         Text(
             stringResource(R.string.local_logging_desc, logInfo),
-            fontSize = 13.sp, color = Color(0xFF9EB6C3),
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = logEnabled, onCheckedChange = { logEnabled = it; prefs.logEnabled = it })
             Spacer(Modifier.padding(6.dp))
-            Text(stringResource(R.string.logging_enabled), color = Color.White)
+            Text(stringResource(R.string.logging_enabled), color = MaterialTheme.colorScheme.onBackground)
         }
         Row {
             TextButton(onClick = {
@@ -186,10 +194,10 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
         }
 
         // ---- CAN dump (diagnostic capture) ----
-        Text(stringResource(R.string.dump_title), fontSize = 16.sp, color = Color.White)
-        Text(stringResource(R.string.dump_desc), fontSize = 13.sp, color = Color(0xFF9EB6C3))
+        Text(stringResource(R.string.dump_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
+        Text(stringResource(R.string.dump_desc), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = dumpActive, onCheckedChange = { CanService.setDump(it) })
+            Switch(checked = dumpActive, onCheckedChange = { CanService.setDump(it, dumpUnknown) })
             Spacer(Modifier.padding(6.dp))
             Text(
                 when {
@@ -197,8 +205,12 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
                     dumpFile != null -> DataLogger.humanSize(java.io.File(dumpFile!!).length())
                     else -> stringResource(R.string.dump_enabled)
                 },
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
             )
+        }
+        if (!dumpActive) Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Checkbox(checked = dumpUnknown, onCheckedChange = { dumpUnknown = it })
+            Text(stringResource(R.string.dump_unknown), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
         }
         dumpFile?.let { path ->
             if (!dumpActive) TextButton(onClick = {
@@ -208,13 +220,47 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
             }) { Text(stringResource(R.string.dump_share)) }
         }
 
+        // ---- Firmware update (over USB) ----
+        Text(stringResource(R.string.flash_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
+        Text(
+            "ESP: " + CanService.fmtFw(fwRun ?: 0) + "  /  v" + CanService.fmtFw(CanService.BUNDLED_FW),
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        when (flSt) {
+            FlashState.FLASHING -> {
+                Text(flMsg, color = MaterialTheme.colorScheme.onBackground)
+                LinearProgressIndicator(progress = { flPct / 100f }, modifier = Modifier.fillMaxWidth())
+                Text("$flPct %", color = MaterialTheme.colorScheme.onBackground)
+            }
+            FlashState.DONE -> Text(flMsg, color = Color(0xFF7CFC00))
+            FlashState.ERROR -> Text(flMsg, color = Color(0xFFFF6B6B))
+            else -> {
+                if (fwRun != null && fwRun!! < CanService.BUNDLED_FW) {
+                    Text(stringResource(R.string.flash_warn), fontSize = 12.sp, color = Color(0xFFFFB74D))
+                    Button(onClick = { CanService.requestFlash() }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.flash_update_btn, CanService.fmtFw(CanService.BUNDLED_FW)))
+                    }
+                } else {
+                    Text(stringResource(R.string.flash_uptodate), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        // ---- Display: dark mode from the car's light sensor ----
+        Text(stringResource(R.string.display_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = autoDark, onCheckedChange = { autoDark = it; prefs.autoDarkCar = it })
+            Spacer(Modifier.padding(6.dp))
+            Text(stringResource(R.string.theme_auto_car), color = MaterialTheme.colorScheme.onBackground)
+        }
+
         // ---- HV battery ----
         OutlinedTextField(refAh, { refAh = it.filter { c -> c.isDigit() || c == '.' } },
             label = { Text(stringResource(R.string.battery_ref_label)) },
             modifier = Modifier.fillMaxWidth(), singleLine = true)
 
         // ---- TPMS pairing ----
-        Text(stringResource(R.string.tpms_section), fontSize = 16.sp, color = Color.White)
+        Text(stringResource(R.string.tpms_section), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
         TextButton(onClick = { CanService.sendTpmsCommand(Tpms.QUERY) }) {
             Text(stringResource(R.string.tpms_query))
         }
@@ -226,7 +272,7 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
                 }
                 tpmsIds[w]?.let {
                     Spacer(Modifier.padding(6.dp))
-                    Text(stringResource(R.string.tpms_id_fmt, it), color = Color(0xFF9EB6C3), fontSize = 12.sp)
+                    Text(stringResource(R.string.tpms_id_fmt, it), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
             }
         }
@@ -236,13 +282,13 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
 
         Text(
             stringResource(R.string.ha_desc, prefix),
-            fontSize = 13.sp, color = Color(0xFF9EB6C3),
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = enabled, onCheckedChange = { enabled = it })
             Spacer(Modifier.padding(6.dp))
-            Text(stringResource(R.string.ha_enabled), color = Color.White)
+            Text(stringResource(R.string.ha_enabled), color = MaterialTheme.colorScheme.onBackground)
         }
 
         OutlinedTextField(host, { host = it }, label = { Text(stringResource(R.string.mqtt_broker)) },
@@ -323,8 +369,8 @@ private fun StatusRow(ok: Boolean, label: String, sub: String?) {
         Box(Modifier.size(12.dp).clip(CircleShape).background(if (ok) Color(0xFF66BB6A) else Color(0xFFEF5350)))
         Spacer(Modifier.padding(5.dp))
         Column {
-            Text(label, color = Color(0xFF9EB6C3), fontSize = 14.sp)
-            if (sub != null) Text(sub, color = Color(0xFF5E7A8A), fontSize = 11.sp)
+            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+            if (sub != null) Text(sub, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         }
     }
 }

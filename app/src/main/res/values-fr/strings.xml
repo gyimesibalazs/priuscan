@@ -145,6 +145,7 @@
     <string name="f_wDif">Différence roues avant</string>
     <string name="f_gLat">G latéral</string>
     <string name="f_gFwd">G longitudinal</string>
+    <string name="f_yaw">Lacet / latéral (brut)</string>
     <string name="f_steer">Angle de braquage</string>
     <string name="f_brkP">Pression de freinage</string>
 
@@ -205,6 +206,7 @@
     <string name="permissions_title">Autorisations</string>
     <!-- trip -->
     <string name="grp_trip">Trajet</string>
+    <string name="f_odo">Odomètre</string>
     <string name="f_tDist">Distance</string>
     <string name="f_tFuel">Carburant consommé</string>
     <string name="f_tAvg">Moyenne</string>
@@ -228,4 +230,24 @@
     <string name="dump_desc">Enregistrer les trames CAN brutes (filtrées 0x500–0x6FF, dédupliquées) dans un fichier pour le diagnostic. Le journal capteur reste intact. Arrêt auto après 10 min / 50 Mo.</string>
     <string name="dump_enabled">Capture CAN</string>
     <string name="dump_share">Partager la capture</string>
+    <string name="r_fuelused">Carburant consommé</string>
+    <string name="r_movetime">Temps en mouvement</string>
+    <string name="f_tEv">Distance EV</string>
+    <string name="f_tSpd">Vitesse moyenne</string>
+    <!-- firmware update -->
+    <string name="flash_title">Micrologiciel</string>
+    <string name="flash_running">ESP : v%1$d</string>
+    <string name="flash_update_btn">Mettre à jour (v%1$s)</string>
+    <string name="flash_uptodate">À jour</string>
+    <string name="flash_warn">Ne débranchez pas l’ESP et ne fermez pas l’app pendant la mise à jour.</string>
+    <string name="flash_wait">Redémarrage en bootloader…</string>
+    <string name="flash_no_dev">ESP introuvable en mode téléchargement</string>
+    <string name="flash_sync">Connexion au bootloader…</string>
+    <string name="flash_sync_fail">Échec de synchro bootloader</string>
+    <string name="flash_writing">Écriture du micrologiciel…</string>
+    <string name="flash_done">Micrologiciel mis à jour ✓</string>
+    <string name="flash_err">Échec du flash</string>
+    <string name="display_title">Affichage</string>
+    <string name="theme_auto_car">Mode sombre via le capteur de lumière de la voiture</string>
+    <string name="dump_unknown">Trames inconnues seulement (découverte)</string>
 </resources>

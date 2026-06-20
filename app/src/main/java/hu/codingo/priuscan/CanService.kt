@@ -39,6 +39,8 @@ import java.util.concurrent.ConcurrentLinkedQueue
  *  - warning/alert: sound + pop-up overlay
  *  - open door: Prius drawing overlay that slides in from the top
  */
+enum class FlashState { IDLE, FLASHING, DONE, ERROR }
+
 class CanService : Service() {
 
     companion object {
@@ -60,9 +62,26 @@ class CanService : Service() {
         // ---- GPS (head-unit location, via LocationManager) ----
         val gps = MutableStateFlow<Location?>(null)
 
+        // ---- Dark mode driven by the car's solar (sun-load) sensor ----
+        val carDark = MutableStateFlow(false)   // true = dark (low ambient light)
+
         // ---- Trip stats since last refuel + refuel history (app-side) ----
-        val tripLive = MutableStateFlow(TripLive(0, 0.0, 0.0, 0.0))
+        val tripLive = MutableStateFlow(TripLive(0, 0.0, 0.0, 0.0, 0.0, 0.0))
         val tripHistory = MutableStateFlow<List<RefuelRecord>>(emptyList())
+
+        // ---- Firmware over-the-USB flashing ----
+        const val BUNDLED_FW = 207                        // bundled firmware version (major*100+minor -> 2.7)
+        /** Format an encoded version (>=100 -> major.minor, else plain). */
+        fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
+        val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
+        val flashState = MutableStateFlow(FlashState.IDLE)
+        val flashProgress = MutableStateFlow(0)           // 0..100
+        val flashMsg = MutableStateFlow("")
+        @Volatile private var pendingFlash = false
+        /** True when the bundled firmware is newer than what the ESP runs. */
+        val updateAvailable get() = fwRunning.value?.let { it < BUNDLED_FW } ?: false
+        /** Ask the IO loop to reboot the ESP into download mode and flash it. */
+        fun requestFlash() { if (flashState.value == FlashState.IDLE) pendingFlash = true }
 
         // ---- App-controlled CAN dump (session-only, never auto-starts) ----
         val dumpActive = MutableStateFlow(false)
@@ -73,10 +92,13 @@ class CanService : Service() {
         /** Enqueue a text command (newline added); the reader thread writes it to the ESP. */
         fun sendCommand(s: String) { cmdQueue.offer((s + "\n").toByteArray()) }
 
-        /** Toggle the ESP CAN dump (default filter 0x500-0x6FF + dedup). */
-        fun setDump(on: Boolean) {
-            if (on) { dumpBytes.value = 0L; dumpFile.value = null; dumpActive.value = true; sendCommand("D1 500 6FF") }
-            else { sendCommand("D0"); dumpActive.value = false }
+        /** Toggle the ESP CAN dump. unknown=false -> D1 (0x500-0x6FF + dedup); unknown=true ->
+         *  D2 (every frame we don't already decode, for discovery). */
+        fun setDump(on: Boolean, unknown: Boolean = false) {
+            if (on) {
+                dumpBytes.value = 0L; dumpFile.value = null; dumpActive.value = true
+                sendCommand(if (unknown) "D2" else "D1 500 6FF")
+            } else { sendCommand("D0"); dumpActive.value = false }
         }
 
         /** Enqueue a raw TPMS command frame; the reader thread sends it. */
@@ -267,6 +289,9 @@ class CanService : Service() {
                                     valid = true
                                     connected.value = true
                                     deviceInfo.value = link.describe(opened.device)
+                                    // re-arm after a finished update once the ESP is back
+                                    if (flashState.value == FlashState.DONE || flashState.value == FlashState.ERROR)
+                                        flashState.value = FlashState.IDLE
                                 }
                                 line.setLength(0)
                             } else if (line.length < 4096) {
@@ -289,6 +314,13 @@ class CanService : Service() {
                         while (true) {
                             val c = cmdQueue.poll() ?: break
                             try { port.write(c, 200) } catch (_: Exception) {}
+                        }
+                        // flash requested -> stream the bundled image via serial OTA (same port)
+                        if (pendingFlash && valid) {
+                            pendingFlash = false
+                            flashState.value = FlashState.FLASHING
+                            doSerialOta(port)     // streams image; sets DONE/ERROR; ESP reboots on success
+                            break                 // reconnect to the rebooted ESP
                         }
                     }
                 } catch (_: Exception) {
@@ -337,6 +369,77 @@ class CanService : Service() {
                 }
             }
         }.also { it.isDaemon = true; it.start() }
+    }
+
+    // ---------------- Serial OTA (stream the bundled image to the running firmware) ----------------
+
+    /** Streams assets/firmware.bin to the ESP over the SAME serial port via the firmware's
+     *  serial-OTA receiver (IDF esp_ota). Flow-controlled per chunk. The ESP reboots on success. */
+    private fun doSerialOta(port: com.hoho.android.usbserial.driver.UsbSerialPort) {
+        fun lg(m: String) = android.util.Log.i("PCota", m)
+        flashProgress.value = 0
+        flashMsg.value = getString(R.string.flash_writing)
+        try {
+            val img = assets.open("firmware.bin").use { it.readBytes() }
+            lg("image=${img.size}")
+            // wait for a one-char ack line (skips any in-flight JSON/log lines)
+            fun expect(want: Char, timeoutMs: Long): Boolean {
+                val rb = ByteArray(256); val sb = StringBuilder()
+                val deadline = System.currentTimeMillis() + timeoutMs
+                while (System.currentTimeMillis() < deadline) {
+                    val n = try { port.read(rb, 200) } catch (e: Exception) { lg("read err: ${e.message}"); return false }
+                    for (i in 0 until n) {
+                        val c = rb[i].toInt().toChar()
+                        if (c == '\n') {
+                            val s = sb.toString(); sb.setLength(0)
+                            lg("rx<- ${s.take(60)}")
+                            val f = s.firstOrNull()
+                            if (f == want) return true
+                            if (f == 'E') return false
+                        } else if (sb.length < 240) sb.append(c)
+                    }
+                }
+                lg("expect('$want') TIMEOUT")
+                return false
+            }
+            port.write("O${img.size}\n".toByteArray(), 1000)
+            if (!expect('K', 6000)) { lg("no READY"); flashFail(getString(R.string.flash_sync_fail)); return }
+            // send the image as base64 LINES (binary over the JTAG console is mangled)
+            var off = 0; val raw = 600
+            while (off < img.size) {
+                val end = minOf(off + raw, img.size)
+                val b64 = android.util.Base64.encodeToString(img.copyOfRange(off, end), android.util.Base64.NO_WRAP)
+                port.write((b64 + "\n").toByteArray(), 3000)
+                if (!expect('A', 8000)) { lg("chunk nack @${off}"); flashFail(getString(R.string.flash_err)); return }
+                off = end
+                flashProgress.value = off * 100 / img.size
+            }
+            if (!expect('D', 10000)) { lg("no DONE"); flashFail(getString(R.string.flash_err)); return }
+            lg("OTA ok -> ESP rebooting")
+            flashState.value = FlashState.DONE
+            flashMsg.value = getString(R.string.flash_done)
+        } catch (e: Exception) {
+            lg("exception: ${e.message}")
+            flashFail(e.message ?: "error")
+        }
+    }
+
+    private fun flashFail(msg: String) {
+        flashState.value = FlashState.ERROR
+        flashMsg.value = msg
+    }
+
+    /** Best-effort device-wide night mode (needs a system perm; granted via adb on this
+     *  head unit:  pm grant hu.codingo.priuscan android.permission.WRITE_SECURE_SETTINGS).
+     *  The in-app theme follows carDark regardless; this also flips the rest of the system. */
+    private fun applyNightMode(dark: Boolean) {
+        try {
+            val uim = getSystemService(android.app.UiModeManager::class.java)
+            uim?.setNightMode(if (dark) android.app.UiModeManager.MODE_NIGHT_YES else android.app.UiModeManager.MODE_NIGHT_NO)
+        } catch (_: Exception) {}
+        try {
+            android.provider.Settings.Secure.putInt(contentResolver, "ui_night_mode", if (dark) 2 else 1)
+        } catch (_: Exception) {}
     }
 
     /** Byte-level framer: resync to 55 AA, validate XOR; 0x09 frames are 9 bytes, others 8. */
@@ -390,6 +493,7 @@ class CanService : Service() {
         // PriusCAN signature: every emit_json line contains the door+cruise
         // fields -> this is how we tell it apart from another ESP/TPMS's data
         if (!json.has("door") || !json.has("cruise")) return false
+        if (json.has("fw")) fwRunning.value = json.optInt("fw")
         if (prefs.logEnabled && s.endsWith("}")) {
             // append a timestamp (epoch ms) + the latest GPS fix to the logged line, so
             // the JSONL is usable for time-based offline analysis (capacity, etc.).
@@ -420,6 +524,15 @@ class CanService : Service() {
         updateNotifications(s)
         updateStatusStrip(s)
         tripTracker.onState(s)
+
+        // dark/light from the car's solar (sun-load) sensor, with hysteresis to avoid flicker
+        s.d("solar")?.let { sol ->
+            val now = if (sol < 6.0) true else if (sol > 20.0) false else carDark.value
+            if (now != carDark.value) {
+                carDark.value = now
+                if (prefs.autoDarkCar) applyNightMode(now)   // best-effort device-wide
+            }
+        }
 
         // warning -> sound + overlay, only at a sustained (HOLD_MS) level, not repeated
         val now = System.currentTimeMillis()

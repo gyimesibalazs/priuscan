@@ -145,6 +145,7 @@
     <string name="f_wDif">Diff. ruote anteriori</string>
     <string name="f_gLat">G laterale</string>
     <string name="f_gFwd">G longitudinale</string>
+    <string name="f_yaw">Imbardata / laterale (grezzo)</string>
     <string name="f_steer">Angolo di sterzo</string>
     <string name="f_brkP">Pressione freno</string>
 
@@ -205,6 +206,7 @@
     <string name="permissions_title">Autorizzazioni</string>
     <!-- trip -->
     <string name="grp_trip">Viaggio</string>
+    <string name="f_odo">Contachilometri</string>
     <string name="f_tDist">Distanza</string>
     <string name="f_tFuel">Carburante usato</string>
     <string name="f_tAvg">Media</string>
@@ -228,4 +230,24 @@
     <string name="dump_desc">Cattura i frame CAN grezzi (filtrati 0x500–0x6FF, deduplicati) in un file per la diagnostica. Il log sensori resta intatto. Stop automatico dopo 10 min / 50 MB.</string>
     <string name="dump_enabled">Dump CAN</string>
     <string name="dump_share">Condividi dump</string>
+    <string name="r_fuelused">Carburante consumato</string>
+    <string name="r_movetime">Tempo in movimento</string>
+    <string name="f_tEv">Distanza EV</string>
+    <string name="f_tSpd">Velocità media</string>
+    <!-- firmware update -->
+    <string name="flash_title">Firmware</string>
+    <string name="flash_running">ESP: v%1$d</string>
+    <string name="flash_update_btn">Aggiorna firmware (v%1$s)</string>
+    <string name="flash_uptodate">Aggiornato</string>
+    <string name="flash_warn">Non scollegare l’ESP né chiudere l’app durante l’aggiornamento.</string>
+    <string name="flash_wait">Riavvio nel bootloader…</string>
+    <string name="flash_no_dev">ESP non trovato in modalità download</string>
+    <string name="flash_sync">Connessione al bootloader…</string>
+    <string name="flash_sync_fail">Sincronizzazione bootloader fallita</string>
+    <string name="flash_writing">Scrittura firmware…</string>
+    <string name="flash_done">Firmware aggiornato ✓</string>
+    <string name="flash_err">Flash non riuscito</string>
+    <string name="display_title">Display</string>
+    <string name="theme_auto_car">Modalità scura dal sensore di luce dell\'auto</string>
+    <string name="dump_unknown">Solo frame sconosciuti (scoperta)</string>
 </resources>

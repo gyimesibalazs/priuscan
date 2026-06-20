@@ -12,6 +12,8 @@
     <string name="r_dist">Distance</string>
     <string name="r_avgspeed">Avg speed</string>
     <string name="r_avgcons">Avg consumption</string>
+    <string name="r_fuelused">Fuel used</string>
+    <string name="r_movetime">Moving time</string>
     <string name="r_history">History</string>
     <string name="r_none">no data yet</string>
     <string name="connected">PriusCAN connected</string>
@@ -50,6 +52,21 @@
     <string name="dump_desc">Capture raw CAN frames (filtered 0x500–0x6FF, deduplicated) into a file for diagnostics. The sensor log is untouched. Auto-stops after 10 min / 50 MB.</string>
     <string name="dump_enabled">CAN dump</string>
     <string name="dump_share">Share dump</string>
+    <string name="dump_unknown">Unknown frames only (discovery)</string>
+    <string name="flash_title">Firmware</string>
+    <string name="flash_running">ESP: v%1$d</string>
+    <string name="flash_update_btn">Update firmware (v%1$s)</string>
+    <string name="flash_uptodate">Up to date</string>
+    <string name="flash_warn">Do not unplug the ESP or close the app during the update.</string>
+    <string name="flash_wait">Rebooting into bootloader…</string>
+    <string name="flash_no_dev">ESP not found in download mode</string>
+    <string name="flash_sync">Connecting to bootloader…</string>
+    <string name="flash_sync_fail">Bootloader sync failed</string>
+    <string name="flash_writing">Writing firmware…</string>
+    <string name="flash_done">Firmware updated ✓</string>
+    <string name="flash_err">Flash failed</string>
+    <string name="display_title">Display</string>
+    <string name="theme_auto_car">Dark mode from the car light sensor</string>
     <string name="ha_desc">Home Assistant connection (MQTT). Sensors appear automatically in HA via MQTT Discovery. Without internet, batches are buffered with timestamps and sent to %1$s/backlog on reconnect.</string>
     <string name="ha_enabled">HA integration enabled</string>
     <string name="mqtt_broker">MQTT broker (host/IP)</string>
@@ -181,6 +198,7 @@
     <string name="f_gLat">Lateral G</string>
     <string name="f_gFwd">Longitudinal G</string>
     <string name="f_steer">Steering angle</string>
+    <string name="f_yaw">Yaw / lateral (raw)</string>
     <string name="f_brkP">Brake pressure</string>
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
@@ -207,7 +225,10 @@
     <string name="battery_ref_label">Reference capacity (Ah)</string>
 
     <!-- ===== Trip ===== -->
+    <string name="f_odo">Odometer</string>
     <string name="f_tDist">Distance</string>
+    <string name="f_tEv">EV distance</string>
+    <string name="f_tSpd">Avg speed</string>
     <string name="f_tFuel">Fuel used</string>
     <string name="f_tAvg">Average</string>
 

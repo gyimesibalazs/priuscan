@@ -48,6 +48,12 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("log_enabled", true)
         set(v) = sp.edit().putBoolean("log_enabled", v).apply()
 
+    /** Drive dark/light mode from the car's solar (sun-load) sensor instead of the
+     *  system setting. When on, also tries to set the system night mode device-wide. */
+    var autoDarkCar: Boolean
+        get() = sp.getBoolean("auto_dark_car", false)
+        set(v) = sp.edit().putBoolean("auto_dark_car", v).apply()
+
     /** Reference HV pack capacity (Ah) for the SoH/degradation calc. Default ~Prius
      *  6.5 Ah; set to the transplanted Prius-4 cell's rated capacity. */
     var batteryRefAh: Float

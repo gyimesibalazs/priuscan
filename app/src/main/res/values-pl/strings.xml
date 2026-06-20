@@ -146,6 +146,7 @@
     <string name="f_wDif">Różnica kół przednich</string>
     <string name="f_gLat">Przyspieszenie boczne G</string>
     <string name="f_gFwd">Przyspieszenie wzdłużne G</string>
+    <string name="f_yaw">Odchylenie / boczne (surowe)</string>
     <string name="f_steer">Kąt skrętu kierownicy</string>
     <string name="f_brkP">Ciśnienie hamowania</string>
 
@@ -206,6 +207,7 @@
     <string name="permissions_title">Uprawnienia</string>
     <!-- trip -->
     <string name="grp_trip">Trasa</string>
+    <string name="f_odo">Licznik km</string>
     <string name="f_tDist">Dystans</string>
     <string name="f_tFuel">Zużyte paliwo</string>
     <string name="f_tAvg">Średnia</string>
@@ -229,4 +231,24 @@
     <string name="dump_desc">Przechwytywanie surowych ramek CAN (filtr 0x500–0x6FF, deduplikacja) do pliku diagnostycznego. Log czujników pozostaje nietknięty. Auto-stop po 10 min / 50 MB.</string>
     <string name="dump_enabled">Zrzut CAN</string>
     <string name="dump_share">Udostępnij zrzut</string>
+    <string name="r_fuelused">Zużyte paliwo</string>
+    <string name="r_movetime">Czas jazdy</string>
+    <string name="f_tEv">Dystans EV</string>
+    <string name="f_tSpd">Śr. prędkość</string>
+    <!-- firmware update -->
+    <string name="flash_title">Firmware</string>
+    <string name="flash_running">ESP: v%1$d</string>
+    <string name="flash_update_btn">Aktualizuj firmware (v%1$s)</string>
+    <string name="flash_uptodate">Aktualne</string>
+    <string name="flash_warn">Nie odłączaj ESP ani nie zamykaj aplikacji podczas aktualizacji.</string>
+    <string name="flash_wait">Restart do bootloadera…</string>
+    <string name="flash_no_dev">Nie znaleziono ESP w trybie pobierania</string>
+    <string name="flash_sync">Łączenie z bootloaderem…</string>
+    <string name="flash_sync_fail">Błąd synchronizacji bootloadera</string>
+    <string name="flash_writing">Zapis firmware…</string>
+    <string name="flash_done">Firmware zaktualizowany ✓</string>
+    <string name="flash_err">Flashowanie nie powiodło się</string>
+    <string name="display_title">Wyświetlanie</string>
+    <string name="theme_auto_car">Tryb ciemny wg czujnika światła auta</string>
+    <string name="dump_unknown">Tylko nieznane ramki (wykrywanie)</string>
 </resources>
