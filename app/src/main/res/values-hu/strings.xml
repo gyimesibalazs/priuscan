@@ -255,7 +255,7 @@
     <string name="sl_oil">Olajcsere</string>
     <string name="sl_trip">Trip %1$s</string>
     <string name="btn_reset">Nullázás</string>
-    <string name="r_regen">Regen arány</string>
+    <string name="r_regen">Regeneratív fékezés aránya</string>
     <string name="trip_boot">Indítás óta</string>
     <string name="trip_home">Otthonról</string>
     <string name="trip_tank">Tankolás</string>
@@ -265,4 +265,14 @@
     <string name="trip_hold">Tartsd nyomva a resethez</string>
     <string name="trip_at">%1$s km-nél</string>
     <string name="trip_need_fw">Firmware frissítés kell (v3.0)</string>
+    <string name="grp_lights">Világítás</string>
+    <string name="l_position">Helyzetjelző</string>
+    <string name="l_lowbeam">Tompított</string>
+    <string name="l_highbeam">Távolsági</string>
+    <string name="l_fogfront">Első ködlámpa</string>
+    <string name="l_fogrear">Hátsó ködlámpa</string>
+    <string name="f_illum">Fény (döntés)</string>
+    <string name="f_ambL">Fényszint</string>
+    <string name="fuel_corr_label">Fogyasztás-korrekció (×)</string>
+    <string name="btn_save">Mentés</string>
 </resources>

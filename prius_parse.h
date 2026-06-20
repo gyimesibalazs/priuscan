@@ -43,6 +43,8 @@ enum VKey {
   TEV,                          // since boot: pure-EV distance (km, engine off + moving)
   ODO,                          // odometer (km), from 0x611 broadcast bytes[5..7]
   GASB,                         // gas pedal %, from 0x245 b2 (0..200 -> /2 = 0..100)
+  LIGHTS,                       // exterior lights bitmask, 0x622 b3 (0x10 pos,0x20 low,0x40 high,0x08 fFog,0x04 rFog)
+  AMBL,                         // raw ambient light level, 0x620 b2:b3 BE (~31 bright .. ~600 dark, inverted)
   N_JSON,                       // number of fields that go into the JSON (length of FIELDS)
   RAW0 = N_JSON, RAW1, RAW2, RAW3, RAW4, RAW5, RAW6, RAW7,
   V_COUNT
@@ -71,7 +73,7 @@ inline const char *KEYS[V_COUNT] = {
   "tDist","tFuel","tAvg",
   "capAh","capKwh",
   "tMove","tSpd","tEv",
-  "odo","gasB",
+  "odo","gasB","lights","ambL",
   "raw0","raw1","raw2","raw3","raw4","raw5","raw6","raw7",
 };
 
@@ -111,7 +113,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 300;   // encoded major*100+minor -> 3.0 (unified trip-slot model + new UI)
+inline constexpr int FW_VERSION = 308;   // 3.8: refuel gate on persist_loaded (drop 60s warm-up)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -130,7 +132,7 @@ inline bool dump_is_known(uint16_t id) {
   switch (id) {
     case 0x1C4: case 0x0B4: case 0x127: case 0x614: case 0x1D3: case 0x5C8:
     case 0x5A4: case 0x610: case 0x611: case 0x612: case 0x620: case 0x626:
-    case 0x4A1: case 0x320: case 0x245: case 0x025:  // decoded broadcasts
+    case 0x4A1: case 0x320: case 0x245: case 0x025: case 0x622:  // decoded broadcasts
     case 0x7DF: case 0x7E0: case 0x7E2: case 0x7C4: case 0x7B0: case 0x7C0:  // our requests
     case 0x7E8: case 0x7EA: case 0x7CC: case 0x7B8: case 0x7C8:              // diag responses
       return true;
@@ -155,6 +157,8 @@ inline void dump_frame(uint16_t id, const uint8_t *d, int n) {
 // before the host-time block because parse_host_line back-corrects these (#4).
 inline float fuel_ref = -1;             // slow-tracked fuel-level baseline
 inline uint32_t last_refuel_epoch = 0;  // unix seconds of the last detected refuel
+inline float fuel_corr = 1.0f;          // user fuel-consumption correction (calibrate to the pump);
+                                        // app sets it via "F<value>", persisted as an ESPHome global
 
 // ===== Power-off (ignition) detection + NVS persistence =====
 // TEST stage: on ignition-off we save only the shutdown epoch + a save counter, so the
@@ -203,6 +207,10 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
     return;
   }
   if (line[0] == 'H') { if (line[1] == 'O') ohist_request = true; else hist_request = true; return; }  // H/HO history
+  if (line[0] == 'F') {                                   // fuel correction: "F<factor>" (e.g. F1.05)
+    float f; if (sscanf(line + 1, " %f", &f) == 1 && f > 0.5f && f < 2.0f) fuel_corr = f;  // YAML flushes it to NVS
+    return;
+  }
   if (line[0] == 'R') {                                   // reset distance slot: "R<1..4>"
     int i = line[1] - '0';
     if (i >= 2 && i <= 6) reset_req = i;
@@ -504,6 +512,14 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
       // compute_derived instead, so a genuinely full tank still reads 100%.
       if (x.size() >= 6) V[FUELIN] = (float)x[5] * 100.0f / 255.0f;
       return;
+    case 0x622:  // exterior lights, byte[3] bitmask: 0x10 position, 0x20 low beam,
+      // 0x40 high beam, 0x08 front fog, 0x04 rear fog (decoded from the labelled light test)
+      if (x.size() >= 4) V[LIGHTS] = (float)(x[3] & 0x7C);
+      return;
+    case 0x620:  // body ECU: RAW ambient light level, bytes[2:3] BE, inverted (~31 bright ..
+      // ~600 dark). Confirmed with a 3-pulse lamp test. (doors are byte[5], handled in the YAML.)
+      if (x.size() >= 4) V[AMBL] = (float)(((uint16_t)x[2] << 8) | x[3]);
+      return;
   }
 }
 
@@ -703,9 +719,22 @@ inline void cap_import(const float *in) { cap_ah=in[0]; cap_n=(uint32_t)in[1]; v
 inline uint32_t derive_boot_ms = 0;   // first compute_derived call (for the boot warm-up)
 inline void compute_derived(uint32_t now_ms) {
   if (derive_boot_ms == 0) derive_boot_ms = now_ms;
-  float maf = V[MAF], r = V[RPM];
-  if (!std::isnan(maf))
-    V[FUEL] = (r < 100) ? 0.0f : maf/14.7f*3600.0f/745.0f;
+  // stamp the since-boot slot's start once host time + odometer are available
+  // (epoch back-dated to boot so the "since start" chip shows the real start time/odo).
+  if (boot_slot.epoch == 0 && host_time_set)
+    boot_slot.epoch = cur_epoch(now_ms) - (uint32_t)((now_ms - derive_boot_ms) / 1000u);
+  if (boot_slot.odo == 0) { uint32_t o = cur_odo(); if (o) boot_slot.odo = o; }
+  // Fuel rate (l/h). Primary: the INJECTOR (injml = injected volume per injection, ~ * rpm =
+  // volume/time) -> tracks real fuel incl. power-enrichment AND decel fuel-cut. Calibrated K
+  // against the car trip computer (tank trip 2026-06-20: 3.05 L / 63.9 km). Fallback to the
+  // MAF stoichiometric estimate (AFR 14.7) only while the injector PID hasn't arrived yet.
+  float maf = V[MAF], r = V[RPM], inj = V[INJML];
+  // l/h per (injml * rpm). Calibrated to the PUMP-REAL consumption: the car trip computer reads
+  // ~5.6% low (5.2 shown vs 5.5 real on a full 45-47 L tank), so 0.00923 (car-match) * 5.5/5.2.
+  constexpr float INJ_K = 0.00976f;            // fuel_corr (default 1.0) fine-tunes at a full refuel
+  if (r < 100) V[FUEL] = 0.0f;                  // engine off
+  else if (!std::isnan(inj)) V[FUEL] = INJ_K * inj * r * fuel_corr;       // injector-based (incl. enrichment / fuel-cut)
+  else if (!std::isnan(maf)) V[FUEL] = maf/14.7f*3600.0f/745.0f * fuel_corr;   // MAF fallback
 
   float ct = V[CT], rate = NAN;
   if (!std::isnan(ct)) {
@@ -846,10 +875,10 @@ inline void compute_derived(uint32_t now_ms) {
   if (!std::isnan(fin)) {
     if (fuel_ref < 0) fuel_ref = fin;
     bool parked = std::isnan(sp2) || sp2 < 3.0f;
-    // boot warm-up: the meter ECU bounces fuelIn 0%<->100% (b5 0x00/0xFF) for ~1 min after
-    // power-up; suppress refuel detection until it settles so we don't log a false refuel.
-    bool warmup = (now_ms - derive_boot_ms) < 60000u;
-    if (!warmup && parked && fin - fuel_ref >= REFUEL_DELTA) {
+    // Gate refuel detection until the NVS load has completed: fuel_ref is then either the
+    // restored baseline or 100% (empty-flash default), so the boot fuelIn transient can't be
+    // mistaken for a refuel. (Replaces the old 60 s boot warm-up.)
+    if (persist_loaded && parked && fin - fuel_ref >= REFUEL_DELTA) {
       // up-jump seen; require it to PERSIST >=1.5 s so a 1-sample spike does not trigger
       if (refuel_seen_ms == 0) refuel_seen_ms = now_ms;
       else if (now_ms - refuel_seen_ms >= 1500) {
@@ -911,7 +940,8 @@ inline const Field FIELDS[] = {
   {CWL,"\"cwL\":",6,0}, {WBLK,"\"wblk\":",7,0}, {WZ,"\"wz\":",5,2},
   // trip computer / slots are NOT flat fields anymore -> emitted as the "slots" array below
   {CAPAH,"\"capAh\":",8,2}, {CAPKWH,"\"capKwh\":",9,2},
-  {ODO,"\"odo\":",6,0}, {GASB,"\"gasB\":",7,0},
+  {ODO,"\"odo\":",6,0}, {GASB,"\"gasB\":",7,0}, {LIGHTS,"\"lights\":",9,0},
+  {AMBL,"\"ambL\":",7,0},
 };
 inline const int FIELDS_N = sizeof(FIELDS) / sizeof(FIELDS[0]);
 
@@ -983,6 +1013,7 @@ inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
   *p++ = ']'; *p++ = ',';
   std::memcpy(p, "\"rhN\":", 6); p += 6; put_uint(p, rhist_n); *p++ = ',';
   std::memcpy(p, "\"ohN\":", 6); p += 6; put_uint(p, ohist_n); *p++ = ',';
+  std::memcpy(p, "\"fCorr\":", 8); p += 8; put_num(p, fuel_corr, 3); *p++ = ',';
   if (door_cruise_extra) {       // passed in by the YAML: "door":..,"cruise":..
     size_t n = std::strlen(door_cruise_extra);
     std::memcpy(p, door_cruise_extra, n); p += n;

@@ -26,7 +26,7 @@ esphome:
   on_boot:
     priority: -100   # the globals have been restored by then
     then:
-      - lambda: 'prius::learn_import(id(learn_state).data()); prius::cap_import(id(cap_state).data()); prius::last_refuel_epoch = id(refuel_epoch); prius_persist_load();'
+      - lambda: 'prius::learn_import(id(learn_state).data()); prius::cap_import(id(cap_state).data()); prius::last_refuel_epoch = id(refuel_epoch); prius::fuel_corr = id(fuel_corr_g); prius_persist_load();'
 
 # Persistent storage of the self-learning weak-block baseline (lz[14] + sample count).
 # restore_value: restored on boot, periodically flushed to flash (the YAML
@@ -41,6 +41,10 @@ globals:
   - id: refuel_epoch       # unix seconds of the last detected refuel (persisted)
     type: uint32_t
     restore_value: yes
+  - id: fuel_corr_g        # user fuel-consumption correction factor (calibrate to the pump)
+    type: float
+    restore_value: yes
+    initial_value: '1.0'
 
 esp32:
   board: esp32-c3-devkitm-1
@@ -954,6 +958,7 @@ canbus:
               id(door_trunk).publish_state(m & 0x02);
               // driver seatbelt unlatched: byte7 bit6 (opendbc SEATBELT_DRIVER_UNLATCHED)
               if (x.size() >= 8) id(belt_driver).publish_state(x[7] & 0x40);
+              prius::on_broadcast(0x620, x);   // also: raw ambient light level (bytes[2:3])
       - can_id: 0x5C8   # cruise control main switch
         then:
           - lambda: |-
@@ -984,6 +989,8 @@ canbus:
         then: { lambda: 'prius::on_broadcast(0x245, x);' }
       - can_id: 0x025   # steering angle broadcast
         then: { lambda: 'prius::on_broadcast(0x025, x);' }
+      - can_id: 0x622   # exterior lights bitmask (b3): position/low/high/fog
+        then: { lambda: 'prius::on_broadcast(0x622, x);' }
 
       # ---------- ISO-TP diag responses (all four ECUs) ----------
       - can_id: 0x7E8
@@ -1077,6 +1084,7 @@ interval:
           prius::learn_export(id(learn_state).data());
           prius::cap_export(id(cap_state).data());
           if (prius::refuel_dirty) { id(refuel_epoch) = prius::last_refuel_epoch; prius::refuel_dirty = false; }
+          id(fuel_corr_g) = prius::fuel_corr;
 
   # Full JSON state to the serial port every 250 ms (4 Hz; the divider=1
   # PIDs update more frequently than this internally, so every line has fresh rpm/spd)

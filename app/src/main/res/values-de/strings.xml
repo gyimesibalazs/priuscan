@@ -265,4 +265,14 @@
     <string name="trip_hold">Halten zum Reset</string>
     <string name="trip_at">bei %1$s km</string>
     <string name="trip_need_fw">Firmware-Update nötig (v3.0)</string>
+    <string name="grp_lights">Beleuchtung</string>
+    <string name="l_position">Standlicht</string>
+    <string name="l_lowbeam">Abblendlicht</string>
+    <string name="l_highbeam">Fernlicht</string>
+    <string name="l_fogfront">Nebel vorn</string>
+    <string name="l_fogrear">Nebel hinten</string>
+    <string name="f_illum">Licht (Entsch.)</string>
+    <string name="f_ambL">Lichtniveau</string>
+    <string name="fuel_corr_label">Verbrauchskorrektur (×)</string>
+    <string name="btn_save">Speichern</string>
 </resources>

@@ -142,12 +142,16 @@ Response ID = request ID + 8.
 | 0x7C0  | 0x7C8   | Body           | 2113, 2129, 2141 |
 
 Passive broadcast frames (no request):
-* **0x620** — doors. `byte5` bits (verified by dump):
-  `bit5 (0x20)` = front-left/driver, `bit4 (0x10)` = front-right/passenger,
-  `bit3 (0x08)` = rear-right, `bit2 (0x04)` = rear-left, `bit1 (0x02)` = trunk.
-  The two rears are now published **separately** (`door_rear_left` /
-  `door_rear_right`); the L/R assignment is a best guess — swap the two
-  `publish_state` lines if a dump shows it reversed.
+* **0x620** — doors (`byte5`) **+ raw ambient light level** (`bytes[2:3]`, BE).
+  Doors: `bit5 (0x20)` = front-left/driver, `bit4 (0x10)` = front-right/passenger,
+  `bit3 (0x08)` = rear-right, `bit2 (0x04)` = rear-left, `bit1 (0x02)` = trunk
+  (rears published separately; L/R is a best guess). Ambient light (`b2:b3`,
+  16-bit, **inverted**): ~31 bright .. ~600 dark; the instrument cluster flips its
+  day/night illumination at ~100. Confirmed with a 3-pulse lamp test on the sensor.
+  → `ambL` key; the app drives dark mode from it (threshold 100, ±10 hysteresis).
+* **0x622** — exterior lights, `byte3` bitmask (decoded from a labelled light test):
+  `0x10` position, `0x20` low beam, `0x40` high beam, `0x08` front fog, `0x04` rear fog.
+  → `lights` key; shown on the Driving tab.
 * **0x5C8** — cruise main switch (byte2 bit4) — *tentative, verify in dump*.
 
 ### JSON output schema
@@ -162,17 +166,27 @@ Battery:  hvA hvdis hvchg bmin bmax blkD weakB maxR tHot hvAir tb1 tb2 tb3
           b01..b14 (individual block voltages)
 A/C:      cabin setT comp evap solar acAmb blower acPress
 ABS:      wFL wFR wRL wRR wDif gLat gFwd steer brkP
-Body:     bodyV fuelIn oilDist odo
+Body:     bodyV fuelIn oilDist odo gasB lights (0x622 bitmask) ambL (0x620 light level)
 Fans/ECU: battFan ecuMode fanMode dtcCur dtcHist
 Derived:  ctR (coolant rate °C/min) fuel (l/h) wpW (water-pump warn 0/1/2)
           cellW (HV cell warn 0/1/2)
 Learned:  cwL (learned cell warn) wblk (weakest block #) wz (weak-block Z-score)
           capAh capKwh (self-learned pack capacity, coulomb counting)
-Trip:     tDist tFuel tAvg (since boot) · tMove (moving s) tSpd (avg km/h) tEv (EV km)
+Trip:     slots (array of the 8 live TripSlots, see below) · rhN/ohN (history counts) · fCorr (fuel correction ×)
 Integers: epoch (unix s, host time) fuelTs (last-refuel epoch) fw (firmware version, major*100+minor)
+          offTs/offN (last NVS save epoch / counter)
 State:    door (bitmask 0x80 drv / 0x40 pass / 0x08 rear-L / 0x04 rear-R / 0x01 trunk) cruise belt
 Debug:    eFF eOK eLen loops · raw0..raw7 (0x7B8/2147 response — G-sensor cal)
 ```
+
+**Trip slots** (firmware-owned, persisted in NVS; the app only displays). Every
+counter is one uniform `TripSlot {epoch, odo, dist, ev, fuel, move_s, regen_e,
+brake_e}`. The regular line carries a `"slots"` array of 8 live slots in order:
+`[0] since-boot (memory only)`, `[1] lifetime`, `[2] tank`, `[3] oil`, `[4-6]
+A/B/C`, `[7] home-departure`. Each slot object is `{e,o,d,v,f,m,r}` (r = regen %,
+derived from `regen_e/brake_e`). The app derives avg consumption (`fuel/dist`),
+avg speed (`dist/move_s`) and the regen ratio. Refuel history (`rhist`) and
+oil-change history (`ohist`), 50 entries each, are fetched on demand (`H` / `HO`).
 
 `epoch`, `fuelTs`, `fw` are appended by `emit_json` as **integers** (a unix epoch /
 version does not fit a 24-bit-mantissa float, so they bypass the float `V[]` store).
@@ -182,8 +196,18 @@ from `0x612` byte[5] /255×100), `odo` (km, `0x611` bytes[5..7]), rear doors (`0
 byte[5] / `0x626` byte[2]).
 
 ### Derived values & warnings (`compute_derived`)
-* **fuel** (l/h) = `maf / 14.7 * 3600 / 745` (stoichiometric AFR, petrol density);
-  0 when rpm < 100 (engine off / EV mode).
+* **fuel** (l/h) — **injector-based** (primary): `INJ_K * injml * rpm * fuel_corr`,
+  0 when rpm < 100. `injml` (injected volume) tracks the *real* commanded fuel, so it
+  includes power-enrichment (the engine runs mostly at high load → the old MAF/14.7
+  stoichiometric estimate read ~7 % low) **and** decel fuel-cut (injectors off → 0,
+  where MAF over-counted). `INJ_K = 0.00976` is an empirical one-trip fit:
+  `∫(injml·rpm·dt)` over the 2026-06-20 tank trip set equal to the car trip computer
+  (3.05 L), then ×5.5/5.2 because the car itself reads ~5.6 % below the pump. **MAF
+  fallback** (`maf/14.7*3600/745`) only while the injector PID hasn't arrived. The
+  single source `V[FUEL]` feeds both the instant display and the trip accumulation.
+* **fuel_corr** — user fuel-consumption correction (×, default 1.0), set via the `F`
+  command, persisted as an ESPHome global. Refine at a full refuel (accumulated L vs
+  pump litres). Affects instant *and* trip fuel.
 * **wpW** (water-pump warning, 0/1/2): coolant absolute thresholds + coolant
   rise-rate (`ctR`) + the direct `wpRun` pump-running bit.
 * **cellW** (HV cell warning, 0/1/2): **the self-learning layer is the primary
@@ -197,12 +221,17 @@ byte[5] / `0x626` byte[2]).
   oscillating SoC band — the running min/max + the charge integral at each does).
   kWh uses the averaged pack voltage `vl`. Estimate, improves over drives; NiMH/Li
   charge-efficiency biases it. Persisted in NVS.
-* **Trip / EV** (since ESP boot): `tDist`/`tFuel`/`tAvg`; `tMove` = active moving
-  time (stops ≤180 s still count); `tSpd` = `tDist / tMove`; `tEv` = distance with the
-  engine off (rpm<100). The **since-refuel** equivalents are computed app-side
-  (`TripTracker`) with a 50-entry history.
-* **Refuel** (`fuelTs`): `fuelIn` jump while parked → records `cur_epoch` (host time);
-  if no host time yet, stamps `millis()` and back-corrects when the time arrives.
+* **Trip slots** (unified `TripSlot`, see the schema above): one per-tick delta
+  (`dist`/`ev`/`fuel`/`move_s`/regen energies) is added to **every** slot; they differ
+  only in *when* they reset. Moving time counts stops ≤180 s (and a just-started,
+  still-standing car does **not** count until it first moves — `stop_s` starts high).
+  Persisted in NVS (power-off / refuel / reset) and restored first at boot, behind a
+  load guard. The since-boot slot is memory-only (resets each power-on).
+* **Refuel** (`fuelTs` = `slot[1].epoch`): `fuelIn` jump while parked → push `slot[1]`
+  into `rhist`, reset it, stamp `cur_epoch` + odometer. Host-time back-correction as
+  before. Detection is gated on `persist_loaded` (the NVS load done → `fuel_ref` is the
+  restored baseline, or 100% for an empty flash), which avoids the boot fuelIn-sentinel
+  false refuel without needing a fixed warm-up delay.
 
 ### Serial command protocol (app/PC → ESP)
 The firmware reads `\n`-terminated text commands from the USB-Serial/JTAG console

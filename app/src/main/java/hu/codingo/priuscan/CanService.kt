@@ -77,7 +77,7 @@ class CanService : Service() {
         fun resetSlot(cmd: Int) { if (cmd in 2..6) sendCommand("R$cmd") }
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 300                        // bundled firmware version (major*100+minor -> 3.0)
+        const val BUNDLED_FW = 308                        // bundled firmware version (3.8)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
@@ -99,12 +99,12 @@ class CanService : Service() {
         /** Enqueue a text command (newline added); the reader thread writes it to the ESP. */
         fun sendCommand(s: String) { cmdQueue.offer((s + "\n").toByteArray()) }
 
-        /** Toggle the ESP CAN dump. unknown=false -> D1 (0x500-0x6FF + dedup); unknown=true ->
-         *  D2 (every frame we don't already decode, for discovery). */
+        /** Toggle the ESP CAN dump. unknown=false -> FULL dump (every frame 0x000-0x7FF + dedup);
+         *  unknown=true -> D2 (only frames we don't already decode, for discovery). */
         fun setDump(on: Boolean, unknown: Boolean = false) {
             if (on) {
                 dumpBytes.value = 0L; dumpFile.value = null; dumpActive.value = true
-                sendCommand(if (unknown) "D2" else "D1 500 6FF")
+                sendCommand(if (unknown) "D2" else "D1 000 7FF")
             } else { sendCommand("D0"); dumpActive.value = false }
         }
 
@@ -557,13 +557,18 @@ class CanService : Service() {
         updateNotifications(s)
         updateStatusStrip(s)
 
-        // dark/light from the car's solar (sun-load) sensor, with hysteresis to avoid flicker
-        s.d("solar")?.let { sol ->
-            val now = if (sol < 6.0) true else if (sol > 20.0) false else carDark.value
-            if (now != carDark.value) {
-                carDark.value = now
-                if (prefs.autoDarkCar) applyNightMode(now)   // best-effort device-wide
-            }
+        // dark/light: prefer the RAW ambient-light sensor (0x620 b2:b3, ~31 bright .. ~600 dark,
+        // confirmed by the lamp test) — fast and independent of the light switch. Fall back to the
+        // slow solar sun-load sensor. Hysteresis to avoid flicker.
+        // the instrument cluster flips day/night at ambL ~100 -> match it (±10 hysteresis)
+        val ambL = s.d("ambL")
+        val nightNow = when {
+            ambL != null -> if (ambL > 110.0) true else if (ambL < 90.0) false else carDark.value
+            else -> s.d("solar")?.let { sol -> if (sol < 6.0) true else if (sol > 20.0) false else carDark.value } ?: carDark.value
+        }
+        if (nightNow != carDark.value) {
+            carDark.value = nightNow
+            if (prefs.autoDarkCar) applyNightMode(nightNow)   // best-effort device-wide
         }
 
         // warning -> sound + overlay, only at a sustained (HOLD_MS) level, not repeated

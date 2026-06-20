@@ -266,4 +266,14 @@
     <string name="trip_hold">Przytrzymaj, by zerować</string>
     <string name="trip_at">przy %1$s km</string>
     <string name="trip_need_fw">Wymagana aktualizacja firmware (v3.0)</string>
+    <string name="grp_lights">Światła</string>
+    <string name="l_position">Pozycyjne</string>
+    <string name="l_lowbeam">Mijania</string>
+    <string name="l_highbeam">Drogowe</string>
+    <string name="l_fogfront">Przód p.mgielne</string>
+    <string name="l_fogrear">Tył p.mgielne</string>
+    <string name="f_illum">Światło (decyzja)</string>
+    <string name="f_ambL">Poziom światła</string>
+    <string name="fuel_corr_label">Korekta zużycia (×)</string>
+    <string name="btn_save">Zapisz</string>
 </resources>

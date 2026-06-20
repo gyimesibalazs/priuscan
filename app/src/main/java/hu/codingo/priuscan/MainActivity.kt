@@ -122,6 +122,7 @@ fun MainScreen(prefs: Prefs) {
             in 1..groups.size -> {
                 val (titleRes, fields) = groups[tab - 1]
                 if (titleRes == R.string.grp_hybrid_batt) HybridBatteryTab(state, fields, prefs.batteryRefAh)
+                else if (titleRes == R.string.grp_drive_brake) DriveTab(state, fields)
                 else GroupTab(state, fields)
             }
             groups.size + 1 -> TpmsTab(tpmsReadings)
@@ -137,7 +138,7 @@ private fun tabColumn(content: androidx.compose.foundation.lazy.LazyListScope.()
     // rows (and the tyre values next to the car drawing) stay readable, not stretched.
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
-            Modifier.widthIn(max = 600.dp).fillMaxHeight().padding(horizontal = 16.dp),
+            Modifier.widthIn(max = 820.dp).fillMaxHeight().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             item { Spacer(Modifier.height(8.dp)) }
@@ -168,6 +169,28 @@ private fun GroupTab(state: CanState, fields: List<Field>) = tabColumn {
     itemsIndexed(fields) { _, f ->
         SensorRow(stringResource(f.labelRes), format(state.d(f.key), f.decimals, f.unit))
     }
+}
+
+/** Driving tab = the drive/brake fields + the exterior-light states (0x622 bitmask). */
+@Composable
+private fun DriveTab(state: CanState, fields: List<Field>) = tabColumn {
+    itemsIndexed(fields) { _, f ->
+        SensorRow(stringResource(f.labelRes), format(state.d(f.key), f.decimals, f.unit))
+    }
+    item { GroupTitle(stringResource(R.string.grp_lights)) }
+    val lt = state.i("lights") ?: 0
+    item { LightRow(R.string.l_position, lt and 0x10 != 0) }
+    item { LightRow(R.string.l_lowbeam,  lt and 0x20 != 0) }
+    item { LightRow(R.string.l_highbeam, lt and 0x40 != 0) }
+    item { LightRow(R.string.l_fogfront, lt and 0x08 != 0) }
+    item { LightRow(R.string.l_fogrear,  lt and 0x04 != 0) }
+    // raw ambient-light level (0x620): ~31 bright .. ~600 dark; cluster flips at ~100
+    item { SensorRow(stringResource(R.string.f_ambL), format(state.d("ambL"), 0, "")) }
+}
+
+@Composable
+private fun LightRow(labelRes: Int, on: Boolean) {
+    SensorRow(stringResource(labelRes), if (on) "●" else "○", highlight = on)
 }
 
 /** Hybrid-battery tab: the battery fields + SoH + the b01..b14 block voltages merged in. */
@@ -201,7 +224,7 @@ private fun HybridBatteryTab(state: CanState, fields: List<Field>, refAh: Float)
 private data class TripDef(val labelRes: Int, val arg: String?, val idx: Int, val resetCmd: Int, val hist: Int)
 private val TRIPS = listOf(
     TripDef(R.string.trip_boot, null, 0, 0, 0),
-    TripDef(R.string.trip_home, null, 7, 6, 0),
+    TripDef(R.string.trip_home, null, 7, 0, 0),   // home: app auto-resets (geofence), no UI reset
     TripDef(R.string.sl_trip, "A", 4, 3, 0),
     TripDef(R.string.sl_trip, "B", 5, 4, 0),
     TripDef(R.string.sl_trip, "C", 6, 5, 0),
@@ -238,8 +261,10 @@ private fun TripSection() {
         val s = slots.getOrNull(def.idx) ?: TripSlot.EMPTY
         SensorRow(stringResource(R.string.r_dist), "%.1f km".format(s.dist))
         SensorRow(stringResource(R.string.f_tEv), "%.1f km".format(s.ev))
+        SensorRow(stringResource(R.string.r_fuelused), "%.2f L".format(s.fuel))
         SensorRow(stringResource(R.string.r_avgcons), "%.1f l/100km".format(s.avgCons))
         SensorRow(stringResource(R.string.r_avgspeed), "%.0f km/h".format(s.avgKmh))
+        SensorRow(stringResource(R.string.r_movetime), fmtDur(s.moveS.toLong()))
         SensorRow(stringResource(R.string.r_regen), "%.0f %%".format(s.regen))
         if (s.epoch > 0) {
             Text(
@@ -328,7 +353,12 @@ private fun Header(s: CanState) {
                 val gear = if (s.gear in 0..4) CanState.GEARS[s.gear] else "–"
                 val line = buildString {
                     append("$gear  •  ${s.d("rpm")?.toInt() ?: "–"} rpm  •  SoC ${s.d("soc")?.toInt() ?: "–"}%")
-                    s.d("fuel")?.let { append("  •  %.1f l/h".format(it)) }   // consumption
+                    // consumption: l/100km while moving, l/h when stationary
+                    s.d("fuel")?.let { lh ->
+                        val sp = s.d("spd") ?: 0.0
+                        if (sp > 3.0) append("  •  %.1f l/100km".format(lh / sp * 100.0))
+                        else append("  •  %.1f l/h".format(lh))
+                    }
                 }
                 Text(line, color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp)
             }

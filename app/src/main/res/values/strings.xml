@@ -267,4 +267,14 @@
     <string name="trip_hold">Hold to reset</string>
     <string name="trip_at">at %1$s km</string>
     <string name="trip_need_fw">Firmware update needed (v3.0)</string>
+    <string name="grp_lights">Lights</string>
+    <string name="l_position">Position</string>
+    <string name="l_lowbeam">Low beam</string>
+    <string name="l_highbeam">High beam</string>
+    <string name="l_fogfront">Front fog</string>
+    <string name="l_fogrear">Rear fog</string>
+    <string name="f_illum">Light (decision)</string>
+    <string name="f_ambL">Light level</string>
+    <string name="fuel_corr_label">Fuel correction (×)</string>
+    <string name="btn_save">Save</string>
 </resources>

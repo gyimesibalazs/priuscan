@@ -1,5 +1,7 @@
 package hu.codingo.priuscan
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -48,38 +50,36 @@ fun TpmsCarView(readings: Map<Wheel, TireReading>, modifier: Modifier = Modifier
         catch (_: Exception) { null }
     }
     val now = System.currentTimeMillis()
+    val ids by CanService.tpmsIds.collectAsState()
     // cap width so the corner tyre values sit close to the car (not flung to the
-    // far edges on a wide landscape screen), centered.
+    // far edges on a wide landscape screen), centered. Spare goes UNDER the car (the trunk).
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-        BoxWithConstraints(
-            Modifier.widthIn(max = 440.dp).fillMaxWidth().height(280.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (bmp != null) {
-                Image(bmp, contentDescription = null, modifier = Modifier.fillMaxHeight(), contentScale = ContentScale.Fit)
+        Column(Modifier.widthIn(max = 440.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            BoxWithConstraints(
+                Modifier.fillMaxWidth().height(280.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (bmp != null) {
+                    Image(bmp, contentDescription = null, modifier = Modifier.fillMaxHeight(), contentScale = ContentScale.Fit)
+                }
+                WheelChip(readings[Wheel.FL], ids[Wheel.FL], now, Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 8.dp))
+                WheelChip(readings[Wheel.FR], ids[Wheel.FR], now, Modifier.align(Alignment.TopEnd).padding(end = 8.dp, top = 8.dp))
+                WheelChip(readings[Wheel.RL], ids[Wheel.RL], now, Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 8.dp))
+                WheelChip(readings[Wheel.RR], ids[Wheel.RR], now, Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 8.dp))
             }
-            WheelChip(readings[Wheel.FL], Wheel.FL, now, Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 8.dp))
-            WheelChip(readings[Wheel.FR], Wheel.FR, now, Modifier.align(Alignment.TopEnd).padding(end = 8.dp, top = 8.dp))
-            WheelChip(readings[Wheel.RL], Wheel.RL, now, Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 8.dp))
-            WheelChip(readings[Wheel.RR], Wheel.RR, now, Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 8.dp))
-            WheelChip(readings[Wheel.SPARE], Wheel.SPARE, now, Modifier.align(Alignment.Center))
+            // spare: under the trunk (below the rear of the car)
+            WheelChip(readings[Wheel.SPARE], ids[Wheel.SPARE], now, Modifier.padding(top = 4.dp, bottom = 8.dp))
         }
     }
 }
 
 @Composable
-private fun WheelChip(r: TireReading?, w: Wheel, now: Long, modifier: Modifier) {
+private fun WheelChip(r: TireReading?, id: String?, now: Long, modifier: Modifier) {
     val stale = r == null || r.stale(now)
     val color = if (stale) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onBackground
-    val label = when (w) {
-        Wheel.FL -> stringResource(R.string.tpms_fl)
-        Wheel.FR -> stringResource(R.string.tpms_fr)
-        Wheel.RL -> stringResource(R.string.tpms_rl)
-        Wheel.RR -> stringResource(R.string.tpms_rr)
-        Wheel.SPARE -> stringResource(R.string.tpms_spare)
-    }
+    // sensor ID instead of a position label - the position is obvious from the layout
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
+        Text(id ?: "–", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
         Text(
             if (r == null) "– bar" else "%.2f bar".format(r.bar),
             color = color, fontWeight = FontWeight.Bold, fontSize = 20.sp, fontFamily = FontFamily.Monospace,

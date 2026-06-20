@@ -266,4 +266,14 @@
     <string name="trip_hold">Manter para repor</string>
     <string name="trip_at">a %1$s km</string>
     <string name="trip_need_fw">Atualização de firmware necessária (v3.0)</string>
+    <string name="grp_lights">Luzes</string>
+    <string name="l_position">Mínimos</string>
+    <string name="l_lowbeam">Médios</string>
+    <string name="l_highbeam">Máximos</string>
+    <string name="l_fogfront">Nevoeiro front.</string>
+    <string name="l_fogrear">Nevoeiro tras.</string>
+    <string name="f_illum">Luz (decisão)</string>
+    <string name="f_ambL">Nível de luz</string>
+    <string name="fuel_corr_label">Correção consumo (×)</string>
+    <string name="btn_save">Guardar</string>
 </resources>

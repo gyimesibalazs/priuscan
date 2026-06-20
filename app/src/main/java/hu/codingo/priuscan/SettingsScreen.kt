@@ -1,5 +1,7 @@
 package hu.codingo.priuscan
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,6 +63,7 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
     var statusSel by remember { mutableStateOf(prefs.statusItems) }
     var fontSize by remember { mutableStateOf(prefs.statusFontSize.toInt().toString()) }
     var refAh by remember { mutableStateOf(prefs.batteryRefAh.toString()) }
+    var fuelCorr by remember { mutableStateOf("") }
     var logEnabled by remember { mutableStateOf(prefs.logEnabled) }
     var autoDark by remember { mutableStateOf(prefs.autoDarkCar) }
     var dumpUnknown by remember { mutableStateOf(false) }
@@ -106,8 +109,10 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
         "cons" to R.string.opt_cons,
     )
 
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        Modifier.fillMaxHeight().widthIn(max = 820.dp).fillMaxWidth()
+            .verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(stringResource(R.string.settings_title), fontSize = 28.sp, color = MaterialTheme.colorScheme.onBackground)
@@ -271,6 +276,17 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
             label = { Text(stringResource(R.string.battery_ref_label)) },
             modifier = Modifier.fillMaxWidth(), singleLine = true)
 
+        // ---- Fuel correction (sent to the ESP, persisted there; affects instant + trip fuel) ----
+        val curFCorr = canState.d("fCorr")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(fuelCorr, { fuelCorr = it.filter { c -> c.isDigit() || c == '.' } },
+                label = { Text(stringResource(R.string.fuel_corr_label) + (curFCorr?.let { " — %.3f".format(it) } ?: "")) },
+                modifier = Modifier.weight(1f), singleLine = true)
+            TextButton(onClick = { fuelCorr.toFloatOrNull()?.let { if (it in 0.5f..2.0f) CanService.sendCommand("F$it") } }) {
+                Text(stringResource(R.string.btn_save))
+            }
+        }
+
         // ---- TPMS pairing ----
         Text(stringResource(R.string.tpms_section), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
         TextButton(onClick = { CanService.sendTpmsCommand(Tpms.QUERY) }) {
@@ -367,6 +383,7 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
                 }
             },
         )
+    }
     }
 }
 

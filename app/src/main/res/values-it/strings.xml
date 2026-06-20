@@ -265,4 +265,14 @@
     <string name="trip_hold">Tieni premuto per azzerare</string>
     <string name="trip_at">a %1$s km</string>
     <string name="trip_need_fw">Aggiornamento firmware necessario (v3.0)</string>
+    <string name="grp_lights">Luci</string>
+    <string name="l_position">Posizione</string>
+    <string name="l_lowbeam">Anabbaglianti</string>
+    <string name="l_highbeam">Abbaglianti</string>
+    <string name="l_fogfront">Fendinebbia ant.</string>
+    <string name="l_fogrear">Fendinebbia post.</string>
+    <string name="f_illum">Luce (decisione)</string>
+    <string name="f_ambL">Livello luce</string>
+    <string name="fuel_corr_label">Correzione consumo (×)</string>
+    <string name="btn_save">Salva</string>
 </resources>
