@@ -466,6 +466,25 @@ private fun Header(s: CanState) {
                 color = Color(0xFFFF5252), fontWeight = FontWeight.Bold, fontSize = 15.sp,
             )
         }
+        HsiStrip(s)   // power/charge flow bar at the bottom of the dash-top
+    }
+}
+
+/** Hybrid System Indicator: a center-anchored bar. Neutral ~87; fills left (green) for CHG/regen,
+ *  right (amber) for power. Length = intensity. Hidden until the firmware emits "hsi". */
+@Composable
+private fun HsiStrip(s: CanState) {
+    val hsi = s.d("hsi")?.toFloat() ?: return
+    val neutral = 87f
+    val regen = ((neutral - hsi) / 68f).coerceIn(0f, 1f)   // 87..19 -> 0..1 (CHG)
+    val power = ((hsi - neutral) / 143f).coerceIn(0f, 1f)   // 87..230 -> 0..1 (PWR)
+    Canvas(Modifier.fillMaxWidth().height(12.dp).padding(top = 4.dp)) {
+        val w = size.width; val h = size.height; val cx = w / 2f
+        val r = CornerRadius(h / 2f, h / 2f)
+        drawRoundRect(Color(0xFFCDD2D8), size = Size(w, h), cornerRadius = r)   // track
+        if (regen > 0f) drawRect(Color(0xFF2EA047), Offset(cx - regen * cx, 0f), Size(regen * cx, h))  // regen left
+        if (power > 0f) drawRect(Color(0xFFF5A028), Offset(cx, 0f), Size(power * cx, h))                // power right
+        drawLine(Color(0xFF282C32), Offset(cx, -2f), Offset(cx, h + 2f), strokeWidth = 3f)             // neutral tick
     }
 }
 
