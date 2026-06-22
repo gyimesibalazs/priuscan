@@ -285,4 +285,5 @@
     <string name="nvs_status">NVS : sauv.=%1$d, dernier arrêt=%2$s</string>
     <string name="warn_weak_block">Cellule faible : #%1$d</string>
     <string name="warn_high_res">Résistance élevée : #%1$d</string>
+    <string name="undo_refuel">Annuler ravitaillement erroné</string>
 </resources>

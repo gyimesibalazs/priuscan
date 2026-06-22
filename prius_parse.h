@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 323;   // 3.23: consumption-driven virtual fuel gauge + drift; 15s warm-up + persist gate
+inline constexpr int FW_VERSION = 324;   // 3.24: merge last refuel-history entry into the tank (undo false refuel)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -179,6 +179,7 @@ inline bool     ohist_request = false;  // app sent "HO" -> emit oil-change hist
 inline int      reset_req = -1;         // app sent "R<i>" -> reset slot i (YAML consumes)
 inline int      copy_dst  = -1;         // app sent "C<dst><src>" -> copy a live trip into slot dst (YAML consumes)
 inline char     copy_src  = 0;          // 'B' = since-boot, 'H' = from-home
+inline bool     merge_request = false;  // app sent "M" -> merge the last refuel-history entry into the tank (YAML)
 inline bool     persist_request = false; // ask the YAML to flush the NVS blob (refuel / reset / corrected epoch)
 inline bool     persist_loaded = false; // true after the boot NVS read -> only THEN may we write
 inline uint32_t last_refuel_ms = 0;     // millis() at refuel (for pending correction)
@@ -228,6 +229,7 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
     return;
   }
   if (line[0] == 'B') { rblk_request = true; return; }   // emit per-block internal resistance
+  if (line[0] == 'M') { merge_request = true; return; }  // merge last refuel-history entry into the tank
   if (line[0] == 'H') { if (line[1] == 'O') ohist_request = true; else hist_request = true; return; }  // H/HO history
   if (line[0] == 'F') {                                   // fuel correction: "F<factor>" (e.g. F1.05)
     float f; if (sscanf(line + 1, " %f", &f) == 1 && f > 0.5f && f < 2.0f) fuel_corr = f;  // YAML flushes it to NVS
@@ -726,6 +728,26 @@ inline void copy_slot(int dst, char src) {
   if (src == 'B')      slot[dst] = boot_slot;   // since boot (memory-only source)
   else if (src == 'H') slot[dst] = slot[6];     // from home
   else return;
+  persist_request = true;
+}
+
+// Merge the most recent refuel-history entry back INTO the current tank (slot[1]) and drop it.
+// Use: undo a false refuel that split one tank in two. ts + odo take the EARLIER (min of the
+// non-zero) value; everything else is summed. The tank then starts at the merged (earlier)
+// refuel, and the virtual fuel gauge is re-anchored to the merged consumption.
+inline void merge_last_refuel() {
+  if (rhist_n == 0) return;
+  uint8_t last = (uint8_t)((rhist_head + HISTN - 1) % HISTN);   // most recently pushed entry
+  TripSlot &r = rhist[last];
+  TripSlot &t = slot[1];
+  if (r.epoch && (!t.epoch || r.epoch < t.epoch)) t.epoch = r.epoch;   // earliest start
+  if (r.odo   && (!t.odo   || r.odo   < t.odo))   t.odo   = r.odo;
+  t.dist += r.dist; t.ev += r.ev; t.fuel += r.fuel; t.move_s += r.move_s;
+  t.regen_e += r.regen_e; t.brake_e += r.brake_e;
+  r = {}; rhist_head = last; rhist_n--;                          // pop the merged entry
+  last_refuel_epoch = t.epoch;                                   // tank now starts at the merged refuel
+  fuel_since_refuel = t.fuel;                                    // consumption since the (earlier) refuel
+  tank_known = false; fuel_saw_100 = false; fuel_anchor = TANK_FULL;  // re-anchor from the current gauge
   persist_request = true;
 }
 

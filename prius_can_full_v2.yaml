@@ -1049,6 +1049,7 @@ interval:
           // and flush NVS on a refuel / slot-reset event (persist_request).
           if (prius::reset_req >= 0) { prius::reset_slot(prius::reset_req, prius::cur_epoch(millis())); prius::reset_req = -1; }
           if (prius::copy_dst >= 0) { prius::copy_slot(prius::copy_dst, prius::copy_src); prius::copy_dst = -1; }
+          if (prius::merge_request) { prius::merge_request = false; prius::merge_last_refuel(); }
           if (prius::rblk_request) { prius::rblk_request = false; prius::emit_rblocks(); }
           if (prius::hist_request) { prius::hist_request = false; prius::emit_history(); }
           if (prius::ohist_request) { prius::ohist_request = false; prius::emit_ohist(); }

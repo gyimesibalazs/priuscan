@@ -358,6 +358,13 @@ private fun TripSection() {
             val h = if (def.hist == 1) refuelHist else oilHist
             Spacer(Modifier.height(8.dp))
             GroupTitle(stringResource(R.string.r_history))
+            if (def.hist == 1) {   // undo a false refuel: merge the last entry back into the tank (hold)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+                    Text(stringResource(R.string.undo_refuel), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Spacer(Modifier.width(8.dp))
+                    ResetHoldButton(label = "⤺") { CanService.mergeLastRefuel(); CanService.fetchRefuelHistory() }
+                }
+            }
             if (h.isEmpty()) {
                 Text(stringResource(R.string.r_none), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
             } else {

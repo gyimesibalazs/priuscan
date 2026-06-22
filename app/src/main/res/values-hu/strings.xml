@@ -285,4 +285,5 @@
     <string name="nvs_status">NVS: mentések=%1$d, utolsó kikapcsolás=%2$s</string>
     <string name="warn_weak_block">Gyenge cella: #%1$d</string>
     <string name="warn_high_res">Magas ellenállás: #%1$d</string>
+    <string name="undo_refuel">Téves tankolás visszavonása</string>
 </resources>
