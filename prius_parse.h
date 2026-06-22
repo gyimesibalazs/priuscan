@@ -33,7 +33,7 @@ enum VKey {
   CABIN, SETT, COMP, EVAP, SOLAR,
   WFL, WFR, WRL, WRR, WDIF, GLAT, GFWD, STEER, BRKP,
   ENGNM, INJML, INJUS, BATTFAN, ECUMODE, FANMODE, DTCCUR, DTCHIST,
-  ACAMB, BLOWER, ACPRESS, FUELIN,
+  ACAMB, BLOWER, ACPRESS, FUELIN, FUELL,
   CTR, WPRUN, WPW, CELLW,
   ELEN, EFF, EOK, LOOPS,
   GEAR, TURN, SETSPD,           // from passive broadcast frames (0x127/0x614/0x1D3)
@@ -68,7 +68,7 @@ inline const char *KEYS[V_COUNT] = {
   "cabin","setT","comp","evap","solar",
   "wFL","wFR","wRL","wRR","wDif","gLat","gFwd","steer","brkP",
   "engNm","injml","injus","battFan","ecuMode","fanMode","dtcCur","dtcHist",
-  "acAmb","blower","acPress","fuelIn",
+  "acAmb","blower","acPress","fuelIn","fuelL",
   "ctR","wpRun","wpW","cellW",
   "eLen","eFF","eOK","loops",
   "gear","turn","setSpd",
@@ -116,7 +116,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 319;   // 3.19: refuel plateau-detect (1 event/fill); drop redundant restore_value globals
+inline constexpr int FW_VERSION = 320;   // 3.20: calibrated tank liters (fuelL)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -187,6 +187,14 @@ inline bool refuel_dirty = false;       // YAML flushes this to the persistent g
 inline constexpr float REFUEL_DELTA = 12.0f;   // fuelIn is now % (0..100): a significant up-jump
 inline float    refuel_peak = 0;               // highest fuelIn during the current fill (plateau detect)
 inline constexpr uint32_t REFUEL_STABLE_MS = 8000;  // level must stop rising this long = fill finished
+// Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
+// cross-check (head 3.14 + measured 35.51 + 0%-reserve = the fill). 47 L assumed (safety margin).
+inline constexpr float TANK_FULL   = 47.0f;
+inline constexpr float FUEL_HEAD   = 3.14f;    // top plateau: gauge pinned 100% for this much fuel
+inline constexpr float FUEL_MEAS   = 35.51f;   // span the gauge 0..100% actually measures
+inline constexpr float FUEL_BOTTOM = TANK_FULL - FUEL_HEAD - FUEL_MEAS;  // ~8.35 L reserve below 0%
+inline bool  tank_known = false;        // passed the "first <100%" reference for the current tank?
+inline float fuel_since_refuel = 0;     // liters burned since the last refuel (head-plateau count-down)
 
 // ===== Host wall-clock time (pushed from the head unit over serial) =====
 // The production firmware has no Wi-Fi/NTP, so the head unit is the only time
@@ -966,6 +974,7 @@ inline void compute_derived(uint32_t now_ms) {
     // accumulate into every slot (the only difference between slots is WHEN they reset)
     slot_add(boot_slot, d_dist, d_ev, d_fuel, d_move, d_re, d_be);
     for (int i = 0; i < NSLOT; i++) slot_add(slot[i], d_dist, d_ev, d_fuel, d_move, d_re, d_be);
+    fuel_since_refuel += d_fuel;   // for the head-plateau liter count-down (calibrated tank)
     // distance = real odometer delta (drift-free) for any slot with a stamped start odo; the
     // spd-integral above only fills it until the odo is known / for slots without a start odo
     // (e.g. lifetime). Fixes the ~0.4% speed-integral drift seen vs the odometer.
@@ -1042,11 +1051,17 @@ inline void compute_derived(uint32_t now_ms) {
         else { last_refuel_ms = now_ms; refuel_pending = true; }   // correct later (#4)
         refuel_dirty = true; persist_request = true;               // flush NVS on refuel
         fuel_ref = refuel_peak; refuel_peak = 0; refuel_seen_ms = 0;
+        tank_known = false; fuel_since_refuel = 0;                  // new tank: assume full again
       }
     } else {
       refuel_peak = 0; refuel_seen_ms = 0;       // not a refuel rise (or spike dropped back)
       fuel_ref += 0.01f * (fin - fuel_ref);      // slow follow (consumption + noise)
     }
+    // calibrated tank liters: assume full (count down) until the gauge first drops below 100%
+    // (the reference point), then read the measured 0..100% range; at 0% the ~8 L reserve is the floor.
+    if (fin < 99.5f) tank_known = true;
+    V[FUELL] = tank_known ? (FUEL_BOTTOM + fin * 0.01f * FUEL_MEAS)
+                          : fmaxf(FUEL_BOTTOM, TANK_FULL - fuel_since_refuel);
   }
 }
 
@@ -1083,7 +1098,7 @@ inline const Field FIELDS[] = {
   {BATTFAN,"\"battFan\":",10,2}, {ECUMODE,"\"ecuMode\":",10,0}, {FANMODE,"\"fanMode\":",10,0},
   {DTCCUR,"\"dtcCur\":",9,0}, {DTCHIST,"\"dtcHist\":",10,0},
   {ACAMB,"\"acAmb\":",8,2}, {BLOWER,"\"blower\":",9,0}, {ACPRESS,"\"acPress\":",10,2},
-  {FUELIN,"\"fuelIn\":",9,2},
+  {FUELIN,"\"fuelIn\":",9,2}, {FUELL,"\"fuelL\":",8,1},
   {CTR,"\"ctR\":",6,2}, {WPRUN,"\"wpRun\":",8,0}, {WPW,"\"wpW\":",6,0}, {CELLW,"\"cellW\":",8,0},
   {ELEN,"\"eLen\":",7,2}, {EFF,"\"eFF\":",6,2}, {EOK,"\"eOK\":",6,2}, {LOOPS,"\"loops\":",8,2},
   {GEAR,"\"gear\":",7,0}, {TURN,"\"turn\":",7,0}, {SETSPD,"\"setSpd\":",9,0},

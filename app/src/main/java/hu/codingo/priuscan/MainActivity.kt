@@ -537,7 +537,13 @@ private fun FuelGauge(s: CanState) {
     Box(Modifier.width(60.dp).height(128.dp)) {
         Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CYellow, battery = false) }
         Text(s.d("fuelIn")?.let { "${it.toInt()}%" } ?: "–",
-            style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))
+            style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))   // % position unchanged
+        // calibrated remaining liters, on a new line UNDER the % (smaller, doesn't move the %)
+        s.d("fuelL")?.let { l ->
+            Text("%.1f L".format(l), color = Color.White, fontSize = 12.sp,
+                style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 8f)),
+                modifier = Modifier.align(BiasAlignment(0f, 0.28f)))
+        }
         Row(Modifier.align(Alignment.TopCenter).padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("←", color = CIconDim, fontSize = 16.sp)
             Image(painterResource(R.drawable.ic_fuel), null, Modifier.size(18.dp), colorFilter = ColorFilter.tint(CIconDim))
