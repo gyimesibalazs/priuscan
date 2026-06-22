@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 327;   // 3.27: real HSI = 0x247 total drive power; strip + regen on HSI
+inline constexpr int FW_VERSION = 328;   // 3.28: HSI = 0x247 d1 signed-8bit needle (not kW), strip+regen on it
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -191,7 +191,7 @@ inline constexpr float REFUEL_DELTA = 12.0f;   // fuelIn is now % (0..100): a si
 inline float    refuel_peak = 0;               // highest fuelIn during the current fill (plateau detect)
 inline constexpr uint32_t REFUEL_STABLE_MS = 8000;  // level must stop rising this long = fill finished
 inline constexpr uint32_t FUEL_WARMUP_MS = 15000;   // ignore fuelIn for 15 s after boot (b5 settles)
-inline constexpr float HSI_REGEN_KW = -2.0f;        // HSI (total drive power, kW) below this = CHG/regen
+inline constexpr float HSI_REGEN = -12.0f;          // HSI needle (signed, +-127) below this = CHG/regen
 // Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
 // cross-check (head 3.14 + measured 35.51 + 0%-reserve = the fill). 47 L assumed (safety margin).
 inline constexpr float TANK_FULL   = 47.0f;
@@ -513,9 +513,10 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
     case 0x245:  // gas pedal: byte[2] is 0..200 -> /2 = 0..100 %
       if (x.size() >= 3) V[GASB] = (float)x[2] * 0.5f;
       return;
-    case 0x247:  // Hybrid System Indicator = total drive power, signed16 BE bytes[1..2] in W -> kW.
-      // + = PWR (driving, incl. engine-direct), - = CHG/regen. Validated: smooth, gas corr 0.88,
-      if (x.size() >= 3) V[HSI] = (float)(int16_t)(((uint16_t)x[1] << 8) | x[2]) * 0.001f;  // high on engine-only drive too
+    case 0x247:  // Hybrid System Indicator NEEDLE: byte[1] as a SIGNED 8-bit value (d2 has only 2
+      // values, so it's not a 16-bit field). +127 = full PWR (drive, incl. engine-direct),
+      // -128 = full CHG/regen. NOT calibrated kW -- it's the meter position (256 coarse steps).
+      if (x.size() >= 2) V[HSI] = (float)(int8_t)x[1];
       return;
     case 0x4A2:  // brake pedal POSITION (skid/brake ECU): byte[3]. 0 = released, rises with travel
       if (x.size() >= 4) V[BRKPOS] = (float)x[3];  // (distinct from the polled friction pressure brkP)
@@ -1026,7 +1027,7 @@ inline void compute_derived(uint32_t now_ms) {
     {
       float brk = V[BRKP], hsi = V[HSI], vn = sp, vp = std::isnan(trap_sp) ? sp : trap_sp;
       if (!std::isnan(vn) && !std::isnan(vp) && vn < vp && vn >= 0) {
-        bool braking = !std::isnan(hsi) ? (hsi < HSI_REGEN_KW)
+        bool braking = !std::isnan(hsi) ? (hsi < HSI_REGEN)
                                         : (!std::isnan(brk) && brk > 0.55f);
         if (braking) {
           float vpm = vp / 3.6f, vnm = vn / 3.6f;
@@ -1172,7 +1173,7 @@ inline const Field FIELDS[] = {
   {WFL,"\"wFL\":",6,2}, {WFR,"\"wFR\":",6,2}, {WRL,"\"wRL\":",6,2}, {WRR,"\"wRR\":",6,2},
   {WDIF,"\"wDif\":",7,2}, {GLAT,"\"gLat\":",7,2}, {GFWD,"\"gFwd\":",7,2},
   {STEER,"\"steer\":",8,2}, {BRKP,"\"brkP\":",7,2}, {BRKPOS,"\"brkPos\":",9,0},
-  {MG2POW,"\"mg2Pow\":",9,1}, {MG1POW,"\"mg1Pow\":",9,1}, {HSI,"\"hsi\":",6,1},
+  {MG2POW,"\"mg2Pow\":",9,1}, {MG1POW,"\"mg1Pow\":",9,1}, {HSI,"\"hsi\":",6,0},
   {ENGNM,"\"engNm\":",8,2}, {INJML,"\"injml\":",8,3}, {INJUS,"\"injus\":",8,0},
   {BATTFAN,"\"battFan\":",10,2}, {ECUMODE,"\"ecuMode\":",10,0}, {FANMODE,"\"fanMode\":",10,0},
   {DTCCUR,"\"dtcCur\":",9,0}, {DTCHIST,"\"dtcHist\":",10,0},

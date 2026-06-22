@@ -475,13 +475,12 @@ private fun Header(s: CanState) {
  *  (driving, incl. engine-direct) -> fills right (amber); hsi<0 = CHG/regen -> fills left (green). */
 @Composable
 private fun HsiStrip(s: CanState) {
-    val pow = s.d("hsi")?.toFloat() ?: return
-    // ASYMMETRIC: drive power (~60+ kW) far exceeds regen (~-25 kW), so the PWR side gets both more
-    // width AND a larger kW scale than the CHG side. Neutral (0 kW) sits left of centre.
-    val regenMax = 20f; val powerMax = 55f               // kW full-scale, CHG / PWR (tunable)
+    val pos = s.d("hsi")?.toFloat() ?: return            // HSI needle, signed -128..+127
+    // ASYMMETRIC like the factory dial: the PWR zone is bigger than CHG. Neutral (0) at 30% -> the
+    // PWR (drive) side gets the right 70%, CHG/regen the left 30%. +127 = full PWR, -128 = full CHG.
     val centerFrac = 0.30f
-    val regen = ((-pow) / regenMax).coerceIn(0f, 1f)     // CHG -> green left
-    val power = (pow / powerMax).coerceIn(0f, 1f)         // PWR -> amber right
+    val regen = ((-pos) / 128f).coerceIn(0f, 1f)         // CHG -> green left
+    val power = (pos / 127f).coerceIn(0f, 1f)            // PWR -> amber right
     Canvas(Modifier.fillMaxWidth().height(12.dp).padding(top = 4.dp)) {
         val w = size.width; val h = size.height; val cx = w * centerFrac
         val r = CornerRadius(h / 2f, h / 2f)
