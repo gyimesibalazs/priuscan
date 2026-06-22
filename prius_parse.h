@@ -31,7 +31,7 @@ enum VKey {
   HVA, HVDIS, HVCHG, BMIN, BMAX, BLKD, WEAKB, MAXR, THOT, HVAIR, TB1, TB2, TB3,
   B01, B02, B03, B04, B05, B06, B07, B08, B09, B10, B11, B12, B13, B14,
   CABIN, SETT, COMP, EVAP, SOLAR,
-  WFL, WFR, WRL, WRR, WDIF, GLAT, GFWD, STEER, BRKP, HSI, BRKPOS,
+  WFL, WFR, WRL, WRR, WDIF, GLAT, GFWD, STEER, BRKP, MG2POW, MG1POW, BRKPOS,
   ENGNM, INJML, INJUS, BATTFAN, ECUMODE, FANMODE, DTCCUR, DTCHIST,
   ACAMB, BLOWER, ACPRESS, FUELIN, FUELL, FUELGM,
   CTR, WPRUN, WPW, CELLW,
@@ -67,7 +67,7 @@ inline const char *KEYS[V_COUNT] = {
   "hvA","hvdis","hvchg","bmin","bmax","blkD","weakB","maxR","tHot","hvAir","tb1","tb2","tb3",
   "b01","b02","b03","b04","b05","b06","b07","b08","b09","b10","b11","b12","b13","b14",
   "cabin","setT","comp","evap","solar",
-  "wFL","wFR","wRL","wRR","wDif","gLat","gFwd","steer","brkP","hsi","brkPos",
+  "wFL","wFR","wRL","wRR","wDif","gLat","gFwd","steer","brkP","mg2Pow","mg1Pow","brkPos",
   "engNm","injml","injus","battFan","ecuMode","fanMode","dtcCur","dtcHist",
   "acAmb","blower","acPress","fuelIn","fuelL","fuelGm",
   "ctR","wpRun","wpW","cellW",
@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 325;   // 3.25: HSI + brake-pos broadcasts, regen gated on HSI-CHG
+inline constexpr int FW_VERSION = 326;   // 3.26: drop bad 0x024 HSI; regen + power meter from MG2 power (poll)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -137,7 +137,7 @@ inline bool dump_is_known(uint16_t id) {
     case 0x1C4: case 0x0B4: case 0x127: case 0x614: case 0x1D3: case 0x5C8:
     case 0x5A4: case 0x610: case 0x611: case 0x612: case 0x620: case 0x626:
     case 0x4A1: case 0x320: case 0x245: case 0x025: case 0x622: case 0x0AA:  // decoded broadcasts
-    case 0x49B: case 0x399: case 0x024: case 0x4A2:                          // drive-mode / cruise / HSI / brake-pos
+    case 0x49B: case 0x399: case 0x4A2:                                      // drive-mode / cruise / brake-pos
     case 0x7DF: case 0x7E0: case 0x7E2: case 0x7C4: case 0x7B0:              // our requests
     case 0x7E8: case 0x7EA: case 0x7CC: case 0x7B8:                          // diag responses
       return true;
@@ -191,8 +191,7 @@ inline constexpr float REFUEL_DELTA = 12.0f;   // fuelIn is now % (0..100): a si
 inline float    refuel_peak = 0;               // highest fuelIn during the current fill (plateau detect)
 inline constexpr uint32_t REFUEL_STABLE_MS = 8000;  // level must stop rising this long = fill finished
 inline constexpr uint32_t FUEL_WARMUP_MS = 15000;   // ignore fuelIn for 15 s after boot (b5 settles)
-inline constexpr float HSI_REGEN_MAX = 72.0f;       // HSI (0x024 d3) below this = CHG/regen region
-                                                    // (idle ~87; TENTATIVE, refine with a controlled test)
+inline constexpr float MG2_REGEN_KW = -1.5f;        // MG2 power below this (kW) = generating = regen
 // Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
 // cross-check (head 3.14 + measured 35.51 + 0%-reserve = the fill). 47 L assumed (safety margin).
 inline constexpr float TANK_FULL   = 47.0f;
@@ -513,9 +512,6 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
       return;
     case 0x245:  // gas pedal: byte[2] is 0..200 -> /2 = 0..100 %
       if (x.size() >= 3) V[GASB] = (float)x[2] * 0.5f;
-      return;
-    case 0x024:  // Hybrid System Indicator (power/charge meter): byte[3]. ~87 neutral, UP=power,
-      if (x.size() >= 4) V[HSI] = (float)x[3];   // DOWN=CHG/regen (the system's own regen decision)
       return;
     case 0x4A2:  // brake pedal POSITION (skid/brake ECU): byte[3]. 0 = released, rises with travel
       if (x.size() >= 4) V[BRKPOS] = (float)x[3];  // (distinct from the polled friction pressure brkP)
@@ -889,6 +885,14 @@ inline void daily_accumulate(DailyRec &d, uint32_t today, uint32_t end_epoch) {
 inline uint32_t derive_boot_ms = 0;   // first compute_derived call (for the boot warm-up)
 inline void compute_derived(uint32_t now_ms) {
   if (derive_boot_ms == 0) derive_boot_ms = now_ms;
+  // MG mechanical power (kW) = torque[Nm] * rpm * 2pi/60 / 1000. MG2 = the traction motor:
+  // positive = driving the wheels, NEGATIVE = generating = REGEN. MG1 = the engine-coupled
+  // generator (in-motion charging). Used for the power/charge meter + the regen trigger.
+  {
+    constexpr float K = 0.000104719755f;   // 2*pi/60/1000
+    float q2 = V[MG2Q], r2 = V[MG2R]; if (!std::isnan(q2) && !std::isnan(r2)) V[MG2POW] = q2 * r2 * K;
+    float q1 = V[MG1Q], r1 = V[MG1R]; if (!std::isnan(q1) && !std::isnan(r1)) V[MG1POW] = q1 * r1 * K;
+  }
   // stamp the since-boot slot's start once host time + odometer are available
   // (epoch back-dated to boot so the "since start" chip shows the real start time/odo).
   if (boot_slot.epoch == 0 && host_time_set)
@@ -1011,14 +1015,14 @@ inline void compute_derived(uint32_t now_ms) {
     if (!std::isnan(sp) && sp > 2.0f && !std::isnan(rp) && rp < 100.0f) d_ev = sp * dt_h;
     // regen ratio: while REGENERATING AND decelerating, accumulate the kinetic energy shed
     // (1/2 m dv^2, m~1450 kg) and the energy recovered into the pack (-hvA*VL while hvA<0).
-    // Trigger = the Hybrid System Indicator in its CHG region (the car's OWN regen decision) ->
-    // in-motion engine charging (HSI not in CHG) is NOT counted, which previously inflated the
-    // sum. Falls back to the friction pressure (brkP) if the HSI is unavailable (old data).
+    // Trigger = MG2 GENERATING (mg2Pow < 0): the wheels drive the traction motor. This excludes
+    // MG1's engine-driven in-motion charging (NOT regen), which previously inflated the sum.
+    // Falls back to the friction pressure (brkP) if MG2 power is unavailable (old data).
     {
-      float brk = V[BRKP], hsi = V[HSI], vn = sp, vp = std::isnan(trap_sp) ? sp : trap_sp;
+      float brk = V[BRKP], m2 = V[MG2POW], vn = sp, vp = std::isnan(trap_sp) ? sp : trap_sp;
       if (!std::isnan(vn) && !std::isnan(vp) && vn < vp && vn >= 0) {
-        bool braking = !std::isnan(hsi) ? (hsi < HSI_REGEN_MAX)
-                                        : (!std::isnan(brk) && brk > 0.55f);
+        bool braking = !std::isnan(m2) ? (m2 < MG2_REGEN_KW)
+                                       : (!std::isnan(brk) && brk > 0.55f);
         if (braking) {
           float vpm = vp / 3.6f, vnm = vn / 3.6f;
           d_be = 0.5f * 1450.0f * (vpm*vpm - vnm*vnm);                    // J shed
@@ -1162,7 +1166,8 @@ inline const Field FIELDS[] = {
   {EVAP,"\"evap\":",7,2}, {SOLAR,"\"solar\":",8,2},
   {WFL,"\"wFL\":",6,2}, {WFR,"\"wFR\":",6,2}, {WRL,"\"wRL\":",6,2}, {WRR,"\"wRR\":",6,2},
   {WDIF,"\"wDif\":",7,2}, {GLAT,"\"gLat\":",7,2}, {GFWD,"\"gFwd\":",7,2},
-  {STEER,"\"steer\":",8,2}, {BRKP,"\"brkP\":",7,2}, {HSI,"\"hsi\":",6,0}, {BRKPOS,"\"brkPos\":",9,0},
+  {STEER,"\"steer\":",8,2}, {BRKP,"\"brkP\":",7,2}, {BRKPOS,"\"brkPos\":",9,0},
+  {MG2POW,"\"mg2Pow\":",9,1}, {MG1POW,"\"mg1Pow\":",9,1},
   {ENGNM,"\"engNm\":",8,2}, {INJML,"\"injml\":",8,3}, {INJUS,"\"injus\":",8,0},
   {BATTFAN,"\"battFan\":",10,2}, {ECUMODE,"\"ecuMode\":",10,0}, {FANMODE,"\"fanMode\":",10,0},
   {DTCCUR,"\"dtcCur\":",9,0}, {DTCHIST,"\"dtcHist\":",10,0},

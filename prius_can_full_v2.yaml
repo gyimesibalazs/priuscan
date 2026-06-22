@@ -978,8 +978,6 @@ canbus:
         then: { lambda: 'prius::on_broadcast(0x622, x);' }
       - can_id: 0x49B   # drive mode (b4): EV / ECO / PWR
         then: { lambda: 'prius::on_broadcast(0x49B, x);' }
-      - can_id: 0x024   # Hybrid System Indicator (b3): power/charge meter -> hsi
-        then: { lambda: 'prius::on_broadcast(0x024, x);' }
       - can_id: 0x4A2   # brake pedal position (b3) -> brkPos
         then: { lambda: 'prius::on_broadcast(0x4A2, x);' }
 

@@ -318,7 +318,7 @@ private fun TripSection() {
         }
         val s = slots.getOrNull(def.idx) ?: TripSlot.EMPTY
         val evPct = if (s.dist > 0.1) (s.ev / s.dist * 100).toInt() else 0
-        SensorRow(stringResource(R.string.r_dist), "%.0f km / %.0f EV km (%d%%)".format(s.dist, s.ev, evPct))
+        SensorRow(stringResource(R.string.r_dist), "%.1f km / %.1f EV km (%d%%)".format(s.dist, s.ev, evPct))
         SensorRow(stringResource(R.string.r_fuelused), "%.2f L".format(s.fuel))
         SensorRow(stringResource(R.string.r_avgcons), "%.1f l/100km".format(s.avgCons))
         SensorRow(stringResource(R.string.r_avgspeed), "%.0f km/h".format(s.avgKmh))
@@ -371,7 +371,7 @@ private fun TripSection() {
                 h.asReversed().forEach { r ->   // newest first
                     SensorRow(
                         fmtDate(r.epoch),
-                        "%.0f km · %.0f EV · %.1f l/100km · %.0f%% regen".format(r.dist, r.ev, r.avgCons, r.regen),
+                        "%.1f km · %.1f EV · %.1f l/100km · %.0f%% regen".format(r.dist, r.ev, r.avgCons, r.regen),
                     )
                 }
             }
@@ -467,17 +467,18 @@ private fun Header(s: CanState) {
             )
         }
         HsiStrip(s)   // power/charge flow bar at the bottom of the dash-top
+        BrakeBar(s)   // brake pedal position (for visual verification)
     }
 }
 
-/** Hybrid System Indicator: a center-anchored bar. Neutral ~87; fills left (green) for CHG/regen,
- *  right (amber) for power. Length = intensity. Hidden until the firmware emits "hsi". */
+/** Power/charge meter (HSI-like): center-anchored bar from MG2 power. mg2Pow>0 = driving -> fills
+ *  right (amber); mg2Pow<0 = MG2 generating = regen -> fills left (green). Length = kW intensity. */
 @Composable
 private fun HsiStrip(s: CanState) {
-    val hsi = s.d("hsi")?.toFloat() ?: return
-    val neutral = 87f
-    val regen = ((neutral - hsi) / 68f).coerceIn(0f, 1f)   // 87..19 -> 0..1 (CHG)
-    val power = ((hsi - neutral) / 143f).coerceIn(0f, 1f)   // 87..230 -> 0..1 (PWR)
+    val pow = s.d("mg2Pow")?.toFloat() ?: return
+    val scale = 40f                                        // kW full-scale each side
+    val regen = ((-pow) / scale).coerceIn(0f, 1f)          // generating -> green left
+    val power = (pow / scale).coerceIn(0f, 1f)             // driving -> amber right
     Canvas(Modifier.fillMaxWidth().height(12.dp).padding(top = 4.dp)) {
         val w = size.width; val h = size.height; val cx = w / 2f
         val r = CornerRadius(h / 2f, h / 2f)
@@ -485,6 +486,19 @@ private fun HsiStrip(s: CanState) {
         if (regen > 0f) drawRect(Color(0xFF2EA047), Offset(cx - regen * cx, 0f), Size(regen * cx, h))  // regen left
         if (power > 0f) drawRect(Color(0xFFF5A028), Offset(cx, 0f), Size(power * cx, h))                // power right
         drawLine(Color(0xFF282C32), Offset(cx, -2f), Offset(cx, h + 2f), strokeWidth = 3f)             // neutral tick
+    }
+}
+
+/** Brake pedal POSITION bar (0x4A2): left-anchored red fill, 0..~100% of pedal travel. For
+ *  visual verification of the brake-pedal signal (distinct from the friction pressure). */
+@Composable
+private fun BrakeBar(s: CanState) {
+    val pos = s.d("brkPos")?.toFloat() ?: return
+    val frac = (pos / 128f).coerceIn(0f, 1f)
+    Canvas(Modifier.fillMaxWidth().height(8.dp).padding(top = 3.dp)) {
+        val w = size.width; val h = size.height; val r = CornerRadius(h / 2f, h / 2f)
+        drawRoundRect(Color(0xFFCDD2D8), size = Size(w, h), cornerRadius = r)
+        if (frac > 0f) drawRoundRect(Color(0xFFE53935), size = Size(frac * w, h), cornerRadius = r)
     }
 }
 
