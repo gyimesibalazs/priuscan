@@ -26,21 +26,17 @@ esphome:
   on_boot:
     priority: -100   # the globals have been restored by then
     then:
-      - lambda: 'prius::learn_import(id(learn_state).data()); prius::cap_import(id(cap_state).data()); prius::last_refuel_epoch = id(refuel_epoch); prius::fuel_corr = id(fuel_corr_g); prius_persist_load(); prius_daily_load();'
+      # lz / cap / refuel are restored from the NVS blob by prius_persist_load() (single source
+      # of truth) -> no redundant restore_value globals for them. fuel_corr is NOT in the blob.
+      - lambda: 'prius::fuel_corr = id(fuel_corr_g); prius_persist_load(); prius_daily_load();'
 
 # Persistent storage of the self-learning weak-block baseline (lz[14] + sample count).
 # restore_value: restored on boot, periodically flushed to flash (the YAML
 # also writes out the header state every 60 s so the latest gets saved).
 globals:
-  - id: learn_state
-    type: "std::array<float, 15>"
-    restore_value: yes
-  - id: cap_state          # self-learned pack capacity: {cap_ah, cap_n, vl_avg}
-    type: "std::array<float, 3>"
-    restore_value: yes
-  - id: refuel_epoch       # unix seconds of the last detected refuel (persisted)
-    type: uint32_t
-    restore_value: yes
+  # NOTE: lz / cap / refuel_epoch are persisted in the NVS blob (prius_persist.h), restored by
+  # prius_persist_load() — so NO redundant restore_value globals for them. fuel_corr is the only
+  # firmware-owned value NOT in the blob, so it keeps its own global.
   - id: fuel_corr_g        # user fuel-consumption correction factor (calibrate to the pump)
     type: float
     restore_value: yes
@@ -1073,11 +1069,7 @@ interval:
   # losing 5 minutes (on an unexpected power loss) is negligible.
   - interval: 300s
     then:
-      - lambda: |-
-          prius::learn_export(id(learn_state).data());
-          prius::cap_export(id(cap_state).data());
-          if (prius::refuel_dirty) { id(refuel_epoch) = prius::last_refuel_epoch; prius::refuel_dirty = false; }
-          id(fuel_corr_g) = prius::fuel_corr;
+      - lambda: 'id(fuel_corr_g) = prius::fuel_corr;'   # lz/cap/refuel live in the NVS blob now
 
   # Full JSON state to the serial port every 250 ms (4 Hz; the divider=1
   # PIDs update more frequently than this internally, so every line has fresh rpm/spd)

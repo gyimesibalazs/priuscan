@@ -116,7 +116,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 318;   // 3.18: drop unused body ECU poll; daily delta-fold fix
+inline constexpr int FW_VERSION = 319;   // 3.19: refuel plateau-detect (1 event/fill); drop redundant restore_value globals
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -178,12 +178,15 @@ inline bool     ohist_request = false;  // app sent "HO" -> emit oil-change hist
 inline int      reset_req = -1;         // app sent "R<i>" -> reset slot i (YAML consumes)
 inline int      copy_dst  = -1;         // app sent "C<dst><src>" -> copy a live trip into slot dst (YAML consumes)
 inline char     copy_src  = 0;          // 'B' = since-boot, 'H' = from-home
+inline bool     persist_request = false; // ask the YAML to flush the NVS blob (refuel / reset / corrected epoch)
 inline bool     persist_loaded = false; // true after the boot NVS read -> only THEN may we write
 inline uint32_t last_refuel_ms = 0;     // millis() at refuel (for pending correction)
 inline uint32_t refuel_seen_ms = 0;     // when fin first crossed the up-jump (confirm window)
 inline bool refuel_pending = false;     // refuel seen BEFORE host time was known -> correct later
 inline bool refuel_dirty = false;       // YAML flushes this to the persistent global
 inline constexpr float REFUEL_DELTA = 12.0f;   // fuelIn is now % (0..100): a significant up-jump
+inline float    refuel_peak = 0;               // highest fuelIn during the current fill (plateau detect)
+inline constexpr uint32_t REFUEL_STABLE_MS = 8000;  // level must stop rising this long = fill finished
 
 // ===== Host wall-clock time (pushed from the head unit over serial) =====
 // The production firmware has no Wi-Fi/NTP, so the head unit is the only time
@@ -236,7 +239,7 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
     // a refuel detected before we had real time -> back-correct its epoch now
     if (refuel_pending) {
       last_refuel_epoch = host_epoch - (host_epoch_ms - last_refuel_ms) / 1000u;
-      refuel_pending = false; refuel_dirty = true;
+      refuel_pending = false; refuel_dirty = true; persist_request = true;   // blob-save the corrected epoch
     }
   }
 }
@@ -689,7 +692,6 @@ inline constexpr int NSLOT = 7;
 inline constexpr int HISTN = 50;       // rotating history depth (refuel + oil-change)
 inline TripSlot rhist[HISTN] = {}; inline uint8_t rhist_n = 0, rhist_head = 0;  // refuel history
 inline TripSlot ohist[HISTN] = {}; inline uint8_t ohist_n = 0, ohist_head = 0;  // oil-change history
-inline bool persist_request = false;   // ask the YAML to flush NVS (refuel / reset)
 
 inline uint32_t cur_odo() { float o = V[ODO]; return std::isnan(o) ? 0u : (uint32_t)o; }
 inline void slot_start(TripSlot &s, uint32_t epoch, uint32_t odo) { s = {}; s.epoch = epoch; s.odo = odo; }
@@ -1023,10 +1025,14 @@ inline void compute_derived(uint32_t now_ms) {
     // restored baseline or 100% (empty-flash default), so the boot fuelIn transient can't be
     // mistaken for a refuel. (Replaces the old 60 s boot warm-up.)
     if (persist_loaded && parked && fin - fuel_ref >= REFUEL_DELTA) {
-      // up-jump seen; require it to PERSIST >=1.5 s so a 1-sample spike does not trigger
-      if (refuel_seen_ms == 0) refuel_seen_ms = now_ms;
-      else if (now_ms - refuel_seen_ms >= 1500) {
-        // push the just-finished tank (slot[1]) into the rotating refuel history, then restart it
+      // A refuel is in progress. A slow 40-90 s fill rises through MANY DELTA steps, so we must
+      // NOT record per step: track the peak and record exactly ONE event once the level PLATEAUS
+      // (the fill finished). refuel_seen_ms = the last time the level rose. (ESP-off case: the
+      // jump is already plateaued at boot -> still exactly one event.)
+      if (fin > refuel_peak + 0.3f) {                  // still rising
+        refuel_peak = fin; refuel_seen_ms = now_ms;
+      } else if (refuel_seen_ms && now_ms - refuel_seen_ms >= REFUEL_STABLE_MS) {
+        // plateaued -> push the just-finished tank (slot[1]) into the rotating history, restart it
         rhist[rhist_head] = slot[1];
         rhist_head = (rhist_head + 1) % HISTN;
         if (rhist_n < HISTN) rhist_n++;
@@ -1035,11 +1041,11 @@ inline void compute_derived(uint32_t now_ms) {
         if (host_time_set) { last_refuel_epoch = ep; refuel_pending = false; }
         else { last_refuel_ms = now_ms; refuel_pending = true; }   // correct later (#4)
         refuel_dirty = true; persist_request = true;               // flush NVS on refuel
-        fuel_ref = fin; refuel_seen_ms = 0;
+        fuel_ref = refuel_peak; refuel_peak = 0; refuel_seen_ms = 0;
       }
     } else {
-      refuel_seen_ms = 0;                       // dropped back -> it was a transient spike
-      fuel_ref += 0.01f * (fin - fuel_ref);     // slow follow (consumption + noise)
+      refuel_peak = 0; refuel_seen_ms = 0;       // not a refuel rise (or spike dropped back)
+      fuel_ref += 0.01f * (fin - fuel_ref);      // slow follow (consumption + noise)
     }
   }
 }
