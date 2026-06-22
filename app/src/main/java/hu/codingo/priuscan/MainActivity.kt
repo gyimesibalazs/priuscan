@@ -476,16 +476,19 @@ private fun Header(s: CanState) {
 @Composable
 private fun HsiStrip(s: CanState) {
     val pow = s.d("hsi")?.toFloat() ?: return
-    val scale = 35f                                        // kW full-scale each side
-    val regen = ((-pow) / scale).coerceIn(0f, 1f)          // CHG -> green left
-    val power = (pow / scale).coerceIn(0f, 1f)             // PWR -> amber right
+    // ASYMMETRIC: drive power (~60+ kW) far exceeds regen (~-25 kW), so the PWR side gets both more
+    // width AND a larger kW scale than the CHG side. Neutral (0 kW) sits left of centre.
+    val regenMax = 20f; val powerMax = 55f               // kW full-scale, CHG / PWR (tunable)
+    val centerFrac = 0.30f
+    val regen = ((-pow) / regenMax).coerceIn(0f, 1f)     // CHG -> green left
+    val power = (pow / powerMax).coerceIn(0f, 1f)         // PWR -> amber right
     Canvas(Modifier.fillMaxWidth().height(12.dp).padding(top = 4.dp)) {
-        val w = size.width; val h = size.height; val cx = w / 2f
+        val w = size.width; val h = size.height; val cx = w * centerFrac
         val r = CornerRadius(h / 2f, h / 2f)
         drawRoundRect(Color(0xFFCDD2D8), size = Size(w, h), cornerRadius = r)   // track
-        if (regen > 0f) drawRect(Color(0xFF2EA047), Offset(cx - regen * cx, 0f), Size(regen * cx, h))  // regen left
-        if (power > 0f) drawRect(Color(0xFFF5A028), Offset(cx, 0f), Size(power * cx, h))                // power right
-        drawLine(Color(0xFF282C32), Offset(cx, -2f), Offset(cx, h + 2f), strokeWidth = 3f)             // neutral tick
+        if (regen > 0f) drawRect(Color(0xFF2EA047), Offset(cx - regen * cx, 0f), Size(regen * cx, h))      // regen left
+        if (power > 0f) drawRect(Color(0xFFF5A028), Offset(cx, 0f), Size(power * (w - cx), h))             // power right
+        drawLine(Color(0xFF282C32), Offset(cx, -2f), Offset(cx, h + 2f), strokeWidth = 3f)                // neutral tick
     }
 }
 
