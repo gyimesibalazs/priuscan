@@ -285,4 +285,6 @@
     <string name="f_cruise">Cruise</string>
     <string name="f_turn">Richtingaanw.</string>
     <string name="nvs_status">NVS: opsl.=%1$d, laatste uit=%2$s</string>
+    <string name="warn_weak_block">Zwakke cel: #%1$d</string>
+    <string name="warn_high_res">Hoge weerstand: #%1$d</string>
 </resources>

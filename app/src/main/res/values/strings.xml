@@ -285,4 +285,6 @@
     <string name="f_cruise">Cruise</string>
     <string name="f_turn">Turn signal</string>
     <string name="nvs_status">NVS: saves=%1$d, last shutdown=%2$s</string>
+    <string name="warn_weak_block">Weak cell: #%1$d</string>
+    <string name="warn_high_res">High resistance: #%1$d</string>
 </resources>

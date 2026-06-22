@@ -284,4 +284,6 @@
     <string name="f_cruise">Piloto autom.</string>
     <string name="f_turn">Pisca</string>
     <string name="nvs_status">NVS: grav.=%1$d, último desligar=%2$s</string>
+    <string name="warn_weak_block">Célula fraca: #%1$d</string>
+    <string name="warn_high_res">Resistência alta: #%1$d</string>
 </resources>

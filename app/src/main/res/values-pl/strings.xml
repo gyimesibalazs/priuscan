@@ -284,4 +284,6 @@
     <string name="f_cruise">Tempomat</string>
     <string name="f_turn">Kierunkowskaz</string>
     <string name="nvs_status">NVS: zapisy=%1$d, ostatnie wył.=%2$s</string>
+    <string name="warn_weak_block">Słabe ogniwo: #%1$d</string>
+    <string name="warn_high_res">Wysoka rezystancja: #%1$d</string>
 </resources>

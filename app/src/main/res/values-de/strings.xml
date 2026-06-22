@@ -283,4 +283,6 @@
     <string name="f_cruise">Tempomat</string>
     <string name="f_turn">Blinker</string>
     <string name="nvs_status">NVS: Speich.=%1$d, letztes Aus=%2$s</string>
+    <string name="warn_weak_block">Schwache Zelle: #%1$d</string>
+    <string name="warn_high_res">Hoher Widerstand: #%1$d</string>
 </resources>

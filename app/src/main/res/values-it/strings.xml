@@ -283,4 +283,6 @@
     <string name="f_cruise">Cruise</string>
     <string name="f_turn">Freccia</string>
     <string name="nvs_status">NVS: salv.=%1$d, ultimo spegn.=%2$s</string>
+    <string name="warn_weak_block">Cella debole: #%1$d</string>
+    <string name="warn_high_res">Resistenza alta: #%1$d</string>
 </resources>

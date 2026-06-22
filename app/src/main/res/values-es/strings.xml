@@ -283,4 +283,6 @@
     <string name="f_cruise">Crucero</string>
     <string name="f_turn">Intermitente</string>
     <string name="nvs_status">NVS: guard.=%1$d, último apagado=%2$s</string>
+    <string name="warn_weak_block">Celda débil: #%1$d</string>
+    <string name="warn_high_res">Resistencia alta: #%1$d</string>
 </resources>

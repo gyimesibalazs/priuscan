@@ -38,6 +38,7 @@ enum VKey {
   ELEN, EFF, EOK, LOOPS,
   GEAR, TURN, SETSPD,           // from passive broadcast frames (0x127/0x614/0x1D3)
   CWL, WBLK, WZ,                // self-learning weak-block layer: level / block index / EWMA z
+  RASYM, RWBLK,                 // per-block R asymmetry warning: level (0/1/2) / worst block index
   TDIST, TFUEL, TAVG,           // since start: distance (km) / fuel (l) / average (l/100km)
   CAPAH, CAPKWH,                // self-learned pack capacity: Ah / kWh (coulomb counting)
   TMOVE, TSPD,                  // since boot: active moving time (s) / avg speed (km/h)
@@ -72,7 +73,7 @@ inline const char *KEYS[V_COUNT] = {
   "ctR","wpRun","wpW","cellW",
   "eLen","eFF","eOK","loops",
   "gear","turn","setSpd",
-  "cwL","wblk","wz",
+  "cwL","wblk","wz","rasym","rwblk",
   "tDist","tFuel","tAvg",
   "capAh","capKwh",
   "tMove","tSpd","tEv",
@@ -116,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 320;   // 3.20: calibrated tank liters (fuelL)
+inline constexpr int FW_VERSION = 321;   // 3.21: battery degradation warnings (weak-block CWL + per-block R asymmetry)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -900,6 +901,24 @@ inline void compute_derived(uint32_t now_ms) {
   if (blocks_fresh) { learn_update(); rblk_event(); blocks_fresh = false; }
   int learned = learn_verdict();   // fills CWL/WBLK/WZ; >0 only once the baseline is mature
 
+  // Per-block R asymmetry: a block whose learned resistance is well above the pack median is
+  // aging (a degradation warning, RELATIVE so it works without a long-term trend). Uses r_med
+  // (kept fresh by emit_rblocks); NaN until the resistance window has matured.
+  V[RASYM] = NAN; V[RWBLK] = NAN;
+  {
+    bool full = true; for (int i=0;i<14;i++) if (r_med[i] <= 0.1f) full = false;
+    if (full) {
+      float t[14]; for (int i=0;i<14;i++) t[i] = r_med[i];
+      std::nth_element(t, t+7, t+14); float med = t[7];
+      int worst = 0; for (int i=1;i<14;i++) if (r_med[i] > r_med[worst]) worst = i;
+      if (med > 1.0f) {
+        float ratio = r_med[worst] / med;
+        V[RWBLK] = (float)(worst + 1);
+        V[RASYM] = (float)(ratio >= 1.5f ? 2 : ratio >= 1.3f ? 1 : 0);   // 30% / 50% above median
+      }
+    }
+  }
+
   // HV cell warning. The learned, condition-aware layer is the PRIMARY detector once
   // mature (validated against a real drive log: it correctly reports healthy while the
   // absolute block-delta path false-alarmed on normal acceleration spikes). Until the
@@ -1103,6 +1122,7 @@ inline const Field FIELDS[] = {
   {ELEN,"\"eLen\":",7,2}, {EFF,"\"eFF\":",6,2}, {EOK,"\"eOK\":",6,2}, {LOOPS,"\"loops\":",8,2},
   {GEAR,"\"gear\":",7,0}, {TURN,"\"turn\":",7,0}, {SETSPD,"\"setSpd\":",9,0},
   {CWL,"\"cwL\":",6,0}, {WBLK,"\"wblk\":",7,0}, {WZ,"\"wz\":",5,2},
+  {RASYM,"\"rasym\":",8,0}, {RWBLK,"\"rwblk\":",8,0},
   // trip computer / slots are NOT flat fields anymore -> emitted as the "slots" array below
   {CAPAH,"\"capAh\":",8,2}, {CAPKWH,"\"capKwh\":",9,2},
   {ODO,"\"odo\":",6,0}, {GASB,"\"gasB\":",7,0}, {LIGHTS,"\"lights\":",9,0},

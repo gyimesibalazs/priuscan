@@ -443,17 +443,16 @@ private fun Header(s: CanState) {
             Spacer(Modifier.width(8.dp))
             BatteryGauge(s)
         }
-        if (s.wpWarn > 0 || s.cellWarn > 0) {
-            // stringResource must be resolved in composable scope, before buildString
-            val wOver = stringResource(R.string.warn_overheat)
-            val wCool = stringResource(R.string.warn_cooling)
-            val wFault = stringResource(R.string.warn_hv_fault)
-            val wCell = stringResource(R.string.warn_hv_cell)
+        val cwl = s.i("cwL") ?: 0          // learned weak-block (z-score)
+        val rasym = s.i("rasym") ?: 0      // per-block resistance asymmetry (degradation)
+        if (s.wpWarn > 0 || s.cellWarn > 0 || cwl > 0 || rasym > 0) {
+            val parts = mutableListOf<String>()
+            if (s.wpWarn > 0)   parts += stringResource(if (s.wpWarn >= 2) R.string.warn_overheat else R.string.warn_cooling)
+            if (s.cellWarn > 0) parts += stringResource(if (s.cellWarn >= 2) R.string.warn_hv_fault else R.string.warn_hv_cell)
+            if (cwl > 0)        parts += stringResource(R.string.warn_weak_block, s.i("wblk") ?: 0)
+            if (rasym > 0)      parts += stringResource(R.string.warn_high_res, s.i("rwblk") ?: 0)
             Text(
-                buildString {
-                    if (s.wpWarn > 0) append(if (s.wpWarn >= 2) wOver else wCool)
-                    if (s.cellWarn > 0) append(if (s.cellWarn >= 2) wFault else wCell)
-                },
+                parts.joinToString("  •  "),
                 color = Color(0xFFFF5252), fontWeight = FontWeight.Bold, fontSize = 15.sp,
             )
         }
