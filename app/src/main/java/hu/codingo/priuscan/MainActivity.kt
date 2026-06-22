@@ -535,10 +535,15 @@ private fun OdoRow(s: CanState) {
 
 @Composable
 private fun FuelGauge(s: CanState) {
-    val frac = ((s.d("fuelIn") ?: 0.0).toFloat() / 100f).coerceIn(0f, 1f)
+    // % shows the CALCULATED real fullness (calibrated liters / tank), and the gauge fill matches.
+    // Falls back to the raw gauge reading when fuelL is not available (warm-up / old firmware).
+    val full = 47f                              // TANK_FULL in prius_parse.h
+    val liters = s.d("fuelL")?.toFloat()
+    val frac = (liters?.let { it / full } ?: ((s.d("fuelIn") ?: 0.0).toFloat() / 100f)).coerceIn(0f, 1f)
+    val pct = liters?.let { (it / full * 100f).toInt() } ?: s.d("fuelIn")?.toInt()
     Box(Modifier.width(60.dp).height(140.dp)) {
         Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CYellow, battery = false) }
-        Text(s.d("fuelIn")?.let { "${it.toInt()}%" } ?: "–",
+        Text(pct?.let { "$it%" } ?: "–",
             style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))   // % position unchanged
         // calibrated remaining liters, on a new line UNDER the % (smaller, doesn't move the %)
         s.d("fuelL")?.let { l ->
