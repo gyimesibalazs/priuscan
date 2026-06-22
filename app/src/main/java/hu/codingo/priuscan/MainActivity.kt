@@ -532,11 +532,13 @@ private fun StatusIcons(s: CanState) {
     val spd = s.d("spd") ?: 0.0
     val rpm = s.d("rpm") ?: 0.0
     val brk = s.d("brkP") ?: 0.0
-    val hsi = s.d("hsi") ?: 0.0
+    val mg2 = s.d("mg2Pow") ?: 0.0
+    val brkPos = s.d("brkPos") ?: 0.0
     val cruise = (s.i("cruise") ?: 0) != 0
     val belt = (s.i("belt") ?: 0) != 0
     val phys = brk > 0.55                          // physical (friction) brake = pressure rising
-    val regen = !phys && hsi < -12.0 && spd > 2    // regen = HSI in CHG (excludes in-motion engine charging)
+    // regen (green) = brake PEDAL pressed AND MG2 charging (generating), friction not yet engaged
+    val regen = !phys && brkPos > 3.0 && mg2 < 0.0 && spd > 2
     val evGhost = !evOn && spd > 2 && rpm < 100     // electric-only drive without EV mode
     FlowRow(
         Modifier.fillMaxWidth(),

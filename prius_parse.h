@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 328;   // 3.28: HSI = 0x247 d1 signed-8bit needle (not kW), strip+regen on it
+inline constexpr int FW_VERSION = 329;   // 3.29: regen = brake pedal pressed AND MG2 generating (not HSI)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -192,6 +192,7 @@ inline float    refuel_peak = 0;               // highest fuelIn during the curr
 inline constexpr uint32_t REFUEL_STABLE_MS = 8000;  // level must stop rising this long = fill finished
 inline constexpr uint32_t FUEL_WARMUP_MS = 15000;   // ignore fuelIn for 15 s after boot (b5 settles)
 inline constexpr float HSI_REGEN = -12.0f;          // HSI needle (signed, +-127) below this = CHG/regen
+inline constexpr float BRKPOS_REGEN = 3.0f;         // brake pedal position above this = braking (regen)
 // Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
 // cross-check (head 3.14 + measured 35.51 + 0%-reserve = the fill). 47 L assumed (safety margin).
 inline constexpr float TANK_FULL   = 47.0f;
@@ -1018,17 +1019,16 @@ inline void compute_derived(uint32_t now_ms) {
     // pure-EV distance: moving with the engine off (rpm < 100)
     float rp = V[RPM];
     if (!std::isnan(sp) && sp > 2.0f && !std::isnan(rp) && rp < 100.0f) d_ev = sp * dt_h;
-    // regen ratio: while REGENERATING AND decelerating, accumulate the kinetic energy shed
+    // regen ratio: while REGEN-BRAKING AND decelerating, accumulate the kinetic energy shed
     // (1/2 m dv^2, m~1450 kg) and the energy recovered into the pack (-hvA*VL while hvA<0).
-    // Trigger = the Hybrid System Indicator (0x247 total drive power) in its CHG region (hsi < 0):
-    // the system is recovering energy. Net drive power stays POSITIVE during in-motion engine
-    // charging (driving), so that is NOT counted -- which previously inflated the sum. Falls back
-    // to the friction pressure (brkP) if the HSI is unavailable (old data).
+    // Regen braking = the brake PEDAL pressed AND MG2 GENERATING (mg2Pow < 0) -- both necessary.
+    // This excludes in-motion engine charging (no pedal / MG2 not generating). Falls back to the
+    // friction pressure (brkP) only if MG2 power / pedal position are unavailable (old data).
     {
-      float brk = V[BRKP], hsi = V[HSI], vn = sp, vp = std::isnan(trap_sp) ? sp : trap_sp;
+      float brk = V[BRKP], m2 = V[MG2POW], bpos = V[BRKPOS], vn = sp, vp = std::isnan(trap_sp) ? sp : trap_sp;
       if (!std::isnan(vn) && !std::isnan(vp) && vn < vp && vn >= 0) {
-        bool braking = !std::isnan(hsi) ? (hsi < HSI_REGEN)
-                                        : (!std::isnan(brk) && brk > 0.55f);
+        bool braking = (!std::isnan(m2) && !std::isnan(bpos)) ? (bpos > BRKPOS_REGEN && m2 < 0.0f)
+                                                              : (!std::isnan(brk) && brk > 0.55f);
         if (braking) {
           float vpm = vp / 3.6f, vnm = vn / 3.6f;
           d_be = 0.5f * 1450.0f * (vpm*vpm - vnm*vnm);                    // J shed
