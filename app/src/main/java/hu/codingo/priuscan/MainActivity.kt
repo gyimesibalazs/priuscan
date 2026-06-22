@@ -264,10 +264,11 @@ private fun HybridBatteryTab(state: CanState, fields: List<Field>, refAh: Float)
 // Trip switcher definitions. idx = position in the firmware "slots" array
 // [boot, lifetime, tank, oil, A, B, C, home]; resetCmd = "R<n>" (0 = not resettable);
 // hist = 0 none / 1 refuel / 2 oil.
-private data class TripDef(val labelRes: Int, val arg: String?, val idx: Int, val resetCmd: Int, val hist: Int)
+// copySrc: if set, this trip can be snapshotted INTO A/B/C ('B'=since-boot, 'H'=from-home)
+private data class TripDef(val labelRes: Int, val arg: String?, val idx: Int, val resetCmd: Int, val hist: Int, val copySrc: Char? = null)
 private val TRIPS = listOf(
-    TripDef(R.string.trip_boot, null, 0, 0, 0),
-    TripDef(R.string.trip_home, null, 7, 0, 0),   // home: app auto-resets (geofence), no UI reset
+    TripDef(R.string.trip_boot, null, 0, 0, 0, copySrc = 'B'),
+    TripDef(R.string.trip_home, null, 7, 0, 0, copySrc = 'H'),   // home: app auto-resets (geofence), no UI reset
     TripDef(R.string.sl_trip, "A", 4, 3, 0),
     TripDef(R.string.sl_trip, "B", 5, 4, 0),
     TripDef(R.string.sl_trip, "C", 6, 5, 0),
@@ -326,6 +327,18 @@ private fun TripSection() {
                 Text(stringResource(R.string.trip_hold), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
         }
+        if (def.copySrc != null) {   // snapshot this live trip into A/B/C (hold)
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.trip_copy), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Spacer(Modifier.width(8.dp))
+                ResetHoldButton(label = "A") { CanService.copySlot(3, def.copySrc) }
+                Spacer(Modifier.width(6.dp))
+                ResetHoldButton(label = "B") { CanService.copySlot(4, def.copySrc) }
+                Spacer(Modifier.width(6.dp))
+                ResetHoldButton(label = "C") { CanService.copySlot(5, def.copySrc) }
+            }
+        }
         if (def.hist != 0) {
             LaunchedEffect(sel) { if (def.hist == 1) CanService.fetchRefuelHistory() else CanService.fetchOilHistory() }
             val h = if (def.hist == 1) refuelHist else oilHist
@@ -347,7 +360,7 @@ private fun TripSection() {
 
 /** Press-and-hold (~1.3 s) to reset, with a circular progress around the button. */
 @Composable
-private fun ResetHoldButton(onReset: () -> Unit) {
+private fun ResetHoldButton(label: String = "⟲", onReset: () -> Unit) {
     var holding by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
     LaunchedEffect(holding) {
@@ -367,7 +380,7 @@ private fun ResetHoldButton(onReset: () -> Unit) {
     ) {
         if (progress > 0f)
             CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(52.dp), strokeWidth = 3.dp)
-        Text("⟲", fontSize = 22.sp, color = MaterialTheme.colorScheme.onBackground)
+        Text(label, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
     }
 }
 

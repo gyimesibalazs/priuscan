@@ -1065,6 +1065,7 @@ interval:
           // app commands: reset a distance slot ("R<i>"), dump the refuel history ("H"),
           // and flush NVS on a refuel / slot-reset event (persist_request).
           if (prius::reset_req >= 0) { prius::reset_slot(prius::reset_req, prius::cur_epoch(millis())); prius::reset_req = -1; }
+          if (prius::copy_dst >= 0) { prius::copy_slot(prius::copy_dst, prius::copy_src); prius::copy_dst = -1; }
           if (prius::hist_request) { prius::hist_request = false; prius::emit_history(); }
           if (prius::ohist_request) { prius::ohist_request = false; prius::emit_ohist(); }
           if (prius::persist_request) { prius::persist_request = false; prius_persist_save(prius::cur_epoch(millis())); }

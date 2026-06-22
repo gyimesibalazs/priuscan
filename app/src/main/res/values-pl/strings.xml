@@ -264,6 +264,7 @@
     <string name="trip_life">Całość</string>
     <string name="tab_tpms">Opony</string>
     <string name="trip_hold">Przytrzymaj, by zerować</string>
+    <string name="trip_copy">Zapisz do</string>
     <string name="trip_at">przy %1$s km</string>
     <string name="trip_need_fw">Wymagana aktualizacja firmware (v3.0)</string>
     <string name="grp_lights">Światła</string>

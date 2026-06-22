@@ -115,7 +115,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 314;   // 3.14: cruise active from 0x399 b1.bit1 (verified) instead of 0x5C8
+inline constexpr int FW_VERSION = 315;   // 3.15: copy since-boot/from-home trip into A/B/C (C<dst><src>)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -174,6 +174,8 @@ inline uint32_t boot_off_n = 0;         // restored save counter         -> JSON
 inline bool     hist_request = false;   // app sent "H"  -> emit refuel history (YAML consumes)
 inline bool     ohist_request = false;  // app sent "HO" -> emit oil-change history
 inline int      reset_req = -1;         // app sent "R<i>" -> reset slot i (YAML consumes)
+inline int      copy_dst  = -1;         // app sent "C<dst><src>" -> copy a live trip into slot dst (YAML consumes)
+inline char     copy_src  = 0;          // 'B' = since-boot, 'H' = from-home
 inline bool     persist_loaded = false; // true after the boot NVS read -> only THEN may we write
 inline uint32_t last_refuel_ms = 0;     // millis() at refuel (for pending correction)
 inline uint32_t refuel_seen_ms = 0;     // when fin first crossed the up-jump (confirm window)
@@ -217,6 +219,11 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
     int i = line[1] - '0';
     if (i >= 2 && i <= 6) reset_req = i;
     return;
+  }
+  if (line[0] == 'C') {                                   // copy a live trip INTO A/B/C: "C<dst><src>"
+    int dst = line[1] - '0';                               // dst: 3=A 4=B 5=C
+    if (dst >= 3 && dst <= 5 && (line[2] == 'B' || line[2] == 'H')) { copy_dst = dst; copy_src = line[2]; }
+    return;                                                 // deferred -> YAML calls copy_slot (slot[] declared later)
   }
   if (line[0] != 'T') return;
   uint32_t e = 0;
@@ -700,6 +707,16 @@ inline void reset_slot(int i, uint32_t epoch) {
   if (i < 2 || i > 6) return;        // [2]=oil [3..5]=user [6]=home; [0]/[1] not resettable here
   if (i == 2) { ohist[ohist_head] = slot[2]; ohist_head = (ohist_head + 1) % HISTN; if (ohist_n < HISTN) ohist_n++; }
   slot_start(slot[i], epoch, cur_odo());
+  persist_request = true;
+}
+
+// Snapshot a live trip INTO a user slot (A/B/C). The destination then keeps accumulating
+// from the source's start point (since-boot or from-home), and is persisted.
+inline void copy_slot(int dst, char src) {
+  if (dst < 3 || dst > 5) return;
+  if (src == 'B')      slot[dst] = boot_slot;   // since boot (memory-only source)
+  else if (src == 'H') slot[dst] = slot[6];     // from home
+  else return;
   persist_request = true;
 }
 

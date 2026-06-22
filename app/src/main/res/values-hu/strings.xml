@@ -263,6 +263,7 @@
     <string name="trip_life">Élettartam</string>
     <string name="tab_tpms">Keréknyomás</string>
     <string name="trip_hold">Tartsd nyomva a resethez</string>
+    <string name="trip_copy">Mentés ide</string>
     <string name="trip_at">%1$s km-nél</string>
     <string name="trip_need_fw">Firmware frissítés kell (v3.0)</string>
     <string name="grp_lights">Világítás</string>

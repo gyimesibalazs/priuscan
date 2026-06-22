@@ -263,6 +263,7 @@
     <string name="trip_life">Total</string>
     <string name="tab_tpms">Neumáticos</string>
     <string name="trip_hold">Mantén para reiniciar</string>
+    <string name="trip_copy">Guardar en</string>
     <string name="trip_at">a %1$s km</string>
     <string name="trip_need_fw">Actualización de firmware necesaria (v3.0)</string>
     <string name="grp_lights">Luces</string>

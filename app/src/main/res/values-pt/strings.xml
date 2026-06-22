@@ -264,6 +264,7 @@
     <string name="trip_life">Total</string>
     <string name="tab_tpms">Pneus</string>
     <string name="trip_hold">Manter para repor</string>
+    <string name="trip_copy">Guardar em</string>
     <string name="trip_at">a %1$s km</string>
     <string name="trip_need_fw">Atualização de firmware necessária (v3.0)</string>
     <string name="grp_lights">Luzes</string>

@@ -263,6 +263,7 @@
     <string name="trip_life">Totale</string>
     <string name="tab_tpms">Gomme</string>
     <string name="trip_hold">Tieni premuto per azzerare</string>
+    <string name="trip_copy">Salva in</string>
     <string name="trip_at">a %1$s km</string>
     <string name="trip_need_fw">Aggiornamento firmware necessario (v3.0)</string>
     <string name="grp_lights">Luci</string>

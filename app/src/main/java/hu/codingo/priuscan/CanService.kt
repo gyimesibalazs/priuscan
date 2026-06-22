@@ -75,9 +75,11 @@ class CanService : Service() {
         fun fetchOilHistory() = sendCommand("HO")
         /** Reset a slot: 2=Oil(=oil change) 3=A 4=B 5=C 6=Home. (boot/lifetime/tank not here) */
         fun resetSlot(cmd: Int) { if (cmd in 2..6) sendCommand("R$cmd") }
+        /** Copy a live trip INTO a user slot: dst 3=A/4=B/5=C, src 'B'=since-boot 'H'=from-home. */
+        fun copySlot(dst: Int, src: Char) { if (dst in 3..5 && (src == 'B' || src == 'H')) sendCommand("C$dst$src") }
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 314                        // bundled firmware version (3.14)
+        const val BUNDLED_FW = 315                        // bundled firmware version (3.15)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")

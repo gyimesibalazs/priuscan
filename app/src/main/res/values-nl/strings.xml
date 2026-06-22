@@ -265,6 +265,7 @@
     <string name="trip_life">Levensduur</string>
     <string name="tab_tpms">Banden</string>
     <string name="trip_hold">Houd vast om te resetten</string>
+    <string name="trip_copy">Opslaan naar</string>
     <string name="trip_at">bij %1$s km</string>
     <string name="trip_need_fw">Firmware-update nodig (v3.0)</string>
     <string name="grp_lights">Verlichting</string>

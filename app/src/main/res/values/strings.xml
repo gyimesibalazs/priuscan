@@ -265,6 +265,7 @@
     <string name="trip_life">Lifetime</string>
     <string name="tab_tpms">Tyres</string>
     <string name="trip_hold">Hold to reset</string>
+    <string name="trip_copy">Save to</string>
     <string name="trip_at">at %1$s km</string>
     <string name="trip_need_fw">Firmware update needed (v3.0)</string>
     <string name="grp_lights">Lights</string>
