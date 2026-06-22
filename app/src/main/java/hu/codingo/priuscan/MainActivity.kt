@@ -77,6 +77,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -422,20 +423,22 @@ private val PctStyle = TextStyle(
 @Composable
 private fun Header(s: CanState) {
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-        Row(Modifier.fillMaxWidth().height(132.dp), verticalAlignment = Alignment.CenterVertically) {
-            // coolant temperature, narrowed horizontally, with a small degree mark
+        // TOP-aligned so the temp, icons and gauges share a common top line; the block is tall
+        // enough for TWO icon rows (icons at the top, ODO pinned to the bottom).
+        Row(Modifier.fillMaxWidth().height(140.dp), verticalAlignment = Alignment.Top) {
+            // coolant temperature, narrowed horizontally; no font padding so it hugs the top line
             Text(
                 s.coolant?.let { "${it.toInt()}" } ?: "–",
                 fontSize = 100.sp, fontWeight = FontWeight.Bold, color = coolantColor(s.coolant),
+                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false)),
                 modifier = Modifier.graphicsLayer(scaleX = 0.78f),
             )
             Text("°", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = coolantColor(s.coolant),
-                modifier = Modifier.align(Alignment.Top).padding(top = 6.dp))
+                modifier = Modifier.padding(top = 4.dp))
             Spacer(Modifier.width(20.dp))
-            // middle: status icons (wraps to a 2nd row) + the justified ODO row
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
+            // middle: status icons (up to 2 rows) at the top, justified ODO row at the bottom
+            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
                 StatusIcons(s)
-                Spacer(Modifier.height(10.dp))
                 OdoRow(s)
             }
             Spacer(Modifier.width(24.dp))
@@ -533,7 +536,7 @@ private fun OdoRow(s: CanState) {
 @Composable
 private fun FuelGauge(s: CanState) {
     val frac = ((s.d("fuelIn") ?: 0.0).toFloat() / 100f).coerceIn(0f, 1f)
-    Box(Modifier.width(60.dp).height(128.dp)) {
+    Box(Modifier.width(60.dp).height(140.dp)) {
         Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CYellow, battery = false) }
         Text(s.d("fuelIn")?.let { "${it.toInt()}%" } ?: "–",
             style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))   // % position unchanged
@@ -555,7 +558,7 @@ private fun BatteryGauge(s: CanState) {
     val soc = (s.d("soc") ?: 0.0).toFloat()
     val frac = ((soc - 35f) / (70f - 35f)).coerceIn(0f, 1f)   // operating band ~35..70%
     val hvA = s.d("hvA") ?: 0.0
-    Box(Modifier.width(60.dp).height(128.dp)) {
+    Box(Modifier.width(60.dp).height(140.dp)) {
         Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CGreen, battery = true) }
         Text(s.d("soc")?.let { "${it.toInt()}%" } ?: "–",
             style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))
