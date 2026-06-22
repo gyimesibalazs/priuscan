@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 321;   // 3.21: battery degradation warnings (weak-block CWL + per-block R asymmetry)
+inline constexpr int FW_VERSION = 322;   // 3.22: re-add boot warm-up gate for fuelIn (fix false refuel at startup)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -188,6 +188,7 @@ inline bool refuel_dirty = false;       // YAML flushes this to the persistent g
 inline constexpr float REFUEL_DELTA = 12.0f;   // fuelIn is now % (0..100): a significant up-jump
 inline float    refuel_peak = 0;               // highest fuelIn during the current fill (plateau detect)
 inline constexpr uint32_t REFUEL_STABLE_MS = 8000;  // level must stop rising this long = fill finished
+inline constexpr uint32_t FUEL_WARMUP_MS = 90000;   // ignore fuelIn for 90 s after boot (b5 bounces)
 // Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
 // cross-check (head 3.14 + measured 35.51 + 0%-reserve = the fill). 47 L assumed (safety margin).
 inline constexpr float TANK_FULL   = 47.0f;
@@ -1046,12 +1047,14 @@ inline void compute_derived(uint32_t now_ms) {
 
   // refuel detection: fuelIn (%) jumps up significantly while parked -> record the time
   float fin = V[FUELIN], sp2 = V[SPD];
+  // Boot warm-up: the fuelIn gauge (0x612 b5) bounces 0<->255 for ~1 min after power-on. Treat it
+  // as invalid until it settles, so the transient can't be mistaken for a refuel OR corrupt the
+  // fuel_ref baseline / fuelL. (The NVS-load gate alone is not enough: a restored low fuel_ref +
+  // a transient spike to 100% looks exactly like a refuel.)
+  if (now_ms - derive_boot_ms < FUEL_WARMUP_MS) fin = NAN;
   if (!std::isnan(fin)) {
     if (fuel_ref < 0) fuel_ref = fin;
     bool parked = std::isnan(sp2) || sp2 < 3.0f;
-    // Gate refuel detection until the NVS load has completed: fuel_ref is then either the
-    // restored baseline or 100% (empty-flash default), so the boot fuelIn transient can't be
-    // mistaken for a refuel. (Replaces the old 60 s boot warm-up.)
     if (persist_loaded && parked && fin - fuel_ref >= REFUEL_DELTA) {
       // A refuel is in progress. A slow 40-90 s fill rises through MANY DELTA steps, so we must
       // NOT record per step: track the peak and record exactly ONE event once the level PLATEAUS
