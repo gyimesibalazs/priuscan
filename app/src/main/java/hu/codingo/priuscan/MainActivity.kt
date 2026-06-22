@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         CanService.start(this)   // the service also runs on USB attach / launcher start
         val prefs = Prefs(this)
+        CanService.carDark.value = prefs.darkLast   // start in the last-known mode (no flash)
         setContent {
             val carDark by CanService.carDark.collectAsState()
             val dark = if (prefs.autoDarkCar) carDark else androidx.compose.foundation.isSystemInDarkTheme()
@@ -177,6 +178,34 @@ private fun DriveTab(state: CanState, fields: List<Field>) = tabColumn {
     itemsIndexed(fields) { _, f ->
         SensorRow(stringResource(f.labelRes), format(state.d(f.key), f.decimals, f.unit))
     }
+    // drive mode (0x49B b4): NORMAL/ECO/PWR selector + independent EV toggle
+    item { GroupTitle(stringResource(R.string.grp_drivemode)) }
+    item {
+        val dm = state.i("dmode") ?: 0
+        SensorRow(stringResource(R.string.f_drivemode),
+            when (dm) { 1 -> "ECO"; 2 -> "PWR"; else -> stringResource(R.string.dm_normal) },
+            highlight = dm != 0)
+    }
+    item {
+        val ev = (state.i("ev") ?: 0) != 0
+        SensorRow(stringResource(R.string.f_evmode), if (ev) "● EV" else "○", highlight = ev)
+    }
+
+    // cruise control + turn signal (firmware decodes them; not elsewhere in the UI)
+    item { GroupTitle(stringResource(R.string.grp_cruise)) }
+    item {
+        val cr = (state.i("cruise") ?: 0) != 0
+        SensorRow(stringResource(R.string.f_cruise), if (cr) "●" else "○", highlight = cr)
+    }
+    item {
+        val ss = state.d("setSpd")
+        SensorRow(stringResource(R.string.f_setSpd), if (ss != null && ss > 0) "%.0f km/h".format(ss) else "–")
+    }
+    item {
+        val t = state.i("turn") ?: 0
+        SensorRow(stringResource(R.string.f_turn), when (t) { 1 -> "◄"; 2 -> "►"; else -> "–" }, highlight = t == 1 || t == 2)
+    }
+
     item { GroupTitle(stringResource(R.string.grp_lights)) }
     val lt = state.i("lights") ?: 0
     item { LightRow(R.string.l_position, lt and 0x10 != 0) }

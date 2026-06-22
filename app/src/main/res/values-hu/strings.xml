@@ -275,4 +275,11 @@
     <string name="f_ambL">Fényszint</string>
     <string name="fuel_corr_label">Fogyasztás-korrekció (×)</string>
     <string name="btn_save">Mentés</string>
+    <string name="grp_cruise">Tempomat / index</string>
+    <string name="grp_drivemode">Vezetési mód</string>
+    <string name="f_drivemode">Mód</string>
+    <string name="f_evmode">EV mód</string>
+    <string name="dm_normal">Normál</string>
+    <string name="f_cruise">Tempomat</string>
+    <string name="f_turn">Index</string>
 </resources>

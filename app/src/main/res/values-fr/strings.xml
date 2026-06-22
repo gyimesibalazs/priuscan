@@ -275,4 +275,11 @@
     <string name="f_ambL">Niveau lumière</string>
     <string name="fuel_corr_label">Correction conso (×)</string>
     <string name="btn_save">Enregistrer</string>
+    <string name="grp_cruise">Régulateur / cligno</string>
+    <string name="grp_drivemode">Mode de conduite</string>
+    <string name="f_drivemode">Mode</string>
+    <string name="f_evmode">Mode EV</string>
+    <string name="dm_normal">Normal</string>
+    <string name="f_cruise">Régulateur</string>
+    <string name="f_turn">Clignotant</string>
 </resources>

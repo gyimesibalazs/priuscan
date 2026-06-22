@@ -275,4 +275,11 @@
     <string name="f_ambL">Livello luce</string>
     <string name="fuel_corr_label">Correzione consumo (×)</string>
     <string name="btn_save">Salva</string>
+    <string name="grp_cruise">Cruise / frecce</string>
+    <string name="grp_drivemode">Modalità guida</string>
+    <string name="f_drivemode">Modo</string>
+    <string name="f_evmode">Modalità EV</string>
+    <string name="dm_normal">Normale</string>
+    <string name="f_cruise">Cruise</string>
+    <string name="f_turn">Freccia</string>
 </resources>

@@ -45,6 +45,8 @@ enum VKey {
   GASB,                         // gas pedal %, from 0x245 b2 (0..200 -> /2 = 0..100)
   LIGHTS,                       // exterior lights bitmask, 0x622 b3 (0x10 pos,0x20 low,0x40 high,0x08 fFog,0x04 rFog)
   AMBL,                         // raw ambient light level, 0x620 b2:b3 BE (~31 bright .. ~600 dark, inverted)
+  DMODE,                        // drive mode, 0x49B b4: 0=normal, 1=ECO (0x08), 2=PWR (0x04)
+  EVMODE,                       // EV mode on/off, 0x49B b4 bit1 (0x02)
   N_JSON,                       // number of fields that go into the JSON (length of FIELDS)
   RAW0 = N_JSON, RAW1, RAW2, RAW3, RAW4, RAW5, RAW6, RAW7,
   V_COUNT
@@ -73,7 +75,7 @@ inline const char *KEYS[V_COUNT] = {
   "tDist","tFuel","tAvg",
   "capAh","capKwh",
   "tMove","tSpd","tEv",
-  "odo","gasB","lights","ambL",
+  "odo","gasB","lights","ambL","dmode","ev",
   "raw0","raw1","raw2","raw3","raw4","raw5","raw6","raw7",
 };
 
@@ -113,7 +115,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 308;   // 3.8: refuel gate on persist_loaded (drop 60s warm-up)
+inline constexpr int FW_VERSION = 314;   // 3.14: cruise active from 0x399 b1.bit1 (verified) instead of 0x5C8
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -132,7 +134,7 @@ inline bool dump_is_known(uint16_t id) {
   switch (id) {
     case 0x1C4: case 0x0B4: case 0x127: case 0x614: case 0x1D3: case 0x5C8:
     case 0x5A4: case 0x610: case 0x611: case 0x612: case 0x620: case 0x626:
-    case 0x4A1: case 0x320: case 0x245: case 0x025: case 0x622:  // decoded broadcasts
+    case 0x4A1: case 0x320: case 0x245: case 0x025: case 0x622: case 0x0AA:  // decoded broadcasts
     case 0x7DF: case 0x7E0: case 0x7E2: case 0x7C4: case 0x7B0: case 0x7C0:  // our requests
     case 0x7E8: case 0x7EA: case 0x7CC: case 0x7B8: case 0x7C8:              // diag responses
       return true;
@@ -282,7 +284,6 @@ inline const PollItem POLL[] = {
   {0x7E0, 0x21, 0x01, 1},                            // engine: ct,rpm,spd,maf
   {0x7E2, 0x21, 0x01, 1},                            // hybrid 2101
   {0x7E2, 0x21, 0x98, 1},                            // HV current/dis/chg
-  {0x7B0, 0x21, 0x03, 1},                            // wheel speeds
   // --- divider=3: every 3rd cycle (temperatures, MG/inverter, A/C) ---
   {0x7E2, 0x01, 0x5B, 3},                            // std SoC (slow change)
   {0x7E2, 0x21, 0x92, 3}, {0x7E2, 0x21, 0x81, 3},
@@ -294,12 +295,11 @@ inline const PollItem POLL[] = {
   {0x7C4, 0x21, 0x21, 3}, {0x7C4, 0x21, 0x29, 3}, {0x7C4, 0x21, 0x49, 3},
   {0x7C4, 0x21, 0x4B, 3}, {0x7C4, 0x21, 0x24, 3},
   {0x7C4, 0x21, 0x3C, 3}, {0x7C4, 0x21, 0x53, 3},    // A/C
-  {0x7B0, 0x21, 0x47, 3}, {0x7B0, 0x21, 0x07, 3},
+  {0x7B0, 0x21, 0x07, 3},                            // brake pedal pressure (2107)
   // --- divider=10: every 10th cycle (slow/infrequent diagnostics, body) ---
   {0x7E0, 0x21, 0x49, 10}, {0x7E0, 0x21, 0x3C, 10},  // engine torque, injector
   {0x7E2, 0x21, 0x8E, 10}, {0x7E2, 0x21, 0x9B, 10},  // cooling fan
   {0x7E2, 0x21, 0xE1, 10}, {0x7E2, 0x21, 0xC1, 10},  // DTC count, model code
-  {0x7C4, 0x21, 0x22, 10},                           // A/C ambient
   {0x7C0, 0x21, 0x13, 10}, {0x7C0, 0x21, 0x41, 10},  // body
 };
 inline const int POLL_N = sizeof(POLL) / sizeof(POLL[0]);
@@ -437,13 +437,6 @@ inline void parse_payload(uint16_t resp_id, const uint8_t *p, int n) {
 
   if (resp_id == 0x7B8) {
     switch (pid) {
-      case 0x03:
-        if (dn < 4) return;
-        V[WFR] = d[0]*32.0f/25.0f; V[WFL] = d[1]*32.0f/25.0f;
-        V[WRR] = d[2]*32.0f/25.0f; V[WRL] = d[3]*32.0f/25.0f;
-        { float fr=d[0]*32.0f/25.0f, fl=d[1]*32.0f/25.0f;
-          if (fr+fl>20) V[WDIF] = 200.0f*fabsf(fr-fl)/(fr+fl); }
-        return;
       case 0x47:
         if (dn < 5) return;
         // OLD G/steer source (saturated, replaced): lateral=0x4A1, longitudinal=0x320 b4,
@@ -502,6 +495,16 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
     case 0x025:  // steering angle: byte[0..1] 12-bit, 2048 = centre, ~0.245 deg/count
       if (x.size() >= 2) V[STEER] = (float)((int)(((x[0] & 0x0F) << 8) | x[1]) - 2048) * 0.245f;
       return;
+    case 0x0AA:  // ABS wheel speeds (replaces the 7B0 2103 poll): 4x u16 BE, *0.01 - 67.67 km/h (FR,FL,RR,RL)
+      if (x.size() >= 8) {
+        V[WFR] = (float)(((uint16_t)x[0]<<8)|x[1]) * 0.01f - 67.67f;
+        V[WFL] = (float)(((uint16_t)x[2]<<8)|x[3]) * 0.01f - 67.67f;
+        V[WRR] = (float)(((uint16_t)x[4]<<8)|x[5]) * 0.01f - 67.67f;
+        V[WRL] = (float)(((uint16_t)x[6]<<8)|x[7]) * 0.01f - 67.67f;
+        float fr = V[WFR], fl = V[WFL];
+        if (fr + fl > 20.0f) V[WDIF] = 200.0f * fabsf(fr - fl) / (fr + fl);
+      }
+      return;
     case 0x611:  // Combination meter: odometer in km, bytes[5..7] (24-bit)
       if (x.size() >= 8) V[ODO] = (float)(((uint32_t)x[5] << 16) | ((uint32_t)x[6] << 8) | x[7]);
       return;
@@ -519,6 +522,13 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
     case 0x620:  // body ECU: RAW ambient light level, bytes[2:3] BE, inverted (~31 bright ..
       // ~600 dark). Confirmed with a 3-pulse lamp test. (doors are byte[5], handled in the YAML.)
       if (x.size() >= 4) V[AMBL] = (float)(((uint16_t)x[2] << 8) | x[3]);
+      return;
+    case 0x49B:  // drive mode, byte[4]: bit1(0x02)=EV, bit3(0x08)=ECO, bit2(0x04)=PWR
+      // (confirmed with a 3x EV/ECO/PWR switch test). EV is independent of the ECO/PWR selector.
+      if (x.size() >= 5) {
+        V[DMODE]  = (float)((x[4] & 0x08) ? 1 : (x[4] & 0x04) ? 2 : 0);   // 0 normal / 1 eco / 2 pwr
+        V[EVMODE] = (float)((x[4] & 0x02) ? 1 : 0);
+      }
       return;
   }
 }
@@ -821,12 +831,14 @@ inline void compute_derived(uint32_t now_ms) {
     // pure-EV distance: moving with the engine off (rpm < 100)
     float rp = V[RPM];
     if (!std::isnan(sp) && sp > 2.0f && !std::isnan(rp) && rp < 100.0f) d_ev = sp * dt_h;
-    // regen: while BRAKING (disc pressure up OR battery charging) AND decelerating, energy shed
-    // (1/2 m dv^2, m~1450 kg) and energy recovered into the pack (-hvA*VL while hvA<0).
+    // regen ratio: while the BRAKE PEDAL is pressed AND decelerating, accumulate the kinetic
+    // energy shed (1/2 m dv^2, m~1450 kg) and the energy recovered into the pack (-hvA*VL while
+    // hvA<0). The trigger is the brake PEDAL only (brkP) — the old "or hvA<-5" also fired while
+    // coasting with the engine charging from fuel (NOT regen), which inflated the ratio >100%.
     {
       float brk = V[BRKP], vn = sp, vp = std::isnan(trap_sp) ? sp : trap_sp;
       if (!std::isnan(vn) && !std::isnan(vp) && vn < vp && vn >= 0) {
-        bool braking = (!std::isnan(brk) && brk > 0.55f) || (!std::isnan(amps) && amps < -5.0f);
+        bool braking = !std::isnan(brk) && brk > 0.55f;   // brake pedal pressed
         if (braking) {
           float vpm = vp / 3.6f, vnm = vn / 3.6f;
           d_be = 0.5f * 1450.0f * (vpm*vpm - vnm*vnm);                    // J shed
@@ -837,6 +849,17 @@ inline void compute_derived(uint32_t now_ms) {
     // accumulate into every slot (the only difference between slots is WHEN they reset)
     slot_add(boot_slot, d_dist, d_ev, d_fuel, d_move, d_re, d_be);
     for (int i = 0; i < NSLOT; i++) slot_add(slot[i], d_dist, d_ev, d_fuel, d_move, d_re, d_be);
+    // distance = real odometer delta (drift-free) for any slot with a stamped start odo; the
+    // spd-integral above only fills it until the odo is known / for slots without a start odo
+    // (e.g. lifetime). Fixes the ~0.4% speed-integral drift seen vs the odometer.
+    {
+      uint32_t co = cur_odo();
+      if (co) {
+        if (boot_slot.odo && co >= boot_slot.odo) boot_slot.dist = (float)(co - boot_slot.odo);
+        for (int i = 0; i < NSLOT; i++)
+          if (slot[i].odo && co >= slot[i].odo) slot[i].dist = (float)(co - slot[i].odo);
+      }
+    }
 
     // running charge integral for the capacity estimate (needs dt)
     if (!std::isnan(amps)) charge_ah += amps * dt_h;     // signed Ah
@@ -941,7 +964,7 @@ inline const Field FIELDS[] = {
   // trip computer / slots are NOT flat fields anymore -> emitted as the "slots" array below
   {CAPAH,"\"capAh\":",8,2}, {CAPKWH,"\"capKwh\":",9,2},
   {ODO,"\"odo\":",6,0}, {GASB,"\"gasB\":",7,0}, {LIGHTS,"\"lights\":",9,0},
-  {AMBL,"\"ambL\":",7,0},
+  {AMBL,"\"ambL\":",7,0}, {DMODE,"\"dmode\":",8,0}, {EVMODE,"\"ev\":",5,0},
 };
 inline const int FIELDS_N = sizeof(FIELDS) / sizeof(FIELDS[0]);
 
@@ -984,7 +1007,7 @@ inline void put_slot(char *&p, const TripSlot &s) {
   std::memcpy(p, ",\"v\":", 5); p += 5; put_num(p, s.ev, 1);
   std::memcpy(p, ",\"f\":", 5); p += 5; put_num(p, s.fuel, 2);
   std::memcpy(p, ",\"m\":", 5); p += 5; put_num(p, s.move_s, 0);
-  std::memcpy(p, ",\"r\":", 5); p += 5; put_num(p, s.brake_e > 1.0f ? (s.regen_e / s.brake_e * 100.0f) : 0.0f, 0);
+  std::memcpy(p, ",\"r\":", 5); p += 5; put_num(p, s.brake_e > 1.0f ? fminf(100.0f, s.regen_e / s.brake_e * 100.0f) : 0.0f, 0);
   *p++ = '}';
 }
 
@@ -1025,7 +1048,7 @@ inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
 
 // one TripSlot as JSON: e=epoch o=odo d=dist v=ev f=fuel m=move_s r=regen%
 inline void emit_slot_json(char *&p, char *end, const TripSlot &s) {
-  float r = s.brake_e > 1.0f ? (s.regen_e / s.brake_e * 100.0f) : 0.0f;
+  float r = s.brake_e > 1.0f ? fminf(100.0f, s.regen_e / s.brake_e * 100.0f) : 0.0f;
   p += snprintf(p, end - p, "{\"e\":%u,\"o\":%u,\"d\":%.1f,\"v\":%.1f,\"f\":%.2f,\"m\":%.0f,\"r\":%.0f}",
                 (unsigned)s.epoch, (unsigned)s.odo, s.dist, s.ev, s.fuel, s.move_s, r);
 }

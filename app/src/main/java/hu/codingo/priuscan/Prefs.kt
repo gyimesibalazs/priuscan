@@ -54,6 +54,12 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("auto_dark_car", false)
         set(v) = sp.edit().putBoolean("auto_dark_car", v).apply()
 
+    /** Last applied dark/light state — restored at startup so the right mode shows
+     *  immediately (before the first ambient-light reading arrives). */
+    var darkLast: Boolean
+        get() = sp.getBoolean("dark_last", false)
+        set(v) = sp.edit().putBoolean("dark_last", v).apply()
+
     /** Reference HV pack capacity (Ah) for the SoH/degradation calc. Default ~Prius
      *  6.5 Ah; set to the transplanted Prius-4 cell's rated capacity. */
     var batteryRefAh: Float

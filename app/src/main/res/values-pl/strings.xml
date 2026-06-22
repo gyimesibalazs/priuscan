@@ -276,4 +276,11 @@
     <string name="f_ambL">Poziom światła</string>
     <string name="fuel_corr_label">Korekta zużycia (×)</string>
     <string name="btn_save">Zapisz</string>
+    <string name="grp_cruise">Tempomat / kier.</string>
+    <string name="grp_drivemode">Tryb jazdy</string>
+    <string name="f_drivemode">Tryb</string>
+    <string name="f_evmode">Tryb EV</string>
+    <string name="dm_normal">Normalny</string>
+    <string name="f_cruise">Tempomat</string>
+    <string name="f_turn">Kierunkowskaz</string>
 </resources>

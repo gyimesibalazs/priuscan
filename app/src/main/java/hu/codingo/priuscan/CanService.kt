@@ -77,7 +77,7 @@ class CanService : Service() {
         fun resetSlot(cmd: Int) { if (cmd in 2..6) sendCommand("R$cmd") }
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 308                        // bundled firmware version (3.8)
+        const val BUNDLED_FW = 314                        // bundled firmware version (3.14)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
@@ -209,6 +209,10 @@ class CanService : Service() {
     override fun onCreate() {
         super.onCreate()
         prefs = Prefs(this)
+        // apply the last-known dark/light mode immediately at startup (before the first
+        // ambient-light reading) so the right theme shows from the very first frame
+        carDark.value = prefs.darkLast
+        if (prefs.autoDarkCar) applyNightMode(prefs.darkLast)
         overlays = OverlayManager(this, prefs)
         notifMgr = getSystemService(NotificationManager::class.java)
         notifMgr.createNotificationChannel(
@@ -455,7 +459,8 @@ class CanService : Service() {
         tb.add(b)
         while (tb.size >= 2 && !(tb[0] == 0x55 && tb[1] == 0xAA)) tb.removeAt(0)
         while (tb.size >= 3 && tb[0] == 0x55 && tb[1] == 0xAA) {
-            val len = if (tb[2] == 0x09) 9 else 8
+            // frame length by type: 0x09 ID = 9, 0x06 command-ack = 6, others (0x08 data) = 8
+            val len = when (tb[2]) { 0x09 -> 9; 0x06 -> 6; else -> 8 }
             if (tb.size < len) break
             var x = 0
             for (k in 0 until len - 1) x = x xor tb[k]
@@ -472,14 +477,14 @@ class CanService : Service() {
 
     private fun tpmsHandleFrame(f: IntArray) {
         if (!tpmsConnected.value) tpmsConnected.value = true
-        val w = Wheel.fromPos(f[3])
         when (f[2]) {
-            0x08 -> {  // sensor data: D0 D1 D2
-                if (w == null) return
+            0x08 -> {  // sensor data: 55 AA 08 POS(0x00/01/10/11/05) D0 D1 D2 XOR
+                val w = Wheel.fromPos(f[3]) ?: return
                 val r = TireReading(Tpms.bar(f[4]), Tpms.tempC(f[5]), f[6], System.currentTimeMillis())
                 tpms.value = HashMap(tpms.value).apply { put(w, r) }
             }
-            0x09 -> {  // ID response: 55 AA 09 POS ID0 ID1 ID2 ID3 XOR
+            0x09 -> {  // ID response: 55 AA 09 SLOT(1..5) ID0 ID1 ID2 ID3 XOR
+                val w = Wheel.fromSlot(f[3])
                 if (w == null || f.size < 9) return
                 val id = "%02X%02X%02X%02X".format(f[4], f[5], f[6], f[7])
                 tpmsIds.value = HashMap(tpmsIds.value).apply { put(w, id) }
@@ -568,6 +573,7 @@ class CanService : Service() {
         }
         if (nightNow != carDark.value) {
             carDark.value = nightNow
+            prefs.darkLast = nightNow                          // remember for the next startup
             if (prefs.autoDarkCar) applyNightMode(nightNow)   // best-effort device-wide
         }
 

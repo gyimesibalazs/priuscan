@@ -959,10 +959,10 @@ canbus:
               // driver seatbelt unlatched: byte7 bit6 (opendbc SEATBELT_DRIVER_UNLATCHED)
               if (x.size() >= 8) id(belt_driver).publish_state(x[7] & 0x40);
               prius::on_broadcast(0x620, x);   // also: raw ambient light level (bytes[2:3])
-      - can_id: 0x5C8   # cruise control main switch
-        then:
+      - can_id: 0x399   # cruise ACTIVE (set/holding) = byte1 bit1 (0x02). Verified empirically:
+        then:           # ON only when speed is held with the engine working (not coasting/driver pedal).
           - lambda: |-
-              if (x.size() >= 3) id(cruise_on).publish_state(x[2] & 0x10);
+              if (x.size() >= 2) id(cruise_on).publish_state(x[1] & 0x02);
 
       # ---------- passive broadcast values (opendbc Gen3 DBC) ----------
       # No request, high rate. The header on_broadcast() writes into prius::V[];
@@ -989,8 +989,12 @@ canbus:
         then: { lambda: 'prius::on_broadcast(0x245, x);' }
       - can_id: 0x025   # steering angle broadcast
         then: { lambda: 'prius::on_broadcast(0x025, x);' }
+      - can_id: 0x0AA   # ABS wheel speeds (replaces the 7B0 2103 poll)
+        then: { lambda: 'prius::on_broadcast(0x0AA, x);' }
       - can_id: 0x622   # exterior lights bitmask (b3): position/low/high/fog
         then: { lambda: 'prius::on_broadcast(0x622, x);' }
+      - can_id: 0x49B   # drive mode (b4): EV / ECO / PWR
+        then: { lambda: 'prius::on_broadcast(0x49B, x);' }
 
       # ---------- ISO-TP diag responses (all four ECUs) ----------
       - can_id: 0x7E8

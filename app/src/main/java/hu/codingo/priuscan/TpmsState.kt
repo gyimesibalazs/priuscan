@@ -5,7 +5,13 @@ enum class Wheel(val pos: Int) {
     FL(0x00), FR(0x01), RL(0x10), RR(0x11), SPARE(0x05);
 
     companion object {
+        // 0x08 data frames carry the wheel-position byte (0x00/0x01/0x10/0x11/0x05)
         fun fromPos(p: Int): Wheel? = values().firstOrNull { it.pos == p }
+        // 0x09 ID-query responses index sensors by SLOT 1..5 (NOT the wheel-pos byte):
+        // 1=FL 2=FR 3=RL 4=RR 5=SPARE (slot 5 == SPARE's 0x05 pos confirms the order).
+        fun fromSlot(slot: Int): Wheel? = when (slot) {
+            1 -> FL; 2 -> FR; 3 -> RL; 4 -> RR; 5 -> SPARE; else -> null
+        }
     }
 }
 
@@ -43,8 +49,11 @@ object Tpms {
         return (body + x).map { it.toByte() }.toByteArray()
     }
 
-    val QUERY: ByteArray get() = build(0x06, 0x07, 0x00, 0x00)          // request all sensor IDs
-    fun pair(pos: Int): ByteArray = build(0x06, 0x01, pos, 0x00)        // learn sensor onto a position
-    val PAIR_STOP: ByteArray get() = build(0x06, 0x06, 0x00, 0x00)      // leave learning mode
+    // NB: frames are 3 payload bytes (06 CMD PARAM) — the old 4-byte QUERY (extra 0x00) got
+    // NO response from the receiver; verified on the bench that "55 AA 06 07 00 <xor>" returns
+    // all sensor IDs as 0x09 frames. pair/PAIR_STOP fixed to the same 3-byte shape.
+    val QUERY: ByteArray get() = build(0x06, 0x07, 0x00)                // request all sensor IDs (slots 1..5)
+    fun pair(pos: Int): ByteArray = build(0x06, 0x01, pos)             // enter learn mode for a position
+    val PAIR_STOP: ByteArray get() = build(0x06, 0x06, 0x00)           // leave learning mode
     val HEARTBEAT: ByteArray get() = build(0x06, 0x19, 0x00)            // keep-alive
 }

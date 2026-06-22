@@ -275,4 +275,11 @@
     <string name="f_ambL">Lichtniveau</string>
     <string name="fuel_corr_label">Verbrauchskorrektur (×)</string>
     <string name="btn_save">Speichern</string>
+    <string name="grp_cruise">Tempomat / Blinker</string>
+    <string name="grp_drivemode">Fahrmodus</string>
+    <string name="f_drivemode">Modus</string>
+    <string name="f_evmode">EV-Modus</string>
+    <string name="dm_normal">Normal</string>
+    <string name="f_cruise">Tempomat</string>
+    <string name="f_turn">Blinker</string>
 </resources>

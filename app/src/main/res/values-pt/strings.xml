@@ -276,4 +276,11 @@
     <string name="f_ambL">Nível de luz</string>
     <string name="fuel_corr_label">Correção consumo (×)</string>
     <string name="btn_save">Guardar</string>
+    <string name="grp_cruise">Piloto / pisca</string>
+    <string name="grp_drivemode">Modo de condução</string>
+    <string name="f_drivemode">Modo</string>
+    <string name="f_evmode">Modo EV</string>
+    <string name="dm_normal">Normal</string>
+    <string name="f_cruise">Piloto autom.</string>
+    <string name="f_turn">Pisca</string>
 </resources>

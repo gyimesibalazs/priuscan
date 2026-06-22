@@ -277,4 +277,11 @@
     <string name="f_ambL">Light level</string>
     <string name="fuel_corr_label">Fuel correction (×)</string>
     <string name="btn_save">Save</string>
+    <string name="grp_cruise">Cruise / turn</string>
+    <string name="grp_drivemode">Drive mode</string>
+    <string name="f_drivemode">Mode</string>
+    <string name="f_evmode">EV mode</string>
+    <string name="dm_normal">Normal</string>
+    <string name="f_cruise">Cruise</string>
+    <string name="f_turn">Turn signal</string>
 </resources>

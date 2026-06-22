@@ -277,4 +277,11 @@
     <string name="f_ambL">Lichtniveau</string>
     <string name="fuel_corr_label">Verbruikscorrectie (×)</string>
     <string name="btn_save">Opslaan</string>
+    <string name="grp_cruise">Cruise / richting</string>
+    <string name="grp_drivemode">Rijmodus</string>
+    <string name="f_drivemode">Modus</string>
+    <string name="f_evmode">EV-modus</string>
+    <string name="dm_normal">Normaal</string>
+    <string name="f_cruise">Cruise</string>
+    <string name="f_turn">Richtingaanw.</string>
 </resources>
