@@ -82,7 +82,7 @@ class CanService : Service() {
         fun fetchBlockR() = sendCommand("B")
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 322                        // bundled firmware version (3.22)
+        const val BUNDLED_FW = 323                        // bundled firmware version (3.23)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")

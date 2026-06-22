@@ -547,7 +547,9 @@ private fun FuelGauge(s: CanState) {
             style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))   // % position unchanged
         // calibrated remaining liters, on a new line UNDER the % (smaller, doesn't move the %)
         s.d("fuelL")?.let { l ->
-            Text("%.1f L".format(l), color = Color.White, fontSize = 12.sp,
+            // calculated remaining liters; turns amber if it disagrees with the measured gauge (drift)
+            val drift = s.d("fuelGm")?.let { kotlin.math.abs(l - it) > 2.5 } ?: false
+            Text("%.1f L".format(l), color = if (drift) Color(0xFFFFA000) else Color.White, fontSize = 12.sp,
                 style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 8f)),
                 modifier = Modifier.align(BiasAlignment(0f, 0.28f)))
         }

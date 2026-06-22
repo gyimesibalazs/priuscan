@@ -33,7 +33,7 @@ enum VKey {
   CABIN, SETT, COMP, EVAP, SOLAR,
   WFL, WFR, WRL, WRR, WDIF, GLAT, GFWD, STEER, BRKP,
   ENGNM, INJML, INJUS, BATTFAN, ECUMODE, FANMODE, DTCCUR, DTCHIST,
-  ACAMB, BLOWER, ACPRESS, FUELIN, FUELL,
+  ACAMB, BLOWER, ACPRESS, FUELIN, FUELL, FUELGM,
   CTR, WPRUN, WPW, CELLW,
   ELEN, EFF, EOK, LOOPS,
   GEAR, TURN, SETSPD,           // from passive broadcast frames (0x127/0x614/0x1D3)
@@ -69,7 +69,7 @@ inline const char *KEYS[V_COUNT] = {
   "cabin","setT","comp","evap","solar",
   "wFL","wFR","wRL","wRR","wDif","gLat","gFwd","steer","brkP",
   "engNm","injml","injus","battFan","ecuMode","fanMode","dtcCur","dtcHist",
-  "acAmb","blower","acPress","fuelIn","fuelL",
+  "acAmb","blower","acPress","fuelIn","fuelL","fuelGm",
   "ctR","wpRun","wpW","cellW",
   "eLen","eFF","eOK","loops",
   "gear","turn","setSpd",
@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 322;   // 3.22: re-add boot warm-up gate for fuelIn (fix false refuel at startup)
+inline constexpr int FW_VERSION = 323;   // 3.23: consumption-driven virtual fuel gauge + drift; 15s warm-up + persist gate
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -188,15 +188,17 @@ inline bool refuel_dirty = false;       // YAML flushes this to the persistent g
 inline constexpr float REFUEL_DELTA = 12.0f;   // fuelIn is now % (0..100): a significant up-jump
 inline float    refuel_peak = 0;               // highest fuelIn during the current fill (plateau detect)
 inline constexpr uint32_t REFUEL_STABLE_MS = 8000;  // level must stop rising this long = fill finished
-inline constexpr uint32_t FUEL_WARMUP_MS = 90000;   // ignore fuelIn for 90 s after boot (b5 bounces)
+inline constexpr uint32_t FUEL_WARMUP_MS = 15000;   // ignore fuelIn for 15 s after boot (b5 settles)
 // Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
 // cross-check (head 3.14 + measured 35.51 + 0%-reserve = the fill). 47 L assumed (safety margin).
 inline constexpr float TANK_FULL   = 47.0f;
 inline constexpr float FUEL_HEAD   = 3.14f;    // top plateau: gauge pinned 100% for this much fuel
 inline constexpr float FUEL_MEAS   = 35.51f;   // span the gauge 0..100% actually measures
 inline constexpr float FUEL_BOTTOM = TANK_FULL - FUEL_HEAD - FUEL_MEAS;  // ~8.35 L reserve below 0%
-inline bool  tank_known = false;        // passed the "first <100%" reference for the current tank?
-inline float fuel_since_refuel = 0;     // liters burned since the last refuel (head-plateau count-down)
+inline bool  tank_known = false;        // calibrated this tank's anchor (left 100% / immediate)?
+inline bool  fuel_saw_100 = false;      // did we see a 100% gauge reading since the last refuel?
+inline float fuel_anchor = 47.0f;       // learned fill size: remaining = fuel_anchor - fuel_since_refuel
+inline float fuel_since_refuel = 0;     // liters burned since the last refuel (drives the virtual gauge)
 
 // ===== Host wall-clock time (pushed from the head unit over serial) =====
 // The production firmware has no Wi-Fi/NTP, so the head unit is the only time
@@ -1047,11 +1049,11 @@ inline void compute_derived(uint32_t now_ms) {
 
   // refuel detection: fuelIn (%) jumps up significantly while parked -> record the time
   float fin = V[FUELIN], sp2 = V[SPD];
-  // Boot warm-up: the fuelIn gauge (0x612 b5) bounces 0<->255 for ~1 min after power-on. Treat it
-  // as invalid until it settles, so the transient can't be mistaken for a refuel OR corrupt the
-  // fuel_ref baseline / fuelL. (The NVS-load gate alone is not enough: a restored low fuel_ref +
-  // a transient spike to 100% looks exactly like a refuel.)
-  if (now_ms - derive_boot_ms < FUEL_WARMUP_MS) fin = NAN;
+  // No fuel logic until (a) the previous fuel_ref baseline has been READ from NVS -- nothing to
+  // compare against before that -- and (b) a short settle window passes (the 0x612 b5 gauge bounces
+  // briefly after power-on). Until both, treat fuelIn as invalid: no refuel detection, no calibration,
+  // no fuelL, and fuel_ref is not corrupted by the boot transient.
+  if (!persist_loaded || now_ms - derive_boot_ms < FUEL_WARMUP_MS) fin = NAN;
   if (!std::isnan(fin)) {
     if (fuel_ref < 0) fuel_ref = fin;
     bool parked = std::isnan(sp2) || sp2 < 3.0f;
@@ -1073,17 +1075,29 @@ inline void compute_derived(uint32_t now_ms) {
         else { last_refuel_ms = now_ms; refuel_pending = true; }   // correct later (#4)
         refuel_dirty = true; persist_request = true;               // flush NVS on refuel
         fuel_ref = refuel_peak; refuel_peak = 0; refuel_seen_ms = 0;
-        tank_known = false; fuel_since_refuel = 0;                  // new tank: assume full again
+        tank_known = false; fuel_since_refuel = 0;                  // new tank: assume full, recalibrate
+        fuel_saw_100 = false; fuel_anchor = TANK_FULL;
       }
     } else {
       refuel_peak = 0; refuel_seen_ms = 0;       // not a refuel rise (or spike dropped back)
       fuel_ref += 0.01f * (fin - fuel_ref);      // slow follow (consumption + noise)
     }
-    // calibrated tank liters: assume full (count down) until the gauge first drops below 100%
-    // (the reference point), then read the measured 0..100% range; at 0% the ~8 L reserve is the floor.
-    if (fin < 99.5f) tank_known = true;
-    V[FUELL] = tank_known ? (FUEL_BOTTOM + fin * 0.01f * FUEL_MEAS)
-                          : fmaxf(FUEL_BOTTOM, TANK_FULL - fuel_since_refuel);
+    // VIRTUAL fuel gauge: consumption-driven, anchored by the real gauge. While the gauge reads
+    // 100% we assume a full 47 L tank and count down by consumption. The moment it first drops
+    // below 100% we learn THIS fill's size: the gauge leaves 100% at a fixed level (TANK_FULL-HEAD),
+    // so full_tank = that level + consumed-so-far. If we never saw 100% (a partial refuel, or a
+    // mid-tank boot) we calibrate immediately from the gauge's measured-range mapping. After that
+    // the level is purely consumption-driven (immune to the bouncy gauge): remaining = anchor - C.
+    if (fin >= 99.8f) fuel_saw_100 = true;
+    if (!tank_known && fin < 99.8f) {
+      float l_real = fuel_saw_100 ? (TANK_FULL - FUEL_HEAD)                  // gauge leaves 100% here
+                                  : (FUEL_BOTTOM + fin * 0.01f * FUEL_MEAS); // never saw 100% -> map gauge
+      fuel_anchor = l_real + fuel_since_refuel;
+      tank_known = true;
+    }
+    V[FUELL] = fmaxf(0.0f, (tank_known ? fuel_anchor : TANK_FULL) - fuel_since_refuel);
+    // measured-gauge liters (for the calc-vs-measured drift indicator); only in the measured range
+    V[FUELGM] = (tank_known && fin < 99.8f) ? (FUEL_BOTTOM + fin * 0.01f * FUEL_MEAS) : NAN;
   }
 }
 
@@ -1120,7 +1134,7 @@ inline const Field FIELDS[] = {
   {BATTFAN,"\"battFan\":",10,2}, {ECUMODE,"\"ecuMode\":",10,0}, {FANMODE,"\"fanMode\":",10,0},
   {DTCCUR,"\"dtcCur\":",9,0}, {DTCHIST,"\"dtcHist\":",10,0},
   {ACAMB,"\"acAmb\":",8,2}, {BLOWER,"\"blower\":",9,0}, {ACPRESS,"\"acPress\":",10,2},
-  {FUELIN,"\"fuelIn\":",9,2}, {FUELL,"\"fuelL\":",8,1},
+  {FUELIN,"\"fuelIn\":",9,2}, {FUELL,"\"fuelL\":",8,1}, {FUELGM,"\"fuelGm\":",9,1},
   {CTR,"\"ctR\":",6,2}, {WPRUN,"\"wpRun\":",8,0}, {WPW,"\"wpW\":",6,0}, {CELLW,"\"cellW\":",8,0},
   {ELEN,"\"eLen\":",7,2}, {EFF,"\"eFF\":",6,2}, {EOK,"\"eOK\":",6,2}, {LOOPS,"\"loops\":",8,2},
   {GEAR,"\"gear\":",7,0}, {TURN,"\"turn\":",7,0}, {SETSPD,"\"setSpd\":",9,0},
