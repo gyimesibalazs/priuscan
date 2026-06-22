@@ -24,8 +24,11 @@ class DumpLogger(private val ctx: Context) {
     @Synchronized
     fun write(line: String) {
         val w = bw ?: open()
-        try { w.write(line); w.write("\n") } catch (_: Exception) {}
-        bytes += line.length + 1
+        // prefix each frame with ms since the dump started, so dumps are time-correlatable for
+        // signal reverse-engineering (the firmware stays timestamp-free; the head unit stamps it)
+        val out = "${System.currentTimeMillis() - startedAt} $line"
+        try { w.write(out); w.write("\n") } catch (_: Exception) {}
+        bytes += out.length + 1
         CanService.dumpBytes.value = bytes
         if (System.currentTimeMillis() - startedAt > 600_000L || bytes > 50_000_000L)
             CanService.setDump(false)   // safety auto-stop (10 min / 50 MB)
