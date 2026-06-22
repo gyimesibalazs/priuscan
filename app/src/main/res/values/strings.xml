@@ -22,6 +22,7 @@
     <string name="perm_battery">Disable battery optimization</string>
     <string name="coolant_caption">coolant</string>
     <string name="hv_block_voltages">HV block voltages</string>
+    <string name="hv_block_res">Internal resistance</string>
     <string name="block_n">Block %1$02d</string>
 
     <!-- header warnings -->

@@ -77,9 +77,12 @@ class CanService : Service() {
         fun resetSlot(cmd: Int) { if (cmd in 2..6) sendCommand("R$cmd") }
         /** Copy a live trip INTO a user slot: dst 3=A/4=B/5=C, src 'B'=since-boot 'H'=from-home. */
         fun copySlot(dst: Int, src: Char) { if (dst in 3..5 && (src == 'B' || src == 'H')) sendCommand("C$dst$src") }
+        /** Per-block internal resistance (mΩ), fetched on demand ("B"); 14 values, NaN = not ready. */
+        val blockR = MutableStateFlow<List<Float>>(emptyList())
+        fun fetchBlockR() = sendCommand("B")
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 316                        // bundled firmware version (3.16)
+        const val BUNDLED_FW = 317                        // bundled firmware version (3.17)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
@@ -513,6 +516,12 @@ class CanService : Service() {
         // firmware history responses (on demand): "H" -> rhist, "HO" -> ohist
         if (json.has("rhist")) { refuelHist.value = TripSlot.list(json.optJSONArray("rhist")); return false }
         if (json.has("ohist")) { oilHist.value = TripSlot.list(json.optJSONArray("ohist")); return false }
+        if (json.has("rblk")) {
+            val a = json.optJSONArray("rblk")
+            blockR.value = if (a == null) emptyList()
+                else (0 until a.length()).map { if (a.isNull(it)) Float.NaN else a.optDouble(it).toFloat() }
+            return false
+        }
         // PriusCAN signature: every emit_json line contains the door+cruise
         // fields -> this is how we tell it apart from another ESP/TPMS's data
         if (!json.has("door") || !json.has("cruise")) return false

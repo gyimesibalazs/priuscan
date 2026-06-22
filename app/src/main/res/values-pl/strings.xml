@@ -11,6 +11,7 @@
     <string name="perm_battery">Wyłącz optymalizację baterii</string>
     <string name="coolant_caption">płyn chłodzący</string>
     <string name="hv_block_voltages">Napięcia bloków HV</string>
+    <string name="hv_block_res">Rezystancja wewn.</string>
     <string name="block_n">Blok %1$02d</string>
 
     <!-- header warnings -->

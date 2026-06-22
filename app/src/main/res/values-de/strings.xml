@@ -11,6 +11,7 @@
     <string name="perm_battery">Akku-Optimierung deaktivieren</string>
     <string name="coolant_caption">Kühlmittel</string>
     <string name="hv_block_voltages">HV-Blockspannungen</string>
+    <string name="hv_block_res">Innenwiderstand</string>
     <string name="block_n">Block %1$02d</string>
 
     <!-- header warnings -->

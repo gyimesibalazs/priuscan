@@ -11,6 +11,7 @@
 
 #include <vector>
 #include <map>
+#include <algorithm>
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
@@ -115,7 +116,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 316;   // 3.16: smoother pack-capacity learn (DSOC 15%, EWMA 0.05, NiMH 0.93)
+inline constexpr int FW_VERSION = 317;   // 3.17: per-block R (trigger window) + daily flash health/trip ring
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -171,6 +172,7 @@ inline uint32_t last_pwr_ms = 0;        // millis() of the last 0x1C4 (fast powe
 inline bool     persist_done = false;   // one save per power-down (re-armed when bus is alive)
 inline uint32_t boot_off_epoch = 0;     // restored last-shutdown epoch  -> JSON "offTs"
 inline uint32_t boot_off_n = 0;         // restored save counter         -> JSON "offN"
+inline bool     rblk_request = false;   // app sent "B"  -> emit per-block resistance (YAML consumes)
 inline bool     hist_request = false;   // app sent "H"  -> emit refuel history (YAML consumes)
 inline bool     ohist_request = false;  // app sent "HO" -> emit oil-change history
 inline int      reset_req = -1;         // app sent "R<i>" -> reset slot i (YAML consumes)
@@ -210,6 +212,7 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
     }
     return;
   }
+  if (line[0] == 'B') { rblk_request = true; return; }   // emit per-block internal resistance
   if (line[0] == 'H') { if (line[1] == 'O') ohist_request = true; else hist_request = true; return; }  // H/HO history
   if (line[0] == 'F') {                                   // fuel correction: "F<factor>" (e.g. F1.05)
     float f; if (sscanf(line + 1, " %f", &f) == 1 && f > 0.5f && f < 2.0f) fuel_corr = f;  // YAML flushes it to NVS
@@ -744,6 +747,96 @@ inline constexpr float    CAP_MAX_AH   = 15.0f;
 inline void cap_export(float *o) { o[0]=cap_ah; o[1]=(float)cap_n; o[2]=vl_avg; }
 inline void cap_import(const float *in) { cap_ah=in[0]; cap_n=(uint32_t)in[1]; vl_avg=in[2]; }
 
+// Per-block internal resistance from current-step TRIGGER EVENTS. On each fresh block-voltage
+// set, if |dI| since the previous set > R_DI, one R_i = -dV_i/dI sample is pushed into a per-block
+// rolling window; the published value is the window MEDIAN (robust). Validated on real logs:
+// N=60 / |dI|>40A gives ~+-0.4 mOhm within-day single-block scatter (the temp/SoC floor); the
+// median is far below the mOhm-per-month aging signal. RAM-only (fresh each boot, fills in ~1-2 min
+// of varied driving); the latest medians (r_med) ride along in the daily flash record and seed the
+// display at boot. Slow-changing -> emitted ON DEMAND ("B") + auto every ~15 events; NOT in the line.
+inline constexpr int   R_WIN = 60;       // rolling window of trigger events
+inline constexpr float R_DI  = 40.0f;    // |dI| (A) trigger between consecutive block-V sets
+inline int16_t  r_win[14][R_WIN];        // R samples x10 (0.1 mOhm); <=0 = invalid slot
+inline uint8_t  r_head = 0, r_cnt = 0;
+inline float    r_prev_i = NAN, r_prev_v[14]; inline bool r_prev_ok = false;
+inline uint32_t r_events = 0;            // total accepted trigger events
+inline float    r_med[14] = {0};         // latest medians (mOhm); persisted via the daily record
+
+inline float rblk_med(int i) {           // window median, NAN until enough fresh events
+  float t[R_WIN]; int m = 0;
+  for (int k=0;k<r_cnt;k++) { int16_t v=r_win[i][k]; if (v>0) t[m++]=v/10.0f; }
+  if (m < 8) return NAN;
+  std::nth_element(t, t+m/2, t+m); float hi=t[m/2];
+  if (m & 1) return hi;
+  std::nth_element(t, t+m/2-1, t+m); return 0.5f*(t[m/2-1]+hi);
+}
+inline float rblk_mohm(int i) {          // live median; keeps r_med fresh; falls back to r_med
+  float v = rblk_med(i);
+  if (!std::isnan(v)) { r_med[i] = v; return v; }
+  return (r_med[i] > 0.1f) ? r_med[i] : NAN;
+}
+inline void rblk_event() {               // call on each fresh COMPLETE block-voltage set
+  for (int i=0;i<14;i++) if (std::isnan(V[B01+i])) return;
+  float a = V[HVA]; if (std::isnan(a)) return;
+  if (r_prev_ok) {
+    float dI = a - r_prev_i;
+    if (fabsf(dI) > R_DI) {
+      for (int i=0;i<14;i++) {
+        float R = -(V[B01+i]-r_prev_v[i])/dI*1000.0f;
+        r_win[i][r_head] = (R>2.0f && R<60.0f) ? (int16_t)lroundf(R*10.0f) : -1;
+      }
+      r_head = (uint8_t)((r_head+1)%R_WIN); if (r_cnt<R_WIN) r_cnt++; r_events++;
+      if (r_events % 15u == 0u) rblk_request = true;   // auto-publish ~every 15 events
+    }
+  }
+  r_prev_i = a; for (int i=0;i<14;i++) r_prev_v[i]=V[B01+i]; r_prev_ok = true;
+}
+inline void rblk_seed(const float *r) { for (int i=0;i<14;i++) r_med[i]=r[i]; }   // boot, from daily rec
+inline void emit_rblocks() {             // on-demand response: {"rblk":[...14...],"rn":N}
+  static char buf[256]; char *p = buf; char *end = buf + sizeof(buf);
+  p += snprintf(p, end-p, "{\"rblk\":[");
+  for (int i=0;i<14;i++) {
+    if (i) *p++ = ',';
+    float r = rblk_mohm(i);
+    if (std::isnan(r)) { std::memcpy(p,"null",4); p+=4; }
+    else p += snprintf(p, end-p, "%.1f", r);
+  }
+  p += snprintf(p, end-p, "],\"rn\":%u}\n", (unsigned)r_events);
+  int total=(int)(p-buf), off=0;
+  for (int t=0; t<200000 && off<total; t++) { int w=write(1,buf+off,total-off); if (w>0) off+=w; }
+}
+
+// per-DRIVE battery throughput (reset each boot; folded into the daily flash record on shutdown)
+inline float drive_batt_in = 0, drive_batt_out = 0;   // Ah charged-in / discharged-out this drive
+
+// One daily flash record (8-year ring, key = ring slot). Accumulating fields SUM across the day's
+// drives; ts start=min, end=max; health fields = latest. ~78 bytes. Kept OUT of TripSlot so the
+// existing persisted trip data is never touched (no magic bump / data loss).
+struct DailyRec {
+  uint32_t day;          // epoch / 86400 (0 = empty)
+  uint32_t start_ts;     // first drive start of the day (min)
+  uint32_t end_ts;       // last shutdown of the day (max)
+  uint32_t odo;          // latest odometer
+  float    dist, ev, fuel, move_s;   // accumulated across the day
+  float    batt_in, batt_out, cap;   // batt Ah accumulated; capacity = latest
+  int16_t  r[14];        // per-block R x10 (0.1 mOhm), latest
+  int16_t  tb[3];        // TB1/TB2/TB3 x10 degC, latest
+};
+inline int16_t tb_x10(int key) { float v=V[key]; return std::isnan(v)?0:(int16_t)lroundf(v*10.0f); }
+// Fold the current drive (boot_slot + drive batt + latest health) into today's record (pure).
+inline void daily_accumulate(DailyRec &d, uint32_t today, uint32_t end_epoch) {
+  if (d.day != today) { std::memset(&d,0,sizeof(d)); d.day = today; }   // new day -> reset
+  uint32_t s = boot_slot.epoch ? boot_slot.epoch : end_epoch;
+  if (d.start_ts == 0 || s < d.start_ts) d.start_ts = s;
+  if (end_epoch > d.end_ts) d.end_ts = end_epoch;
+  d.dist += boot_slot.dist; d.ev += boot_slot.ev; d.fuel += boot_slot.fuel; d.move_s += boot_slot.move_s;
+  d.batt_in += drive_batt_in; d.batt_out += drive_batt_out;
+  uint32_t o = cur_odo(); if (o) d.odo = o;
+  d.cap = cap_ah;
+  for (int i=0;i<14;i++) { float r=rblk_mohm(i); d.r[i] = std::isnan(r)?0:(int16_t)lroundf(r*10.0f); }
+  d.tb[0]=tb_x10(TB1); d.tb[1]=tb_x10(TB2); d.tb[2]=tb_x10(TB3);
+}
+
 inline uint32_t derive_boot_ms = 0;   // first compute_derived call (for the boot warm-up)
 inline void compute_derived(uint32_t now_ms) {
   if (derive_boot_ms == 0) derive_boot_ms = now_ms;
@@ -790,7 +883,7 @@ inline void compute_derived(uint32_t now_ms) {
   }
 
   // self-learning layer: learns only on a new block set (~1 Hz), not on every 0.5s tick
-  if (blocks_fresh) { learn_update(); blocks_fresh = false; }
+  if (blocks_fresh) { learn_update(); rblk_event(); blocks_fresh = false; }
   int learned = learn_verdict();   // fills CWL/WBLK/WZ; >0 only once the baseline is mature
 
   // HV cell warning. The learned, condition-aware layer is the PRIMARY detector once
@@ -880,7 +973,10 @@ inline void compute_derived(uint32_t now_ms) {
     }
 
     // running charge integral for the capacity estimate (needs dt)
-    if (!std::isnan(amps)) charge_ah += amps * dt_h;     // signed Ah
+    if (!std::isnan(amps)) {                              // signed Ah + per-drive in/out split
+      charge_ah += amps * dt_h;
+      if (amps < 0) drive_batt_in += -amps * dt_h; else drive_batt_out += amps * dt_h;
+    }
   }
   derive_last_ms = now_ms;
   trap_sp = V[SPD]; trap_fl = V[FUEL];   // remember for the next trapezoid step

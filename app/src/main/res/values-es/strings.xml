@@ -10,6 +10,7 @@
     <string name="perm_battery">Desactivar la optimización de batería</string>
     <string name="coolant_caption">refrigerante</string>
     <string name="hv_block_voltages">Tensiones de bloque HV</string>
+    <string name="hv_block_res">Resistencia interna</string>
     <string name="block_n">Bloque %1$02d</string>
 
     <!-- header warnings -->

@@ -10,6 +10,7 @@
     <string name="perm_battery">Akkumulátor-optimalizálás kikapcsolása</string>
     <string name="coolant_caption">hűtővíz</string>
     <string name="hv_block_voltages">HV blokkfeszültségek</string>
+    <string name="hv_block_res">Belső ellenállás</string>
     <string name="block_n">Blokk %1$02d</string>
 
     <!-- header warnings -->

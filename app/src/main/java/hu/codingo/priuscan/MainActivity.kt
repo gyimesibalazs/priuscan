@@ -259,6 +259,19 @@ private fun HybridBatteryTab(state: CanState, fields: List<Field>, refAh: Float)
             highlight = state.i("weakB") == i,
         )
     }
+    // per-block internal resistance (on-demand "B"; refreshed every 5 s while this tab is open)
+    item { GroupTitle(stringResource(R.string.hv_block_res)) }
+    item {
+        LaunchedEffect(Unit) { while (true) { CanService.fetchBlockR(); kotlinx.coroutines.delay(5000) } }
+        val r by CanService.blockR.collectAsState()
+        Column {
+            (1..14).forEach { i ->
+                val v = r.getOrNull(i - 1)
+                SensorRow(stringResource(R.string.block_n, i),
+                    if (v == null || v.isNaN()) "–" else "%.1f mΩ".format(v))
+            }
+        }
+    }
 }
 
 // Trip switcher definitions. idx = position in the firmware "slots" array

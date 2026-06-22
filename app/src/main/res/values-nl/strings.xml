@@ -11,6 +11,7 @@
     <string name="perm_battery">Batterijoptimalisatie uitschakelen</string>
     <string name="coolant_caption">koelvloeistof</string>
     <string name="hv_block_voltages">HV-blokspanningen</string>
+    <string name="hv_block_res">Inwendige weerstand</string>
     <string name="block_n">Blok %1$02d</string>
 
     <!-- header warnings -->

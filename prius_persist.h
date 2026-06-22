@@ -86,3 +86,46 @@ inline void prius_persist_load() {
   }
   prius::persist_loaded = true;                // boot read attempt done -> writes allowed
 }
+
+// ---- daily health/trip ring on flash (separate NVS namespace "priusday"; 8-year ring) ----
+// One record per day, accumulated across the day's drives, overwritten in place; a new day moves
+// to the next ring slot; at 8 years the oldest is overwritten. Independent of the trip-slot blob.
+inline constexpr uint32_t DAILY_N = 2920;    // ~8 years of one-record-per-day
+
+// Fold the current drive into today's record on shutdown (also refuel/parked). epoch = wall clock.
+inline void prius_daily_save(uint32_t epoch) {
+  if (!prius::persist_loaded || epoch < 1000000000u) return;
+  nvs_handle_t h;
+  if (nvs_open("priusday", NVS_READWRITE, &h) != ESP_OK) return;
+  uint32_t head = 0; nvs_get_u32(h, "head", &head); head %= DAILY_N;
+  uint32_t today = epoch / 86400u;
+  static prius::DailyRec d; std::memset(&d, 0, sizeof(d));
+  char key[8]; snprintf(key, sizeof(key), "d%04u", (unsigned)head);
+  size_t sz = sizeof(d); nvs_get_blob(h, key, &d, &sz);        // load head record (day=0 if none)
+  if (d.day != 0 && d.day != today) {                          // new day -> next ring slot
+    head = (head + 1) % DAILY_N;
+    snprintf(key, sizeof(key), "d%04u", (unsigned)head);
+    std::memset(&d, 0, sizeof(d));
+  }
+  prius::daily_accumulate(d, today, epoch);                    // pure fold-in (boot_slot + health)
+  nvs_set_blob(h, key, &d, sizeof(d));
+  nvs_set_u32(h, "head", head);
+  nvs_commit(h);
+  nvs_close(h);
+}
+
+// Boot: seed the per-block resistance display from the most recent daily record.
+inline void prius_daily_load() {
+  nvs_handle_t h;
+  if (nvs_open("priusday", NVS_READONLY, &h) != ESP_OK) return;
+  uint32_t head = 0;
+  if (nvs_get_u32(h, "head", &head) == ESP_OK) {
+    static prius::DailyRec d; size_t sz = sizeof(d);
+    char key[8]; snprintf(key, sizeof(key), "d%04u", (unsigned)(head % DAILY_N));
+    if (nvs_get_blob(h, key, &d, &sz) == ESP_OK && d.day > 0) {
+      float r[14]; for (int i = 0; i < 14; i++) r[i] = d.r[i] / 10.0f;
+      prius::rblk_seed(r);
+    }
+  }
+  nvs_close(h);
+}

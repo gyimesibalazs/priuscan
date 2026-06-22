@@ -26,7 +26,7 @@ esphome:
   on_boot:
     priority: -100   # the globals have been restored by then
     then:
-      - lambda: 'prius::learn_import(id(learn_state).data()); prius::cap_import(id(cap_state).data()); prius::last_refuel_epoch = id(refuel_epoch); prius::fuel_corr = id(fuel_corr_g); prius_persist_load();'
+      - lambda: 'prius::learn_import(id(learn_state).data()); prius::cap_import(id(cap_state).data()); prius::last_refuel_epoch = id(refuel_epoch); prius::fuel_corr = id(fuel_corr_g); prius_persist_load(); prius_daily_load();'
 
 # Persistent storage of the self-learning weak-block baseline (lz[14] + sample count).
 # restore_value: restored on boot, periodically flushed to flash (the YAML
@@ -1057,7 +1057,7 @@ interval:
             uint32_t nm = millis();
             bool quiet = !ota_active && prius::last_pwr_ms != 0 && (nm - prius::last_pwr_ms) > 800;
             if (quiet) {
-              if (!prius::persist_done) { prius::persist_done = true; prius_persist_save(prius::cur_epoch(nm)); }
+              if (!prius::persist_done) { prius::persist_done = true; prius_persist_save(prius::cur_epoch(nm)); prius_daily_save(prius::cur_epoch(nm)); }
             } else {
               prius::persist_done = false;
             }
@@ -1066,6 +1066,7 @@ interval:
           // and flush NVS on a refuel / slot-reset event (persist_request).
           if (prius::reset_req >= 0) { prius::reset_slot(prius::reset_req, prius::cur_epoch(millis())); prius::reset_req = -1; }
           if (prius::copy_dst >= 0) { prius::copy_slot(prius::copy_dst, prius::copy_src); prius::copy_dst = -1; }
+          if (prius::rblk_request) { prius::rblk_request = false; prius::emit_rblocks(); }
           if (prius::hist_request) { prius::hist_request = false; prius::emit_history(); }
           if (prius::ohist_request) { prius::ohist_request = false; prius::emit_ohist(); }
           if (prius::persist_request) { prius::persist_request = false; prius_persist_save(prius::cur_epoch(millis())); }
