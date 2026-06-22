@@ -151,9 +151,7 @@
     <string name="f_brkP">Pression de freinage</string>
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
-    <string name="f_bodyV">12V (carrosserie)</string>
     <string name="f_fuelIn">Niveau de carburant</string>
-    <string name="f_oilDist">Depuis la vidange</string>
     <string name="f_battFan">Ventilateur de refroidissement batterie</string>
     <string name="f_dtcCur">DTC actifs</string>
     <string name="f_dtcHist">DTC enregistrés</string>
@@ -284,4 +282,5 @@
     <string name="dm_normal">Normal</string>
     <string name="f_cruise">Régulateur</string>
     <string name="f_turn">Clignotant</string>
+    <string name="nvs_status">NVS : sauv.=%1$d, dernier arrêt=%2$s</string>
 </resources>

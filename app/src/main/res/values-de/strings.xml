@@ -152,9 +152,7 @@
     <string name="f_brkP">Bremsdruck</string>
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
-    <string name="f_bodyV">12V (Karosserie)</string>
     <string name="f_fuelIn">Tankfüllstand</string>
-    <string name="f_oilDist">Seit Ölwechsel</string>
     <string name="f_battFan">Batterie-Kühlgebläse</string>
     <string name="f_dtcCur">Aktive DTC</string>
     <string name="f_dtcHist">Gespeicherte DTC</string>
@@ -284,4 +282,5 @@
     <string name="dm_normal">Normal</string>
     <string name="f_cruise">Tempomat</string>
     <string name="f_turn">Blinker</string>
+    <string name="nvs_status">NVS: Speich.=%1$d, letztes Aus=%2$s</string>
 </resources>

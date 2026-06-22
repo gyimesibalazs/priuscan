@@ -151,9 +151,7 @@
     <string name="f_brkP">Féknyomás</string>
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
-    <string name="f_bodyV">12V (karosszéria)</string>
     <string name="f_fuelIn">Üzemanyagszint</string>
-    <string name="f_oilDist">Olajcsere óta</string>
     <string name="f_battFan">Akku hűtőventilátor</string>
     <string name="f_dtcCur">Aktív DTC-k</string>
     <string name="f_dtcHist">Tárolt DTC-k</string>
@@ -284,4 +282,5 @@
     <string name="dm_normal">Normál</string>
     <string name="f_cruise">Tempomat</string>
     <string name="f_turn">Index</string>
+    <string name="nvs_status">NVS: mentések=%1$d, utolsó kikapcsolás=%2$s</string>
 </resources>

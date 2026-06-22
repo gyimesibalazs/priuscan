@@ -33,7 +33,7 @@ enum VKey {
   CABIN, SETT, COMP, EVAP, SOLAR,
   WFL, WFR, WRL, WRR, WDIF, GLAT, GFWD, STEER, BRKP,
   ENGNM, INJML, INJUS, BATTFAN, ECUMODE, FANMODE, DTCCUR, DTCHIST,
-  ACAMB, BLOWER, ACPRESS, BODYV, FUELIN, OILDIST,
+  ACAMB, BLOWER, ACPRESS, FUELIN,
   CTR, WPRUN, WPW, CELLW,
   ELEN, EFF, EOK, LOOPS,
   GEAR, TURN, SETSPD,           // from passive broadcast frames (0x127/0x614/0x1D3)
@@ -68,7 +68,7 @@ inline const char *KEYS[V_COUNT] = {
   "cabin","setT","comp","evap","solar",
   "wFL","wFR","wRL","wRR","wDif","gLat","gFwd","steer","brkP",
   "engNm","injml","injus","battFan","ecuMode","fanMode","dtcCur","dtcHist",
-  "acAmb","blower","acPress","bodyV","fuelIn","oilDist",
+  "acAmb","blower","acPress","fuelIn",
   "ctR","wpRun","wpW","cellW",
   "eLen","eFF","eOK","loops",
   "gear","turn","setSpd",
@@ -116,7 +116,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 317;   // 3.17: per-block R (trigger window) + daily flash health/trip ring
+inline constexpr int FW_VERSION = 318;   // 3.18: drop unused body ECU poll; daily delta-fold fix
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -136,8 +136,8 @@ inline bool dump_is_known(uint16_t id) {
     case 0x1C4: case 0x0B4: case 0x127: case 0x614: case 0x1D3: case 0x5C8:
     case 0x5A4: case 0x610: case 0x611: case 0x612: case 0x620: case 0x626:
     case 0x4A1: case 0x320: case 0x245: case 0x025: case 0x622: case 0x0AA:  // decoded broadcasts
-    case 0x7DF: case 0x7E0: case 0x7E2: case 0x7C4: case 0x7B0: case 0x7C0:  // our requests
-    case 0x7E8: case 0x7EA: case 0x7CC: case 0x7B8: case 0x7C8:              // diag responses
+    case 0x7DF: case 0x7E0: case 0x7E2: case 0x7C4: case 0x7B0:              // our requests
+    case 0x7E8: case 0x7EA: case 0x7CC: case 0x7B8:                          // diag responses
       return true;
     default: return false;
   }
@@ -218,7 +218,7 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
     float f; if (sscanf(line + 1, " %f", &f) == 1 && f > 0.5f && f < 2.0f) fuel_corr = f;  // YAML flushes it to NVS
     return;
   }
-  if (line[0] == 'R') {                                   // reset distance slot: "R<1..4>"
+  if (line[0] == 'R') {                                   // reset a trip slot: "R<2..6>" (oil/A/B/C/home)
     int i = line[1] - '0';
     if (i >= 2 && i <= 6) reset_req = i;
     return;
@@ -310,7 +310,6 @@ inline const PollItem POLL[] = {
   {0x7E0, 0x21, 0x49, 10}, {0x7E0, 0x21, 0x3C, 10},  // engine torque, injector
   {0x7E2, 0x21, 0x8E, 10}, {0x7E2, 0x21, 0x9B, 10},  // cooling fan
   {0x7E2, 0x21, 0xE1, 10}, {0x7E2, 0x21, 0xC1, 10},  // DTC count, model code
-  {0x7C0, 0x21, 0x13, 10}, {0x7C0, 0x21, 0x41, 10},  // body
 };
 inline const int POLL_N = sizeof(POLL) / sizeof(POLL[0]);
 inline int poll_i = 0;
@@ -459,13 +458,6 @@ inline void parse_payload(uint16_t resp_id, const uint8_t *p, int n) {
     return;
   }
 
-  if (resp_id == 0x7C8) {   // body ECU
-    switch (pid) {
-      case 0x13: if (dn>=1) V[BODYV] = d[0]/10.0f; return;
-      case 0x41: if (dn>=1) V[OILDIST] = d[0]*2514600.0f/15625.0f; return;
-    }
-    return;
-  }
 }
 
 // Decoding of passive broadcast frames (no request, high rate). Only writes to V
@@ -823,14 +815,26 @@ struct DailyRec {
   int16_t  tb[3];        // TB1/TB2/TB3 x10 degC, latest
 };
 inline int16_t tb_x10(int key) { float v=V[key]; return std::isnan(v)?0:(int16_t)lroundf(v*10.0f); }
-// Fold the current drive (boot_slot + drive batt + latest health) into today's record (pure).
+// how much of boot_slot / drive_batt has ALREADY been folded into the daily ring this power session.
+// boot_slot/drive_batt are only reset at ESP boot (memory-only), but a save can fire on every
+// ignition-off while the ESP stays powered -> we must add only the DELTA since the last fold,
+// otherwise the same since-boot totals would be counted multiple times into one day.
+inline TripSlot boot_folded = {};
+inline float    batt_in_folded = 0, batt_out_folded = 0;
+
+// Fold the current drive's NEW portion (delta) + latest health into today's record (pure).
 inline void daily_accumulate(DailyRec &d, uint32_t today, uint32_t end_epoch) {
   if (d.day != today) { std::memset(&d,0,sizeof(d)); d.day = today; }   // new day -> reset
   uint32_t s = boot_slot.epoch ? boot_slot.epoch : end_epoch;
   if (d.start_ts == 0 || s < d.start_ts) d.start_ts = s;
   if (end_epoch > d.end_ts) d.end_ts = end_epoch;
-  d.dist += boot_slot.dist; d.ev += boot_slot.ev; d.fuel += boot_slot.fuel; d.move_s += boot_slot.move_s;
-  d.batt_in += drive_batt_in; d.batt_out += drive_batt_out;
+  d.dist   += boot_slot.dist   - boot_folded.dist;     // delta since the last fold
+  d.ev     += boot_slot.ev     - boot_folded.ev;
+  d.fuel   += boot_slot.fuel   - boot_folded.fuel;
+  d.move_s += boot_slot.move_s - boot_folded.move_s;
+  d.batt_in  += drive_batt_in  - batt_in_folded;
+  d.batt_out += drive_batt_out - batt_out_folded;
+  boot_folded = boot_slot; batt_in_folded = drive_batt_in; batt_out_folded = drive_batt_out;
   uint32_t o = cur_odo(); if (o) d.odo = o;
   d.cap = cap_ah;
   for (int i=0;i<14;i++) { float r=rblk_mohm(i); d.r[i] = std::isnan(r)?0:(int16_t)lroundf(r*10.0f); }
@@ -1073,7 +1077,7 @@ inline const Field FIELDS[] = {
   {BATTFAN,"\"battFan\":",10,2}, {ECUMODE,"\"ecuMode\":",10,0}, {FANMODE,"\"fanMode\":",10,0},
   {DTCCUR,"\"dtcCur\":",9,0}, {DTCHIST,"\"dtcHist\":",10,0},
   {ACAMB,"\"acAmb\":",8,2}, {BLOWER,"\"blower\":",9,0}, {ACPRESS,"\"acPress\":",10,2},
-  {BODYV,"\"bodyV\":",8,2}, {FUELIN,"\"fuelIn\":",9,2}, {OILDIST,"\"oilDist\":",10,2},
+  {FUELIN,"\"fuelIn\":",9,2},
   {CTR,"\"ctR\":",6,2}, {WPRUN,"\"wpRun\":",8,0}, {WPW,"\"wpW\":",6,0}, {CELLW,"\"cellW\":",8,0},
   {ELEN,"\"eLen\":",7,2}, {EFF,"\"eFF\":",6,2}, {EOK,"\"eOK\":",6,2}, {LOOPS,"\"loops\":",8,2},
   {GEAR,"\"gear\":",7,0}, {TURN,"\"turn\":",7,0}, {SETSPD,"\"setSpd\":",9,0},
@@ -1145,7 +1149,7 @@ inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
   std::memcpy(p, "\"offTs\":", 8); p += 8; put_uint(p, boot_off_epoch); *p++ = ',';
   std::memcpy(p, "\"offN\":", 7); p += 7; put_uint(p, boot_off_n); *p++ = ',';
   // ALL live slots in one array (the app derives everything). Order: [0]=since-boot,
-  // [1]=lifetime, [2]=tank, [3]=oil, [4..6]=Trip A/B/C. History records are on-demand ("H");
+  // [1]=lifetime, [2]=tank, [3]=oil, [4..6]=Trip A/B/C, [7]=home-departure. On-demand ("H");
   // here we only send their COUNTS (rhN/ohN) so the UI knows whether data exists.
   std::memcpy(p, "\"slots\":[", 9); p += 9;
   put_slot(p, boot_slot);

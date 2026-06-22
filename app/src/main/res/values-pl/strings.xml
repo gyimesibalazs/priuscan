@@ -152,9 +152,7 @@
     <string name="f_brkP">Ciśnienie hamowania</string>
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
-    <string name="f_bodyV">12V (nadwozie)</string>
     <string name="f_fuelIn">Poziom paliwa</string>
-    <string name="f_oilDist">Od wymiany oleju</string>
     <string name="f_battFan">Wentylator chłodzenia akumulatora</string>
     <string name="f_dtcCur">Aktywne DTC</string>
     <string name="f_dtcHist">Zapisane DTC</string>
@@ -285,4 +283,5 @@
     <string name="dm_normal">Normalny</string>
     <string name="f_cruise">Tempomat</string>
     <string name="f_turn">Kierunkowskaz</string>
+    <string name="nvs_status">NVS: zapisy=%1$d, ostatnie wył.=%2$s</string>
 </resources>

@@ -151,9 +151,7 @@
     <string name="f_brkP">Pressão dos travões</string>
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
-    <string name="f_bodyV">12V (carroçaria)</string>
     <string name="f_fuelIn">Nível de combustível</string>
-    <string name="f_oilDist">Desde a mudança de óleo</string>
     <string name="f_battFan">Ventilador de refrigeração da bateria</string>
     <string name="f_dtcCur">DTC ativos</string>
     <string name="f_dtcHist">DTC armazenados</string>
@@ -285,4 +283,5 @@
     <string name="dm_normal">Normal</string>
     <string name="f_cruise">Piloto autom.</string>
     <string name="f_turn">Pisca</string>
+    <string name="nvs_status">NVS: grav.=%1$d, último desligar=%2$s</string>
 </resources>

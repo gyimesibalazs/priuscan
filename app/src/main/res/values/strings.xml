@@ -203,9 +203,7 @@
     <string name="f_brkP">Brake pressure</string>
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
-    <string name="f_bodyV">12V (body)</string>
     <string name="f_fuelIn">Fuel level</string>
-    <string name="f_oilDist">Since oil change</string>
     <string name="f_battFan">Battery cooling fan</string>
     <string name="f_dtcCur">Active DTCs</string>
     <string name="f_dtcHist">Stored DTCs</string>
@@ -286,4 +284,5 @@
     <string name="dm_normal">Normal</string>
     <string name="f_cruise">Cruise</string>
     <string name="f_turn">Turn signal</string>
+    <string name="nvs_status">NVS: saves=%1$d, last shutdown=%2$s</string>
 </resources>

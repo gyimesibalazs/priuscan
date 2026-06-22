@@ -1,4 +1,4 @@
-# Prius XW30 – FULL CAN/OBD monitor on the ESP32-C6 Super Mini
+# Prius XW30 – FULL CAN/OBD monitor on the ESP32-C3 (board: esp32-c3-devkitm-1)
 # ============================================================
 # Source: PriusChat "GenIII Prius 4-24-12" Torque CSV (usbseawolf2000),
 # every formula and byte offset comes FROM THERE -> verified.
@@ -13,7 +13,7 @@
 # Plus passive broadcast frames (door, lamp, cruise control) with no request.
 #
 # Wiring: OBD 6->CAN-H, 14->CAN-L, 4/5->GND (common!)
-# SN65HVD230: VCC->3V3, RS->GND, D->GPIO4, R->GPIO5. Power: head unit USB-C.
+# SN65HVD230: VCC->3V3, RS->GND, D(TX)->GPIO6, R(RX)->GPIO5. Power: head unit USB-C.
 # Output: JSON line over native USB (VID 303A PID 1001).
 
 esphome:
@@ -853,24 +853,11 @@ sensor:
     accuracy_decimals: 2
     lambda: 'float v=prius::get("acPress"); if(std::isnan(v))return {}; return v;'
   - platform: template
-    name: "Body 12V"
-    id: body_v
-    unit_of_measurement: "V"
-    device_class: voltage
-    accuracy_decimals: 1
-    lambda: 'float v=prius::get("bodyV"); if(std::isnan(v))return {}; return v;'
-  - platform: template
     name: "Fuel Input"
     id: fuel_in
     unit_of_measurement: "L"
     accuracy_decimals: 1
     lambda: 'float v=prius::get("fuelIn"); if(std::isnan(v))return {}; return v;'
-  - platform: template
-    name: "Distance Since Oil Change"
-    id: oil_dist
-    unit_of_measurement: "km"
-    accuracy_decimals: 0
-    lambda: 'float v=prius::get("oilDist"); if(std::isnan(v))return {}; return v;'
 
   # ---- passive broadcast values (opendbc Gen3 DBC) ----
   - platform: template

@@ -151,9 +151,7 @@
     <string name="f_brkP">Pressione freno</string>
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
-    <string name="f_bodyV">12V (carrozzeria)</string>
     <string name="f_fuelIn">Livello carburante</string>
-    <string name="f_oilDist">Dall\'ultimo cambio olio</string>
     <string name="f_battFan">Ventola raffreddamento batteria</string>
     <string name="f_dtcCur">DTC attivi</string>
     <string name="f_dtcHist">DTC memorizzati</string>
@@ -284,4 +282,5 @@
     <string name="dm_normal">Normale</string>
     <string name="f_cruise">Cruise</string>
     <string name="f_turn">Freccia</string>
+    <string name="nvs_status">NVS: salv.=%1$d, ultimo spegn.=%2$s</string>
 </resources>

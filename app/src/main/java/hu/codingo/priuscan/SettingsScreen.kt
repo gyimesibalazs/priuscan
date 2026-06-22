@@ -239,7 +239,7 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
             val tsTxt = if (offTs > 0)
                 java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(offTs * 1000))
             else "—"
-            Text("NVS: mentések=$offN, utolsó kikapcsolás=$tsTxt",
+            Text(stringResource(R.string.nvs_status, offN, tsTxt),
                 fontSize = 13.sp,
                 color = if (offN > 0) Color(0xFF7CFC00) else MaterialTheme.colorScheme.onSurfaceVariant)
         }
