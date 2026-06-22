@@ -79,7 +79,7 @@ class CanService : Service() {
         fun copySlot(dst: Int, src: Char) { if (dst in 3..5 && (src == 'B' || src == 'H')) sendCommand("C$dst$src") }
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 315                        // bundled firmware version (3.15)
+        const val BUNDLED_FW = 316                        // bundled firmware version (3.16)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")

@@ -115,7 +115,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 315;   // 3.15: copy since-boot/from-home trip into A/B/C (C<dst><src>)
+inline constexpr int FW_VERSION = 316;   // 3.16: smoother pack-capacity learn (DSOC 15%, EWMA 0.05, NiMH 0.93)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -735,8 +735,9 @@ inline float cap_smin = NAN, cap_smax = NAN;  // running SoC min/max in the wind
 inline float cap_q_lo = 0, cap_q_hi = 0;      // charge integral at smin / smax
 inline float charge_ah = 0;                   // running charge integral (Ah)
 
-inline constexpr float    CAP_ALPHA    = 0.25f;  // EWMA weight over spans
-inline constexpr float    CAP_MIN_DSOC = 8.0f;   // % SoC swing required for a span
+inline constexpr float    CAP_ALPHA    = 0.05f;  // EWMA weight over spans (slow: settles ~+-0.4 Ah)
+inline constexpr float    CAP_MIN_DSOC = 15.0f;  // % SoC swing required for a span (bigger = far less noise)
+inline constexpr float    CAP_CHG_EFF  = 0.93f;  // NiMH coulombic efficiency: charge spans overstate Ah
 inline constexpr float    CAP_MIN_AH   = 2.0f;   // plausibility window (reject glitches)
 inline constexpr float    CAP_MAX_AH   = 15.0f;
 
@@ -892,7 +893,10 @@ inline void compute_derived(uint32_t now_ms) {
     if (so > cap_smax) { cap_smax = so; cap_q_hi = charge_ah; }
     if (so < cap_smin) { cap_smin = so; cap_q_lo = charge_ah; }
     if (cap_smax - cap_smin >= CAP_MIN_DSOC) {
-      float span = fabsf(cap_q_hi - cap_q_lo) / ((cap_smax - cap_smin) / 100.0f);  // Ah
+      // charge span (max reached via charging -> charge_ah lower at the peak): apply the NiMH
+      // coulombic efficiency so the result is DISCHARGEABLE Ah, not the (larger) charge-in Ah.
+      float eff = (cap_q_hi < cap_q_lo) ? CAP_CHG_EFF : 1.0f;
+      float span = eff * fabsf(cap_q_hi - cap_q_lo) / ((cap_smax - cap_smin) / 100.0f);  // dischargeable Ah
       if (span >= CAP_MIN_AH && span <= CAP_MAX_AH) {
         cap_ah = (cap_n == 0) ? span : (1.0f-CAP_ALPHA)*cap_ah + CAP_ALPHA*span;
         cap_n++;
