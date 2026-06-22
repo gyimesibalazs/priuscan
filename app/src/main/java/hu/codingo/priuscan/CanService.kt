@@ -84,7 +84,7 @@ class CanService : Service() {
         fun mergeLastRefuel() = sendCommand("M")   // merge the last refuel-history entry into the tank
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 324                        // bundled firmware version (3.24)
+        const val BUNDLED_FW = 325                        // bundled firmware version (3.25)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
@@ -632,17 +632,14 @@ class CanService : Service() {
     private var extraCount = 0
 
     /**
-     * Instantaneous consumption from MAF: fuel g/s = MAF/14.7 (stoichiometric
-     * AFR), petrol ~745 g/l. While driving l/100km, when stopped/idling l/h.
-     * In EV mode (ICE off) 0.
+     * Instantaneous consumption: use the SAME firmware-calibrated injector fuel rate (l/h) as the
+     * dashboard, not a MAF approximation (which underestimated -> overlay read lower than the dash).
+     * While driving l/100km, when stopped/idling l/h.
      */
     private fun consumption(s: CanState): Double? {
-        val maf = s.d("maf") ?: return null
-        val rpm = s.d("rpm") ?: 0.0
-        if (rpm < 100) return 0.0
-        val lph = maf / 14.7 * 3600.0 / 745.0
+        val lph = s.d("fuel") ?: return null
         val spd = s.d("spd") ?: 0.0
-        return if (spd > 5) lph / spd * 100.0 else lph
+        return if (spd > 3) lph / spd * 100.0 else lph
     }
 
     private fun itemText(key: String, s: CanState): String? = when (key) {
@@ -660,7 +657,7 @@ class CanService : Service() {
 
     private fun itemUnit(key: String, s: CanState) = when (key) {
         "ct" -> "°C"; "soc" -> "%"; "rpm" -> "rpm"
-        "cons" -> if ((s.d("spd") ?: 0.0) > 5) "l/100km" else "l/h"
+        "cons" -> if ((s.d("spd") ?: 0.0) > 3) "l/100km" else "l/h"
         else -> ""
     }
 
