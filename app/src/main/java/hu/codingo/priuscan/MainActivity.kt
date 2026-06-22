@@ -471,14 +471,14 @@ private fun Header(s: CanState) {
     }
 }
 
-/** Power/charge meter (HSI-like): center-anchored bar from MG2 power. mg2Pow>0 = driving -> fills
- *  right (amber); mg2Pow<0 = MG2 generating = regen -> fills left (green). Length = kW intensity. */
+/** Hybrid System Indicator: center-anchored bar from the total drive power (0x247). hsi>0 = PWR
+ *  (driving, incl. engine-direct) -> fills right (amber); hsi<0 = CHG/regen -> fills left (green). */
 @Composable
 private fun HsiStrip(s: CanState) {
-    val pow = s.d("mg2Pow")?.toFloat() ?: return
-    val scale = 40f                                        // kW full-scale each side
-    val regen = ((-pow) / scale).coerceIn(0f, 1f)          // generating -> green left
-    val power = (pow / scale).coerceIn(0f, 1f)             // driving -> amber right
+    val pow = s.d("hsi")?.toFloat() ?: return
+    val scale = 35f                                        // kW full-scale each side
+    val regen = ((-pow) / scale).coerceIn(0f, 1f)          // CHG -> green left
+    val power = (pow / scale).coerceIn(0f, 1f)             // PWR -> amber right
     Canvas(Modifier.fillMaxWidth().height(12.dp).padding(top = 4.dp)) {
         val w = size.width; val h = size.height; val cx = w / 2f
         val r = CornerRadius(h / 2f, h / 2f)

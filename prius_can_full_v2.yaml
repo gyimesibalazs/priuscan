@@ -980,6 +980,8 @@ canbus:
         then: { lambda: 'prius::on_broadcast(0x49B, x);' }
       - can_id: 0x4A2   # brake pedal position (b3) -> brkPos
         then: { lambda: 'prius::on_broadcast(0x4A2, x);' }
+      - can_id: 0x247   # Hybrid System Indicator: total drive power (signed b1:b2, W) -> hsi
+        then: { lambda: 'prius::on_broadcast(0x247, x);' }
 
       # ---------- ISO-TP diag responses (all four ECUs) ----------
       - can_id: 0x7E8
