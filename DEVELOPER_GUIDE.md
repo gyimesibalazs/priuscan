@@ -137,9 +137,18 @@ Response ID = request ID + 8.
 |-------:|--------:|----------------|-----------------------------|
 | 0x7E0  | 0x7E8   | Engine         | 2101, 2149, 213C |
 | 0x7E2  | 0x7EA   | Hybrid         | 015B (std SoC), 2101, 2161/62/67/68, 2170/71/74/75/7D, 2181, 2187, 2192, 2195, 2198, 218E, 219B, 21E1, 21C1 |
-| 0x7C4  | 0x7CC   | A/C            | 2121, 2122, 2124, 2129, 2149, 213C, 214B, 2153 |
-| 0x7B0  | 0x7B8   | ABS/brake      | 2103, 2107, 2147 |
-| 0x7C0  | 0x7C8   | Body           | 2113, 2129, 2141 |
+| 0x7C4  | 0x7CC   | A/C            | 2121, 2124, 2129, 2149, 213C, 214B, 2153 |
+| 0x7B0  | 0x7B8   | ABS/brake      | 2107 (brake pressure) |
+
+The polling cadence is **event-driven** (one request on the bus at a time, see
+ISO-TP below) and each PID carries a `divider` (run every 1/3/10 cycles).
+
+**Removed since v3.9:** the **body ECU (0x7C0/0x7C8) is gone entirely** (v3.18 —
+its `bodyV`/`oilDist` were unused). The ABS **wheel-speed** poll (7B0 2103) and
+the **G-sensor** poll (7B0 2147) were dropped (v3.9): wheel speeds now come from
+the **0x0AA broadcast**, the G/steer signals from passive broadcasts (§9). The
+2147 response decoder is kept only for the `raw0..raw7` calibration dump. The
+A/C ambient poll (7C4 2122) was dropped (v3.10).
 
 Passive broadcast frames (no request):
 * **0x620** — doors (`byte5`) **+ raw ambient light level** (`bytes[2:3]`, BE).
@@ -152,7 +161,17 @@ Passive broadcast frames (no request):
 * **0x622** — exterior lights, `byte3` bitmask (decoded from a labelled light test):
   `0x10` position, `0x20` low beam, `0x40` high beam, `0x08` front fog, `0x04` rear fog.
   → `lights` key; shown on the Driving tab.
-* **0x5C8** — cruise main switch (byte2 bit4) — *tentative, verify in dump*.
+* **0x0AA** — ABS wheel speeds (replaces the 7B0 2103 poll, v3.9): four `u16` BE,
+  `×0.01 − 67.67` km/h in order **FR, FL, RR, RL**. `wDif` (front L/R %) derived from them.
+  → `wFL/wFR/wRL/wRR/wDif`.
+* **0x49B** — drive mode, `byte4` (v3.13, confirmed with an EV/ECO/PWR switch test):
+  `bit1 (0x02)` EV, `bit3 (0x08)` ECO, `bit2 (0x04)` PWR (EV is independent of the
+  ECO/PWR selector). → `dmode` (0 normal / 1 eco / 2 pwr) + `ev` (0/1).
+* **0x399** — cruise **active** (set/holding), `byte1 bit1 (0x02)` (v3.14, found
+  empirically: on only when speed is held with the engine working, not while coasting
+  or on driver pedal). Replaces the unconfirmed 0x5C8. → `cruise` (in the YAML `extra`).
+  The cruise **set-speed** is *not* on this car's bus (0x1D2/0x1D3 absent); the 0x1D3
+  decoder (`setSpd`) is kept but stays `null`.
 
 ### JSON output schema
 One object per line on stdout (USB serial), ~2 Hz. All numeric values are
@@ -165,8 +184,10 @@ Hybrid:   soc mg1t mg1r mg1q mg2t mg2r mg2q inv1 inv2 btu btl vl vh invct invwp 
 Battery:  hvA hvdis hvchg bmin bmax blkD weakB maxR tHot hvAir tb1 tb2 tb3
           b01..b14 (individual block voltages)
 A/C:      cabin setT comp evap solar acAmb blower acPress
-ABS:      wFL wFR wRL wRR wDif gLat gFwd steer brkP
-Body:     bodyV fuelIn oilDist odo gasB lights (0x622 bitmask) ambL (0x620 light level)
+ABS:      wFL wFR wRL wRR wDif (from 0x0AA) gLat gFwd steer brkP
+Drive:    gear turn setSpd (null on this car) dmode (0=norm/1=eco/2=pwr) ev (0/1)
+Fuel/odo: fuelIn (%) fuelL (calibrated litres) odo (km) gasB (pedal %)
+          lights (0x622 bitmask) ambL (0x620 light level)
 Fans/ECU: battFan ecuMode fanMode dtcCur dtcHist
 Derived:  ctR (coolant rate °C/min) fuel (l/h) wpW (water-pump warn 0/1/2)
           cellW (HV cell warn 0/1/2)
@@ -219,19 +240,33 @@ byte[5] / `0x626` byte[2]).
 * **capAh / capKwh** (self-learned capacity): coulomb counting over the SoC
   **peak↔trough** swing (a fixed anchor never moves 10 % on the Prius's narrow
   oscillating SoC band — the running min/max + the charge integral at each does).
-  kWh uses the averaged pack voltage `vl`. Estimate, improves over drives; NiMH/Li
-  charge-efficiency biases it. Persisted in NVS.
+  kWh uses the averaged pack voltage `vl`. Persisted in NVS. **Smoothed in v3.16**:
+  `CAP_MIN_DSOC 8→15 %` (bigger swing required → far less noise), `CAP_ALPHA 0.25→0.05`
+  (slower EWMA, settles ~±0.4 Ah), and a `CAP_CHG_EFF = 0.93` NiMH **coulombic
+  efficiency** applied to charge spans so the result is *dischargeable* Ah.
 * **Trip slots** (unified `TripSlot`, see the schema above): one per-tick delta
   (`dist`/`ev`/`fuel`/`move_s`/regen energies) is added to **every** slot; they differ
-  only in *when* they reset. Moving time counts stops ≤180 s (and a just-started,
-  still-standing car does **not** count until it first moves — `stop_s` starts high).
-  Persisted in NVS (power-off / refuel / reset) and restored first at boot, behind a
-  load guard. The since-boot slot is memory-only (resets each power-on).
-* **Refuel** (`fuelTs` = `slot[1].epoch`): `fuelIn` jump while parked → push `slot[1]`
-  into `rhist`, reset it, stamp `cur_epoch` + odometer. Host-time back-correction as
-  before. Detection is gated on `persist_loaded` (the NVS load done → `fuel_ref` is the
-  restored baseline, or 100% for an empty flash), which avoids the boot fuelIn-sentinel
-  false refuel without needing a fixed warm-up delay.
+  only in *when* they reset. **Distance is the real odometer delta** (`odo` from 0x611,
+  drift-free) for any slot with a stamped start odo — the speed integral only fills it
+  until the odo is known (v3.12, fixes the ~0.4 % speed-integral drift). Moving time
+  counts stops ≤180 s (and a just-started, still-standing car does **not** count until it
+  first moves — `stop_s` starts high). **Regen ratio** (`r`) accumulates the kinetic
+  energy shed and the energy recovered into the pack **only while the brake pedal is
+  pressed** (`brkP > 0.55`); v3.11 dropped the old `hvA < −5` trigger (which fired while
+  coasting with the engine charging — not regen — and inflated the ratio >100 %) and
+  clamps the ratio to 100 %. Persisted in NVS (power-off / refuel / reset) and restored
+  first at boot, behind a load guard. The since-boot slot is memory-only (resets each
+  power-on). Slots can be **copied** from since-boot/from-home into A/B/C (`C` command, v3.15).
+* **Refuel** (`fuelTs` = `slot[1].epoch`): **plateau-based since v3.19** — a slow
+  fill rises through many `REFUEL_DELTA` (12 %) steps, so the firmware tracks the peak
+  while `fuelIn` keeps rising and records **exactly one event** once the level stops
+  rising for `REFUEL_STABLE_MS` (8 s). This fixes multi-counting a slow fill while the
+  ESP stays powered (the ESP-off case is already plateaued at boot → still one event).
+  On the event: push `slot[1]` into `rhist`, reset it, stamp `cur_epoch` + odometer
+  (host-time back-correction as before). Detection is gated on `persist_loaded`
+  (`fuel_ref` = the restored baseline, or 100 % for an empty flash), avoiding the boot
+  fuelIn-sentinel false refuel.
+* **fuelL** (calibrated tank litres, v3.20) — see the tank-calibration note in §6.
 
 ### Serial command protocol (app/PC → ESP)
 The firmware reads `\n`-terminated text commands from the USB-Serial/JTAG console
@@ -244,6 +279,11 @@ The firmware reads `\n`-terminated text commands from the USB-Serial/JTAG consol
 | `D2\n` | CAN dump on, **unknown frames only** — every ID we don't already decode (`dump_is_known`), deduped. One discovery capture surfaces all still-unknown signals (lights/turn/brake/L-R doors…). |
 | `D0\n` | CAN dump off |
 | `O<size>\n` | begin serial OTA of a `size`-byte image (see §10) |
+| `F<factor>\n` | fuel-consumption correction (× 0.5–2.0), persisted in `fuel_corr_g` |
+| `R<2..6>\n` | reset trip slot *i* (2=oil 3..5=A/B/C 6=home); oil push to `ohist` first |
+| `H\n` / `HO\n` | dump the refuel / oil-change history array (on demand) |
+| `B\n` | dump **per-block internal resistance** — `{"rblk":[…14…],"rn":N}` (v3.17; not in the 2 Hz line) |
+| `C<dst><src>\n` | copy a live trip into slot *dst* (3=A 4=B 5=C) from *src* (`B`=since-boot, `H`=from-home) (v3.15) |
 
 CAN dump emits `#XXX [len] BB BB..\n` lines for frames in `[lo,hi]`, **deduped**
 (only on change) → opening a door makes the relevant frame pop out (how the 0x620
@@ -262,7 +302,7 @@ Package `hu.codingo.priuscan`, minSdk 26, Kotlin + Jetpack Compose. ~1700 LOC.
 
 | File | Responsibility |
 |------|----------------|
-| `MainActivity.kt` | Compose main screen: header (key gauges), grouped sensor list, 14 HV block list, Settings navigation. |
+| `MainActivity.kt` | Compose main screen: redesigned **dashboard top** (see below), grouped sensor list, 14 HV block list + per-block internal-resistance section, trip switcher, Settings navigation. |
 | `CanService.kt` | Foreground service (START_STICKY). Owns the USB serial reader with auto-reconnect; builds the status-bar notifications + the draggable status overlay; raises warnings (sound + overlay); drives the door overlay; relays state to `HaPusher`. |
 | `SerialLink.kt` | usb-serial-for-android wrapper; CDC-ACM driver registration for the C3 (0x303A/0x1003) and C6 (0x303A/0x1001) native USB; line reader. |
 | `CanState.kt` | `Fields` object (display groups + units) and `CanState` (parses one JSON line; `d(key)`/`i(key)` accessors; `door`, `gear`, `coolant`, `wpWarn`, `cellWarn`). |
@@ -272,6 +312,22 @@ Package `hu.codingo.priuscan`, minSdk 26, Kotlin + Jetpack Compose. ~1700 LOC.
 | `SettingsScreen.kt` | Compose settings: status-bar item checkboxes (ct/soc/rpm/cons), MQTT host/port/user/pass/prefix, push interval. |
 | `Prefs.kt` | SharedPreferences wrapper (incl. saved status-overlay x/y). |
 | `BootReceiver.kt` | Starts the service on `BOOT_COMPLETED`. |
+
+### Dashboard top (redesign)
+The main screen now leads with a compact dashboard:
+* big **coolant temperature** + a **status-icon strip** that shows an icon **only when
+  the state is active** (exterior lights, cruise, brake — a brake-pedal PNG, distinguishing
+  physical brake from regen-only —, EV, ECO/PWR badges, seatbelt). Icons are mdi vector
+  drawables; the strip wraps to a second row (`FlowRow`).
+* two **`Canvas`-drawn gauges**: a **tank** gauge (`fuelIn` %, with the calibrated
+  **`fuelL` litres** under the %) and a **SoC battery** gauge (mapped over the ~35–70 %
+  operating band, with a charge arrow when `hvA < 0`).
+* a justified **ODO row**: gear · speed · rpm · odometer · consumption (replaces the old
+  separate odo/fuelIn rows).
+* the **trip detail** line reads `X km / Y EV km (Z%)`, and the per-block
+  internal-resistance section periodically pulls fresh data (`CanService.fetchBlockR()`
+  every 5 s → the `B` command, parses the `rblk` reply). Trip A/B/C can be filled from
+  the since-boot / from-home trip via `CanService.copySlot()` (the `C` command).
 
 ### Status overlay (and why not the notification bar)
 The head-unit ROM (K706, Android 10) does **not** render third-party
@@ -336,6 +392,20 @@ Use **debug**, not release — no signing key needed, no minification (which can
 trip up Paho). The APK is ~17 MB (Filament was removed; the door overlay is
 pre-rendered PNGs now).
 
+> **WSL gotcha:** if `local.properties` points `sdk.dir` at a **Windows** SDK path,
+> the Gradle build **silently fails** (no APK) and the *previous* APK gets installed —
+> always check the APK timestamp. Point `sdk.dir` at the **Linux** SDK
+> (`$HOME/Android/Sdk`).
+
+### Helper scripts (`tools/`)
+* `install-app.sh [--no-build] [IP]` — build the debug APK with the **Linux** SDK and
+  install it on the head unit over **network adb** (port `:9876`).
+* `pull-logs.sh [IP]` — download new `.jsonl`/`.gz` logs + CAN dumps into `carlogs/`
+  (only what's missing locally or larger on the device, e.g. the growing daily JSONL).
+* `priuscan-device.sh` — shared helper that finds the head unit on the (dynamic) hotspot
+  IP: a fast `/dev/tcp` probe first, then `adb connect` only on an open port.
+* `serial_ota.py` — PC-side serial-OTA tester (§10).
+
 ---
 
 ## 6. Calibration status & open tasks
@@ -346,15 +416,23 @@ pre-rendered PNGs now).
 * Battery: blocks 15–16 V, delta 0.05–0.37 V (healthy), temps 32–35 °C,
   weakB rotates (no persistent weak block).
 * A/C: cabin, compressor, evaporator, A/C power, ambient.
-* ABS: four wheel speeds, steering angle, brake pressure.
+* ABS: four wheel speeds (now from the **0x0AA** broadcast), steering angle, brake pressure.
 * Doors: 0x620 byte5 mapping verified by dump.
+* Drive mode (`dmode`/`ev`, 0x49B) and cruise **active** (`cruise`, 0x399) — confirmed
+  with switch tests.
+* **Trip distance** now drift-free (odometer-delta, v3.12); **regen ratio** brake-pedal-only
+  and ≤100 % (v3.11); **pack-capacity** learning smoothed (v3.16); **per-block internal
+  resistance** (v3.17) reads sane (~few mΩ) but the absolute level still wants a known-good
+  reference (it tracks *relative* change reliably).
+* **Tank litres** (`fuelL`) calibrated — see the tank-calibration note below.
 
 ### Open
-1. **G-sensor (`gLat`/`gFwd`)** — only swings between the two extremes
-   (−25.11/+24.91), never near 0. Formula matches the CSV and `steer`
-   (same response, bytes 3–4) works, so the payload indexing is right but the
-   G bytes read wrong. **Use `raw0..raw7` on the web UI** (temporarily re-enabled
-   Wi-Fi) to find the real byte, then fix `case 0x47` in `prius_parse.h`.
+1. **G-sensor (`gLat`/`gFwd`)** — the saturating 7B0 2147 poll was **abandoned**;
+   the values now come from passive broadcasts: `gLat` from **0x4A1** (signed16 BE),
+   `gFwd` from **0x320** byte4 (stored as `154 − b4`). Both are emitted as **raw counts**,
+   **not yet calibrated** to m/s². A controlled test is still needed: a known
+   level-ground drive (steady accel/braking + a known incline) to fit centre + scale.
+   The old 2147 decoder is kept only for `raw0..raw7`.
 2. **Rear doors L/R** — now split (bit2 0x04 = rear-L, bit3 0x08 = rear-R, a
    best guess). Confirm L/R by opening one rear door; swap the two
    `publish_state` lines in the 0x620 handler if reversed.
@@ -372,6 +450,24 @@ pre-rendered PNGs now).
    see §8). The learn thresholds (`LRN_K1/K2`, `LRN_ALPHA`, `LRN_LOAD_A`) and the
    provisional under-load delta thresholds are **estimates** — tune them from a
    real driving log (the app's local JSONL store, §4) before trusting absolute levels.
+7. **Cruise set-speed** — only cruise **active** (0x399) is decoded; the **set-speed
+   value** (`setSpd`, decoded from 0x1D2/0x1D3 on other Gen3 segments) is **absent on
+   this car's bus**, so the value can at best be *inferred* (e.g. held vehicle speed).
+8. **Daily flash health/trip ring** (v3.17, NVS namespace `priusday`) — implemented
+   (one record/day, 8-year ring, written on shutdown/quiet detection, boot seeds the
+   per-block-R display). **Needs on-device verification** that records accumulate and
+   roll over correctly across real power cycles.
+
+### Tank-litre calibration (`fuelL`, v3.20)
+The gauge `fuelIn` (0x612 byte5, 0..100 %) is non-linear at the ends, so litres are
+derived with three constants (`prius_parse.h`): `TANK_FULL = 47` L (safety assumption),
+`FUEL_HEAD = 3.14` L (the top plateau where the gauge stays pinned at 100 %),
+`FUEL_MEAS = 35.51` L (the span the gauge actually measures 0..100 %), and
+`FUEL_BOTTOM = TANK_FULL − FUEL_HEAD − FUEL_MEAS = 8.35` L (reserve below 0 %). On a fresh
+tank the firmware **assumes full and counts down** (`fuel_since_refuel`) until the gauge
+first drops below 100 % (`tank_known` — the reference point); thereafter
+`fuelL = FUEL_BOTTOM + fuelIn/100 × FUEL_MEAS`. **Cross-checked against a measured 39.42 L
+refuel.** The app shows `fuelL` (L) under the % on the tank gauge.
 
 ### Deliberately NOT done (safety / not feasible)
 * SRS airbag DTCs — separate diag protocol, Techstream territory.
@@ -415,11 +511,35 @@ how to assess the NiMH pack purely from the passively logged signals
 (`learn_update`/`learn_verdict`): per-block Z-score vs the pack mean, learned via
 a per-block EWMA (adaptive data-relative baseline), updated **only under load**
 (`|hvA|>30 A`) with a maturity gate. Outputs `cwL`/`wblk`/`wz` and feeds `cellW`
-as `max(fixed, learned)`. State (`lz[14]+lz_n`) persists in an ESPHome
-`restore_value` global (≤1 flash write / 5 min, only while driving). It detects
+as `max(fixed, learned)`. State (`lz[14]+lz_n`) persists in the **NVS blob** (`prius_persist.h`, single source
+of truth — the redundant `restore_value` globals were dropped in v3.19). It detects
 **relative asymmetry/change, not absolute SOH** — absolute SOH/RUL needs a
 known-good reference. Validate the learned baseline against the app's local JSONL
 log (§4) before tuning the thresholds.
+
+**Per-block internal resistance (v3.17).** A **trigger-event** method (`rblk_event`):
+on each fresh complete block-voltage set, if the pack current stepped `|dI| > R_DI`
+(40 A) since the previous set, one `R_i = −dV_i/dI` sample per block is pushed into a
+**rolling window** (`R_WIN = 60`); the published value is the window **median** (robust
+to the temp/SoC floor). Validated on real logs: N=60 / |dI|>40 A gives ~±0.4 mΩ
+within-day single-block scatter, well below the mΩ-per-month aging signal. The window
+is **RAM-only** (refills in 1–2 min of varied driving); the latest medians ride along in
+the daily flash record and **seed the display at boot**. It is **slow-changing → emitted
+on demand** (`B` command → `{"rblk":[…],"rn":N}`) and auto every ~15 events — **never in
+the 2 Hz line**.
+
+**Pack-capacity smoothing (v3.16).** `CAP_MIN_DSOC` 8→15 % (bigger swing → far less
+noise), `CAP_ALPHA` 0.25→0.05 (slower EWMA), and a `CAP_CHG_EFF = 0.93` NiMH coulombic
+efficiency on charge spans (so the result is *dischargeable* Ah, not the larger charge-in Ah).
+
+**Daily flash health/trip ring (v3.17).** A **separate NVS namespace `priusday`** holds a
+~8-year ring (`DAILY_N = 2920`, one `DailyRec` per day) that is **independent of the
+trip-slot blob** (no magic bump / data loss). One record accumulates across the day's
+drives — distance/EV/fuel/moving-time and per-drive battery throughput (`drive_batt_in/out`)
+are **delta-folded** (`boot_folded`/`batt_*_folded`, fixed in v3.18 so a save on each
+ignition-off doesn't double-count the since-boot totals), while health fields (per-block R,
+TB1..3, capacity, odo) store the latest. It is written on the **shutdown/quiet detection**
+(0x1C4 silent > 0.8 s) and at boot it seeds the per-block-R display from the most recent record.
 
 **Key caveat:** nearly all strong statistical methods were validated on Li-ion,
 not NiMH — the math transfers but the numeric thresholds must be re-tuned for
@@ -441,6 +561,13 @@ Decoded passively (no poll) via the app-controlled CAN dump (§3). Decoders live
 | `0x626` | 2 (`0x30`) | rear door (mirror) | changes in lockstep with `0x620` b5 |
 | `0x63B`,`0x619` | b5..7 | trip/odo fine counters | fast-rising while moving |
 | `0x610` | 2 | speed-like | 0 parked, ~100 cruising (redundant with the 0x0B4 broadcast) |
+| `0x0AA` | 0..7 (4×u16 BE) | **ABS wheel speeds** | `×0.01 − 67.67` km/h, order FR,FL,RR,RL — replaces the 7B0 2103 poll (v3.9) |
+| `0x49B` | 4 | **drive mode** | bit1(0x02)=EV, bit3(0x08)=ECO, bit2(0x04)=PWR — switch-test confirmed (v3.13) |
+| `0x399` | 1 | **cruise active** | bit1(0x02), set/holding only; empirically confirmed, replaced 0x5C8 (v3.14) |
+
+> **Body ECU removed (v3.18):** the 0x7C0 polls / 0x7C8 responses (with `bodyV` +
+> `oilDist`) were dropped — they were never used. The diag ECUs are now Engine (7E0),
+> Hybrid (7E2), A/C (7C4), ABS (7B0) only.
 
 `0x5A4` (the "gas gauge" some sources cite) is **NOT present** on this car's powertrain
 segment — fuel had to come from the instrument-cluster `0x612`. The car's **`solar`**
