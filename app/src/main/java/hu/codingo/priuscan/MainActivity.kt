@@ -58,10 +58,26 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -152,9 +168,7 @@ private fun tabColumn(content: androidx.compose.foundation.lazy.LazyListScope.()
 /** Tab 1: glance dashboard - header + odometer + fuel level + the trip switcher. */
 @Composable
 private fun DashboardTab(state: CanState) = tabColumn {
-    item { Header(state) }
-    item { SensorRow(stringResource(R.string.f_odo), format(state.d("odo"), 0, "km")) }
-    item { SensorRow(stringResource(R.string.f_fuelIn), format(state.d("fuelIn"), 0, "%")) }
+    item { Header(state) }   // odo + fuel level now live in the header (tank gauge + ODO row)
     item { TripSection() }
 }
 
@@ -288,8 +302,8 @@ private fun TripSection() {
             return@Column
         }
         val s = slots.getOrNull(def.idx) ?: TripSlot.EMPTY
-        SensorRow(stringResource(R.string.r_dist), "%.1f km".format(s.dist))
-        SensorRow(stringResource(R.string.f_tEv), "%.1f km".format(s.ev))
+        val evPct = if (s.dist > 0.1) (s.ev / s.dist * 100).toInt() else 0
+        SensorRow(stringResource(R.string.r_dist), "%.0f km / %.0f EV km (%d%%)".format(s.dist, s.ev, evPct))
         SensorRow(stringResource(R.string.r_fuelused), "%.2f L".format(s.fuel))
         SensorRow(stringResource(R.string.r_avgcons), "%.1f l/100km".format(s.avgCons))
         SensorRow(stringResource(R.string.r_avgspeed), "%.0f km/h".format(s.avgKmh))
@@ -367,30 +381,41 @@ private fun GpsTab(loc: Location?) = tabColumn {
     item { SensorRow(stringResource(R.string.f_gacc), loc?.let { "%.0f m".format(it.accuracy) } ?: "–") }
 }
 
+// ---- dashboard top palette ----
+private val CGreen = Color(0xFF66BB6A); private val CYellow = Color(0xFFFFCA28)
+private val CBlue = Color(0xFF50AAFF); private val CAmber = Color(0xFFFFA028)
+private val COrange = Color(0xFFFF8C1E); private val CRed = Color(0xFFE53935)
+private val CGaugeFrame = Color(0xFF5F5F5F); private val CIconDim = Color(0xFFAFAFAF)
+
+private val PctStyle = TextStyle(
+    color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+    shadow = Shadow(Color.Black, blurRadius = 10f),
+)
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Header(s: CanState) {
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-        Row(verticalAlignment = Alignment.Bottom) {
+        Row(Modifier.fillMaxWidth().height(132.dp), verticalAlignment = Alignment.CenterVertically) {
+            // coolant temperature, narrowed horizontally, with a small degree mark
             Text(
-                s.coolant?.let { "${it.toInt()}°" } ?: "–",
-                fontSize = 72.sp, fontWeight = FontWeight.Bold,
-                color = coolantColor(s.coolant),
+                s.coolant?.let { "${it.toInt()}" } ?: "–",
+                fontSize = 100.sp, fontWeight = FontWeight.Bold, color = coolantColor(s.coolant),
+                modifier = Modifier.graphicsLayer(scaleX = 0.78f),
             )
-            Spacer(Modifier.size(16.dp))
-            Column(Modifier.padding(bottom = 12.dp)) {
-                Text(stringResource(R.string.coolant_caption), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                val gear = if (s.gear in 0..4) CanState.GEARS[s.gear] else "–"
-                val line = buildString {
-                    append("$gear  •  ${s.d("rpm")?.toInt() ?: "–"} rpm  •  SoC ${s.d("soc")?.toInt() ?: "–"}%")
-                    // consumption: l/100km while moving, l/h when stationary
-                    s.d("fuel")?.let { lh ->
-                        val sp = s.d("spd") ?: 0.0
-                        if (sp > 3.0) append("  •  %.1f l/100km".format(lh / sp * 100.0))
-                        else append("  •  %.1f l/h".format(lh))
-                    }
-                }
-                Text(line, color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp)
+            Text("°", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = coolantColor(s.coolant),
+                modifier = Modifier.align(Alignment.Top).padding(top = 6.dp))
+            Spacer(Modifier.width(20.dp))
+            // middle: status icons (wraps to a 2nd row) + the justified ODO row
+            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
+                StatusIcons(s)
+                Spacer(Modifier.height(10.dp))
+                OdoRow(s)
             }
+            Spacer(Modifier.width(24.dp))
+            FuelGauge(s)
+            Spacer(Modifier.width(8.dp))
+            BatteryGauge(s)
         }
         if (s.wpWarn > 0 || s.cellWarn > 0) {
             // stringResource must be resolved in composable scope, before buildString
@@ -407,6 +432,127 @@ private fun Header(s: CanState) {
             )
         }
     }
+}
+
+@Composable private fun Ic(res: Int, tint: Color, w: Int = 30) =
+    Image(painterResource(res), null, Modifier.size(w.dp), colorFilter = ColorFilter.tint(tint))
+
+@Composable private fun ModeBadge(text: String, color: Color) {
+    Box(Modifier.border(2.dp, color, RoundedCornerShape(5.dp)).padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center) {
+        Text(text, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable private fun EvIcon(tint: Color) {
+    Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+        Image(painterResource(R.drawable.ic_car_ev), null, Modifier.size(32.dp), colorFilter = ColorFilter.tint(tint))
+        Text("EV", fontSize = 8.sp, fontWeight = FontWeight.Bold,
+            color = if (tint == CGreen) Color.White else Color.Black)
+    }
+}
+
+/** Status-icon strip: only active states show; wraps to a 2nd row when too many. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StatusIcons(s: CanState) {
+    val lt = s.i("lights") ?: 0
+    val dmode = s.i("dmode") ?: 0
+    val evOn = (s.i("ev") ?: 0) != 0
+    val spd = s.d("spd") ?: 0.0
+    val rpm = s.d("rpm") ?: 0.0
+    val brk = s.d("brkP") ?: 0.0
+    val hvA = s.d("hvA") ?: 0.0
+    val cruise = (s.i("cruise") ?: 0) != 0
+    val belt = (s.i("belt") ?: 0) != 0
+    val phys = brk > 0.55                          // physical brake (pedal pressed)
+    val regen = !phys && hvA < -5.0 && spd > 2     // regen only (charging, pedal at rest, moving)
+    val evGhost = !evOn && spd > 2 && rpm < 100     // electric-only drive without EV mode
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (lt and 0x10 != 0) Ic(R.drawable.ic_light_position, CGreen)
+        if (lt and 0x20 != 0) Ic(R.drawable.ic_light_low, CGreen)
+        if (lt and 0x40 != 0) Ic(R.drawable.ic_light_high, CBlue)
+        if (lt and 0x08 != 0) Ic(R.drawable.ic_light_fog, CGreen)
+        if (lt and 0x04 != 0) Ic(R.drawable.ic_light_fog, CAmber)
+        if (cruise) Ic(R.drawable.ic_cruise, CGreen)
+        if (phys) Ic(R.drawable.ic_brake_pedal, CYellow, 32) else if (regen) Ic(R.drawable.ic_brake_pedal, CGreen, 32)
+        if (evOn) EvIcon(CGreen) else if (evGhost) EvIcon(CYellow)
+        if (dmode == 1) ModeBadge("ECO", CGreen)
+        if (dmode == 2) ModeBadge("PWR", COrange)
+        if (belt) Ic(R.drawable.ic_seatbelt, CRed)
+    }
+}
+
+/** Justified (space-between) status line: gear · speed · rpm · odometer · consumption. */
+@Composable
+private fun OdoRow(s: CanState) {
+    val gear = if (s.gear in 0..4) CanState.GEARS[s.gear] else "–"
+    val spd = s.d("spd")?.let { "${it.toInt()} km/h" } ?: "– km/h"
+    val rpm = "${s.d("rpm")?.toInt() ?: "–"} rpm"
+    val odo = s.d("odo")?.let { "%,d km".format(it.toLong()) } ?: "– km"
+    val cons = s.d("fuel")?.let { lh ->
+        val sp = s.d("spd") ?: 0.0
+        if (sp > 3.0) "%.1f l/100km".format(lh / sp * 100.0) else "%.1f l/h".format(lh)
+    } ?: "– l/100km"
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        listOf(gear, spd, rpm, odo, cons).forEach {
+            Text(it, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
+        }
+    }
+}
+
+@Composable
+private fun FuelGauge(s: CanState) {
+    val frac = ((s.d("fuelIn") ?: 0.0).toFloat() / 100f).coerceIn(0f, 1f)
+    Box(Modifier.width(60.dp).height(128.dp)) {
+        Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CYellow, battery = false) }
+        Text(s.d("fuelIn")?.let { "${it.toInt()}%" } ?: "–",
+            style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))
+        Row(Modifier.align(Alignment.TopCenter).padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("←", color = CIconDim, fontSize = 16.sp)
+            Image(painterResource(R.drawable.ic_fuel), null, Modifier.size(18.dp), colorFilter = ColorFilter.tint(CIconDim))
+        }
+    }
+}
+
+@Composable
+private fun BatteryGauge(s: CanState) {
+    val soc = (s.d("soc") ?: 0.0).toFloat()
+    val frac = ((soc - 35f) / (70f - 35f)).coerceIn(0f, 1f)   // operating band ~35..70%
+    val hvA = s.d("hvA") ?: 0.0
+    Box(Modifier.width(60.dp).height(128.dp)) {
+        Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CGreen, battery = true) }
+        Text(s.d("soc")?.let { "${it.toInt()}%" } ?: "–",
+            style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))
+        val dir = if (hvA < -2) "▲" else if (hvA > 2) "▼" else ""   // charge direction
+        if (dir.isNotEmpty())
+            Text(dir, color = Color.White, fontSize = 16.sp,
+                style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 8f)),
+                modifier = Modifier.align(BiasAlignment(0f, 0.45f)))
+    }
+}
+
+/** Rounded gauge container + bottom-up fill; battery adds two terminal bumps on top. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.gaugeShape(frac: Float, fill: Color, battery: Boolean) {
+    val w = size.width; val h = size.height; val r = 14.dp.toPx()
+    val bump = if (battery) 7.dp.toPx() else 0f
+    if (battery) {
+        val bw = w * 0.22f
+        drawRoundRect(CGaugeFrame, topLeft = Offset(w * 0.15f, 0f), size = Size(bw, bump + 2f), cornerRadius = CornerRadius(3f))
+        drawRoundRect(CGaugeFrame, topLeft = Offset(w * 0.63f, 0f), size = Size(bw, bump + 2f), cornerRadius = CornerRadius(3f))
+    }
+    drawRoundRect(CGaugeFrame, topLeft = Offset(0f, bump), size = Size(w, h - bump),
+        cornerRadius = CornerRadius(r), style = Stroke(4.dp.toPx()))
+    val pad = 7.dp.toPx()
+    val innerTop = bump + pad; val innerBot = h - pad
+    val fillH = (innerBot - innerTop) * frac.coerceIn(0f, 1f)
+    if (fillH > 0f)
+        drawRoundRect(fill, topLeft = Offset(pad, innerBot - fillH), size = Size(w - 2 * pad, fillH),
+            cornerRadius = CornerRadius(10f))
 }
 
 @Composable
