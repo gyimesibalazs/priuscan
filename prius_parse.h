@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 335;   // 3.35: HSI zone-banded decode (d0 low nibble = band; ECO 0-100, PWR -150, CHG -100)
+inline constexpr int FW_VERSION = 336;   // 3.36: MG2R/MG2Q/MG1R/INV1/VL/VH poll->broadcast (0x245/0x499/0x49A/0x49D)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -322,8 +322,8 @@ inline const PollItem POLL[] = {
   {0x7E2, 0x21, 0x92, 3}, {0x7E2, 0x21, 0x81, 3},
   {0x7E2, 0x21, 0x87, 3}, {0x7E2, 0x21, 0x95, 3},
   {0x7E2, 0x21, 0x61, 3}, {0x7E2, 0x21, 0x62, 3},
-  {0x7E2, 0x21, 0x67, 3}, {0x7E2, 0x21, 0x68, 3},
-  {0x7E2, 0x21, 0x70, 3}, {0x7E2, 0x21, 0x71, 3},
+  {0x7E2, 0x21, 0x67, 3},                            // MG1Q (MG2Q@0x68 + INV1@0x70 moved to broadcast)
+  {0x7E2, 0x21, 0x71, 3},                            // INV2
   {0x7E2, 0x21, 0x74, 3}, {0x7E2, 0x21, 0x75, 3}, {0x7E2, 0x21, 0x7D, 3},
   {0x7C4, 0x21, 0x21, 3}, {0x7C4, 0x21, 0x29, 3}, {0x7C4, 0x21, 0x49, 3},
   {0x7C4, 0x21, 0x4B, 3}, {0x7C4, 0x21, 0x24, 3},
@@ -389,16 +389,14 @@ inline void parse_payload(uint16_t resp_id, const uint8_t *p, int n) {
         V[PEDAL] = d[12] * 20.0f / 51.0f;
         V[VBAT] = u16(d, 19) / 1000.0f;
         return;
-      case 0x61: if (dn>=5){ V[MG1T]=(float)d[0]-40; V[MG1R]=u16(d,3)-32768;} return;
-      case 0x62: if (dn>=5){ V[MG2T]=(float)d[0]-40; V[MG2R]=u16(d,3)-32768;} return;
+      case 0x61: if (dn>=1) V[MG1T]=(float)d[0]-40; return;   // MG1R -> 0x499 broadcast
+      case 0x62: if (dn>=1) V[MG2T]=(float)d[0]-40; return;   // MG2R -> 0x245 broadcast
       case 0x67: if (dn>=2) V[MG1Q] = u16(d,0)/8.0f-4096; return;
-      case 0x68: if (dn>=2) V[MG2Q] = u16(d,0)/8.0f-4096; return;
-      case 0x70: if (dn>=1) V[INV1]=(float)d[0]-40; return;
+      // 0x68 (MG2Q) -> 0x499 broadcast, 0x70 (INV1) -> 0x49A broadcast: no longer polled
       case 0x71: if (dn>=1) V[INV2]=(float)d[0]-40; return;
       case 0x74:
-        if (dn < 9) return;
-        V[BTU]=(float)d[0]-40; V[BTL]=(float)d[1]-40;
-        V[VL] = u16(d,5)/2.0f; V[VH] = u16(d,7)/2.0f;
+        if (dn < 2) return;
+        V[BTU]=(float)d[0]-40; V[BTL]=(float)d[1]-40;        // VL -> 0x49D, VH -> 0x499 broadcast
         return;
       case 0x75:
         if (dn < 4) return;
@@ -514,7 +512,9 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
       // store as (center - b4) so positive = forward accel. Calibrate center+scale -> m/s2.
       if (x.size() >= 5) V[GFWD] = 154.0f - (float)x[4];
       return;
-    case 0x245:  // gas pedal: byte[2] is 0..200 -> /2 = 0..100 %
+    case 0x245:  // gas pedal byte[2] (0..200 -> %); ALSO MG2 rpm = byte0:byte1 (broadcast, was poll
+      // 0x62; corr 1.000, slope 1.0). Signed so reverse works.
+      if (x.size() >= 2) V[MG2R] = (float)(int16_t)((x[0] << 8) | x[1]);
       if (x.size() >= 3) V[GASB] = (float)x[2] * 0.5f;
       return;
     case 0x247: {  // Hybrid System Indicator dial, ZONE-BANDED. byte0 LOW nibble = band
@@ -531,6 +531,22 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
     }
     case 0x4A2:  // brake pedal POSITION (skid/brake ECU): byte[3] (0..~128) -> 0..100 %.
       if (x.size() >= 4) V[BRKPOS] = (float)x[3] * (100.0f / 128.0f);  // distinct from friction pressure brkP
+      return;
+    // ---- MG/inverter values moved from the 7E2 poll to broadcast (fw 3.36) ----
+    // Validated on dump 225502 vs the 7EA poll (linear fit). They update FASTER than the poll
+    // and free poll bandwidth. Residuals: MG2Q +-6.5Nm, MG1R +-498rpm, VH +-26V, VL +-2.6V, INV1 +-1.1C.
+    case 0x499:  // MG2 frame: d1:d2 s = MG2 torque (r.957), d2:d3 = VH boost V (.978), d5:d6 s = MG1 rpm (.983)
+      if (x.size() >= 7) {
+        V[MG2Q] = (float)(int16_t)((x[1] << 8) | x[2]) * 0.01163f - 0.61f;
+        V[VH]   = (float)((x[2] << 8) | x[3]) * 0.01506f + 14.53f;
+        V[MG1R] = (float)(int16_t)((x[5] << 8) | x[6]) * 0.30088f - 37.32f;
+      }
+      return;
+    case 0x49A:  // inverter-1 temperature = d3:d4 (was poll 0x70; r.980)
+      if (x.size() >= 5) V[INV1] = (float)((x[3] << 8) | x[4]) * 0.03060f + 20.17f;
+      return;
+    case 0x49D:  // HV battery voltage VL = d0:d1 (was poll 0x74; r.968)
+      if (x.size() >= 2) V[VL] = (float)((x[0] << 8) | x[1]) * 0.00861f - 2.80f;
       return;
     case 0x025:  // steering angle: byte[0..1] 12-bit, 2048 = centre, ~0.245 deg/count
       if (x.size() >= 2) V[STEER] = (float)((int)(((x[0] & 0x0F) << 8) | x[1]) - 2048) * 0.245f;
