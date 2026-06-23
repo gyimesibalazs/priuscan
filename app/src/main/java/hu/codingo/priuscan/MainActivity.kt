@@ -471,22 +471,26 @@ private fun Header(s: CanState) {
     }
 }
 
-/** Hybrid System Indicator: center-anchored bar from the total drive power (0x247). hsi>0 = PWR
- *  (driving, incl. engine-direct) -> fills right (amber); hsi<0 = CHG/regen -> fills left (green). */
+/** Hybrid System Indicator: center-anchored bar from the total drive power (0x247), scaled +-100
+ *  (the dial; raw +-127 overshoots). hsi>0 = PWR (amber right), hsi<0 = CHG/regen (green left).
+ *  Dial ticks: ~50 = the engine joins MG2, ~75 = the EV-mode power limit. */
 @Composable
 private fun HsiStrip(s: CanState) {
-    val pos = s.d("hsi")?.toFloat() ?: return            // HSI needle, signed -128..+127
-    // ASYMMETRIC like the factory dial: the PWR zone is bigger than CHG. Neutral (0) at 30% -> the
-    // PWR (drive) side gets the right 70%, CHG/regen the left 30%. +127 = full PWR, -128 = full CHG.
-    val centerFrac = 0.30f
-    val regen = ((-pos) / 128f).coerceIn(0f, 1f)         // CHG -> green left
-    val power = (pos / 127f).coerceIn(0f, 1f)            // PWR -> amber right
+    val pos = s.d("hsi")?.toFloat() ?: return
+    val centerFrac = 0.30f                               // PWR side gets the right 70% (like the dial)
+    val regen = ((-pos) / 100f).coerceIn(0f, 1f)         // CHG -> green left  (-100 = full)
+    val power = (pos / 100f).coerceIn(0f, 1f)            // PWR -> amber right (+100 = full)
     Canvas(Modifier.fillMaxWidth().height(12.dp).padding(top = 4.dp)) {
         val w = size.width; val h = size.height; val cx = w * centerFrac
         val r = CornerRadius(h / 2f, h / 2f)
         drawRoundRect(Color(0xFFCDD2D8), size = Size(w, h), cornerRadius = r)   // track
         if (regen > 0f) drawRect(Color(0xFF2EA047), Offset(cx - regen * cx, 0f), Size(regen * cx, h))      // regen left
         if (power > 0f) drawRect(Color(0xFFF5A028), Offset(cx, 0f), Size(power * (w - cx), h))             // power right
+        // dial ticks on the PWR side: engine-start (~50) and EV-limit (~75)
+        for (mark in intArrayOf(50, 75)) {
+            val mx = cx + (mark / 100f) * (w - cx)
+            drawLine(Color(0xFF707880), Offset(mx, 0f), Offset(mx, h), strokeWidth = 2f)
+        }
         drawLine(Color(0xFF282C32), Offset(cx, -2f), Offset(cx, h + 2f), strokeWidth = 3f)                // neutral tick
     }
 }
