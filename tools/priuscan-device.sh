@@ -10,7 +10,7 @@
 # so dead IPs cost ~0.3s instead of adb's slow timeout.
 # On success it prints "ip:port" to stdout and status to stderr.
 PORT="${PRIUSCAN_PORT:-9876}"
-PROBE_TIMEOUT="${PRIUSCAN_PROBE_TIMEOUT:-0.3}"
+PROBE_TIMEOUT="${PRIUSCAN_PROBE_TIMEOUT:-0.6}"   # generous: WSL->hotspot round-trip can be slow
 
 _adb()   { timeout 6 adb "$@"; }                                  # bound every adb call
 _probe() { timeout "$PROBE_TIMEOUT" bash -c "exec 3<>/dev/tcp/$1/$PORT" 2>/dev/null; }
@@ -24,26 +24,40 @@ _ensure_adb() {
   timeout 8 adb start-server >/dev/null 2>&1 || true
 }
 
+# Try to bring up ip:PORT and verify it is a real device. Prints "ip:port" + returns 0 on success.
+# An "offline" entry gets one disconnect+reconnect (the network adb is flaky).
+_connect() {
+  local ip="$1" st
+  for _try in 1 2; do
+    _adb connect "$ip:$PORT" >/dev/null 2>&1
+    st="$(_adb -s "$ip:$PORT" get-state 2>/dev/null | tr -d '\r\n')"
+    [ "$st" = "device" ] && { echo "$ip:$PORT"; return 0; }
+    _adb disconnect "$ip:$PORT" >/dev/null 2>&1
+  done
+  return 1
+}
+
 find_device() {
   _ensure_adb
-  local cand ip st
+  local cand ip dev
   if   [ -n "${1:-}" ];           then cand="${1%:*}"
   elif [ -n "${PRIUSCAN_IP:-}" ]; then cand="${PRIUSCAN_IP%:*}"
-  else cand="172.20.10.2 172.20.10.3 172.20.10.4 172.20.10.5 172.20.10.6 172.20.10.7"
+  else
+    # already-connected head unit? (e.g. connected manually) -> use it, no scan needed
+    dev="$(_adb devices 2>/dev/null | awk -v p=":$PORT" '$1 ~ p && $2=="device"{print $1; exit}')"
+    [ -n "$dev" ] && { echo "$dev"; return 0; }
+    # the hotspot IP is dynamic: scan the whole /28 client range (.2 .. .14)
+    cand=""; for n in $(seq 2 14); do cand="$cand 172.20.10.$n"; done
   fi
+  # fast /dev/tcp probe -> adb connect only the open ones (an explicit IP is always tried)
+  local explicit=0; [ -n "${1:-}${PRIUSCAN_IP:-}" ] && explicit=1
   for ip in $cand; do
-    if ! _probe "$ip"; then echo "   .. $ip:$PORT closed" >&2; continue; fi
-    echo "   .. $ip:$PORT open -> adb connect" >&2
-    _adb connect "$ip:$PORT" >/dev/null 2>&1
-    st="$(_adb -s "$ip:$PORT" get-state 2>/dev/null | tr -d '\r\n')"
-    if [ "$st" = "device" ]; then echo "$ip:$PORT"; return 0; fi
-    # "offline" -> one disconnect+reconnect, then re-check
-    _adb disconnect "$ip:$PORT" >/dev/null 2>&1
-    _adb connect "$ip:$PORT" >/dev/null 2>&1
-    st="$(_adb -s "$ip:$PORT" get-state 2>/dev/null | tr -d '\r\n')"
-    if [ "$st" = "device" ]; then echo "$ip:$PORT"; return 0; fi
-    echo "   .. $ip:$PORT not a device (state: ${st:-none})" >&2
-    _adb disconnect "$ip:$PORT" >/dev/null 2>&1
+    if _probe "$ip" || [ "$explicit" = 1 ]; then   # for an explicit IP, connect even if the probe fails
+      echo "   .. $ip:$PORT -> adb connect" >&2
+      dev="$(_connect "$ip")" && { echo "$dev"; return 0; }
+    else
+      echo "   .. $ip:$PORT closed" >&2
+    fi
   done
   return 1
 }
