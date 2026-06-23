@@ -48,6 +48,7 @@ esp32:
     type: esp-idf
 
 logger:
+  id: prius_logger
   level: WARN
   hardware_uart: USB_SERIAL_JTAG
 
@@ -1036,6 +1037,10 @@ interval:
           if (prius::ota_request) {            // app asked to flash -> spawn the OTA task
             prius::ota_request = false;
             prius::can_paused = true;          // stop CAN processing immediately -> free CPU for the flash
+            // SILENCE all logging during OTA: the logger shares USB_SERIAL_JTAG with the OTA task,
+            // and its "took a long time" warnings flood/corrupt the RX -> chunk timeouts / reset.
+            id(prius_logger).set_log_level(ESPHOME_LOG_LEVEL_NONE);
+            esp_log_level_set("*", ESP_LOG_NONE);
             prius_ota_begin(prius::ota_size);
           }
           // ignition-off = the fast powertrain heartbeat (0x1C4) went quiet > 0.8 s.
