@@ -468,7 +468,6 @@ private fun Header(s: CanState) {
         }
         Spacer(Modifier.height(8.dp))   // margin so the HSI strip doesn't touch the row above
         HsiStrip(s)   // power/charge flow bar at the bottom of the dash-top
-        BrakeBar(s)   // brake pedal position (for visual verification)
     }
 }
 
@@ -501,19 +500,6 @@ private fun HsiStrip(s: CanState) {
         zone(0.85f, 1f, 0f, 1f, Color(0xFFF5A028))      // PWR  (top 1u)
         val m50 = frac(50f) * w                          // engine-start tick (HSI 50 = ECO centre)
         drawLine(Color(0xFF60686F), Offset(m50, 0f), Offset(m50, size.height), strokeWidth = 2f)
-    }
-}
-
-/** Brake pedal POSITION bar (0x4A2): left-anchored red fill, 0..~100% of pedal travel. For
- *  visual verification of the brake-pedal signal (distinct from the friction pressure). */
-@Composable
-private fun BrakeBar(s: CanState) {
-    val pos = s.d("brkPos")?.toFloat() ?: return
-    val frac = (pos / 128f).coerceIn(0f, 1f)
-    Canvas(Modifier.fillMaxWidth().height(8.dp).padding(top = 3.dp)) {
-        val w = size.width; val h = size.height; val r = CornerRadius(h / 2f, h / 2f)
-        drawRoundRect(Color(0xFFCDD2D8), size = Size(w, h), cornerRadius = r)
-        if (frac > 0f) drawRoundRect(Color(0xFFE53935), size = Size(frac * w, h), cornerRadius = r)
     }
 }
 
