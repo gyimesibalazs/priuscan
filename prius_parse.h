@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 333;   // 3.33: silence logger during OTA (fix serial conflict/reset)
+inline constexpr int FW_VERSION = 334;   // 3.34: HSI = 16-bit 0x247 d0:d1 (fix accel wrap); logger off
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -517,10 +517,11 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
     case 0x245:  // gas pedal: byte[2] is 0..200 -> /2 = 0..100 %
       if (x.size() >= 3) V[GASB] = (float)x[2] * 0.5f;
       return;
-    case 0x247:  // Hybrid System Indicator NEEDLE: byte[1] as a SIGNED 8-bit value (d2 has only 2
-      // values, so it's not a 16-bit field). +127 = full PWR (drive, incl. engine-direct),
-      // -128 = full CHG/regen. NOT calibrated kW -- it's the meter position (256 coarse steps).
-      if (x.size() >= 2) V[HSI] = (float)(int8_t)x[1];
+    case 0x247:  // Hybrid System Indicator: 16-bit BE byte0:byte1 (byte0 a 3-level zone selector
+      // 8/12/15, byte1 the fine value). The 16-bit is MONOTONIC with power: ~2150 = full PWR,
+      // ~4095 = full CHG/regen (validated, corr -0.83 with gas). Map to a signed power-flow:
+      // + = PWR, - = CHG, around a ~neutral (3200). (The earlier int8(byte1) read WRAPPED on hard accel.)
+      if (x.size() >= 2) V[HSI] = (3200.0f - (float)(((uint16_t)x[0] << 8) | x[1])) * 0.1f;
       return;
     case 0x4A2:  // brake pedal POSITION (skid/brake ECU): byte[3] (0..~128) -> 0..100 %.
       if (x.size() >= 4) V[BRKPOS] = (float)x[3] * (100.0f / 128.0f);  // distinct from friction pressure brkP
