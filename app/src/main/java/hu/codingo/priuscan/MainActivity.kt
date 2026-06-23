@@ -482,9 +482,9 @@ private fun HsiStrip(s: CanState) {
     val hsi = s.d("hsi")?.toFloat() ?: return
     val grey = Color(0xFFCDD2D8)
     fun frac(h: Float): Float = (when {
-        h <= 0f   -> (h + 128f) / 128f * 0.15f              // -128..0  -> 0..15%   (CHG)
+        h <= 0f   -> (h + 100f) / 100f * 0.15f              // -100..0  -> 0..15%   (CHG/regen)
         h <= 100f -> 0.15f + h / 100f * 0.70f               // 0..100   -> 15..85%  (ECO; 50 at centre)
-        else      -> 0.85f + (h - 100f) / 27f * 0.15f       // 100..127 -> 85..100% (PWR)
+        else      -> 0.85f + (h - 100f) / 50f * 0.15f       // 100..150 -> 85..100% (PWR)
     }).coerceIn(0f, 1f)
     val xc = frac(hsi); val xa = 0.15f                      // anchor = HSI 0
     val lo = minOf(xa, xc); val hi = maxOf(xa, xc)

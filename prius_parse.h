@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 334;   // 3.34: HSI = 16-bit 0x247 d0:d1 (fix accel wrap); logger off
+inline constexpr int FW_VERSION = 335;   // 3.35: HSI zone-banded decode (d0 low nibble = band; ECO 0-100, PWR -150, CHG -100)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -517,12 +517,18 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
     case 0x245:  // gas pedal: byte[2] is 0..200 -> /2 = 0..100 %
       if (x.size() >= 3) V[GASB] = (float)x[2] * 0.5f;
       return;
-    case 0x247:  // Hybrid System Indicator: 16-bit BE byte0:byte1 (byte0 a 3-level zone selector
-      // 8/12/15, byte1 the fine value). The 16-bit is MONOTONIC with power: ~2150 = full PWR,
-      // ~4095 = full CHG/regen (validated, corr -0.83 with gas). Map to a signed power-flow:
-      // + = PWR, - = CHG, around a ~neutral (3200). (The earlier int8(byte1) read WRAPPED on hard accel.)
-      if (x.size() >= 2) V[HSI] = (3200.0f - (float)(((uint16_t)x[0] << 8) | x[1])) * 0.1f;
+    case 0x247: {  // Hybrid System Indicator dial, ZONE-BANDED. byte0 LOW nibble = band
+      // (0x8=PWR, 0xC=ECO, 0xF=CHG; high nibble = status flags), byte1 = position within the band.
+      // The bands form ONE continuous needle: ECO byte1 0..100, PWR byte1 101..150 (hsi = byte1
+      // directly), CHG byte1 156..255 (hsi = -(byte1-155) -> -1..-100). Validated: engine joins
+      // ECO at ~50, EV/PWR boundary 100, full PWR ~150, full regen -100. (The earlier int8(byte1)
+      // read WRAPPED PWR>127 into CHG; the 16-bit read broke the working ECO 0..100 range.)
+      if (x.size() >= 2) {
+        int band = x[0] & 0x0F;
+        V[HSI] = (band == 0xF) ? -(float)((int)x[1] - 155) : (float)x[1];
+      }
       return;
+    }
     case 0x4A2:  // brake pedal POSITION (skid/brake ECU): byte[3] (0..~128) -> 0..100 %.
       if (x.size() >= 4) V[BRKPOS] = (float)x[3] * (100.0f / 128.0f);  // distinct from friction pressure brkP
       return;
