@@ -472,19 +472,20 @@ private fun Header(s: CanState) {
     }
 }
 
-/** Hybrid System Indicator dial (0x247, +-100). Zoned + stepped + non-linear, filled FROM the
- *  HSI=0 point (at 15% width): hsi<0 fills left into CHG (green), hsi>0 fills right through ECO
- *  (light green) into PWR (amber). Widths: CHG 15% (-100..0), ECO 70% (0..75, non-linear: bar
- *  mid=HSI 50, ECO end=75), PWR 15% (75..100). Heights: CHG 1u bottom, ECO 2u full, PWR 1u top. */
+/** Hybrid System Indicator dial (0x247, signed -128..+127). Zoned + stepped, filled FROM the
+ *  HSI=0 point (15% width): hsi<0 fills left into CHG (green), hsi>0 fills right through ECO (light
+ *  green) into PWR (amber). Validated thresholds: HSI 50 = the engine joins MG2 (centre tick),
+ *  HSI 100 = the EV/power limit = the ECO/PWR boundary. Widths CHG 15% (-128..0) / ECO 70%
+ *  (0..100, linear: 50 at the centre, 100 at the end) / PWR 15% (100..127). Heights: CHG 1u
+ *  bottom, ECO 2u full, PWR 1u top. */
 @Composable
 private fun HsiStrip(s: CanState) {
     val hsi = s.d("hsi")?.toFloat() ?: return
     val grey = Color(0xFFCDD2D8)
     fun frac(h: Float): Float = (when {
-        h <= 0f  -> (h + 100f) / 100f * 0.15f               // -100..0 -> 0..15%
-        h <= 50f -> 0.15f + h / 50f * 0.35f                 // 0..50  -> 15..50%
-        h <= 75f -> 0.50f + (h - 50f) / 25f * 0.35f         // 50..75 -> 50..85%
-        else     -> 0.85f + (h - 75f) / 25f * 0.15f         // 75..100-> 85..100%
+        h <= 0f   -> (h + 128f) / 128f * 0.15f              // -128..0  -> 0..15%   (CHG)
+        h <= 100f -> 0.15f + h / 100f * 0.70f               // 0..100   -> 15..85%  (ECO; 50 at centre)
+        else      -> 0.85f + (h - 100f) / 27f * 0.15f       // 100..127 -> 85..100% (PWR)
     }).coerceIn(0f, 1f)
     val xc = frac(hsi); val xa = 0.15f                      // anchor = HSI 0
     val lo = minOf(xa, xc); val hi = maxOf(xa, xc)
@@ -498,6 +499,8 @@ private fun HsiStrip(s: CanState) {
         zone(0f, 0.15f, 1f, 2f, Color(0xFF2EA047))      // CHG  (bottom 1u)
         zone(0.15f, 0.85f, 0f, 2f, Color(0xFF96C878))   // ECO  (full 2u)
         zone(0.85f, 1f, 0f, 1f, Color(0xFFF5A028))      // PWR  (top 1u)
+        val m50 = frac(50f) * w                          // engine-start tick (HSI 50 = ECO centre)
+        drawLine(Color(0xFF60686F), Offset(m50, 0f), Offset(m50, size.height), strokeWidth = 2f)
     }
 }
 
