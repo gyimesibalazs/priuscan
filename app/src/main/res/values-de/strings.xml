@@ -286,4 +286,5 @@
     <string name="warn_weak_block">Schwache Zelle: #%1$d</string>
     <string name="warn_high_res">Hoher Widerstand: #%1$d</string>
     <string name="undo_refuel">Falsche Betankung rückgängig</string>
+    <string name="f_brkPos">Bremspedal</string>
 </resources>

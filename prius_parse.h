@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 329;   // 3.29: regen = brake pedal pressed AND MG2 generating (not HSI)
+inline constexpr int FW_VERSION = 330;   // 3.30: brkPos as 0-100% (drive tab field)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -519,8 +519,8 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
       // -128 = full CHG/regen. NOT calibrated kW -- it's the meter position (256 coarse steps).
       if (x.size() >= 2) V[HSI] = (float)(int8_t)x[1];
       return;
-    case 0x4A2:  // brake pedal POSITION (skid/brake ECU): byte[3]. 0 = released, rises with travel
-      if (x.size() >= 4) V[BRKPOS] = (float)x[3];  // (distinct from the polled friction pressure brkP)
+    case 0x4A2:  // brake pedal POSITION (skid/brake ECU): byte[3] (0..~128) -> 0..100 %.
+      if (x.size() >= 4) V[BRKPOS] = (float)x[3] * (100.0f / 128.0f);  // distinct from friction pressure brkP
       return;
     case 0x025:  // steering angle: byte[0..1] 12-bit, 2048 = centre, ~0.245 deg/count
       if (x.size() >= 2) V[STEER] = (float)((int)(((x[0] & 0x0F) << 8) | x[1]) - 2048) * 0.245f;

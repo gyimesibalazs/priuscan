@@ -103,6 +103,7 @@ object Fields {
             Field("steer", R.string.f_steer, "°"),
             Field("brkP", R.string.f_brkP, "V", 2),
             Field("gasB", R.string.f_gasB, "%", 0),
+            Field("brkPos", R.string.f_brkPos, "%", 0),
         ),
     )
 }

@@ -286,4 +286,5 @@
     <string name="warn_weak_block">Cellule faible : #%1$d</string>
     <string name="warn_high_res">Résistance élevée : #%1$d</string>
     <string name="undo_refuel">Annuler ravitaillement erroné</string>
+    <string name="f_brkPos">Pédale de frein</string>
 </resources>

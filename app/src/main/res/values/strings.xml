@@ -288,4 +288,5 @@
     <string name="warn_weak_block">Weak cell: #%1$d</string>
     <string name="warn_high_res">High resistance: #%1$d</string>
     <string name="undo_refuel">Undo false refuel</string>
+    <string name="f_brkPos">Brake pedal</string>
 </resources>

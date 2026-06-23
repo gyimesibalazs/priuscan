@@ -286,4 +286,5 @@
     <string name="warn_weak_block">Cella debole: #%1$d</string>
     <string name="warn_high_res">Resistenza alta: #%1$d</string>
     <string name="undo_refuel">Annulla rifornimento errato</string>
+    <string name="f_brkPos">Pedale freno</string>
 </resources>

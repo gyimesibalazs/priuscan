@@ -286,4 +286,5 @@
     <string name="warn_weak_block">Gyenge cella: #%1$d</string>
     <string name="warn_high_res">Magas ellenállás: #%1$d</string>
     <string name="undo_refuel">Téves tankolás visszavonása</string>
+    <string name="f_brkPos">Fékpedál</string>
 </resources>

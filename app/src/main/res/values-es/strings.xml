@@ -286,4 +286,5 @@
     <string name="warn_weak_block">Celda débil: #%1$d</string>
     <string name="warn_high_res">Resistencia alta: #%1$d</string>
     <string name="undo_refuel">Deshacer repostaje erróneo</string>
+    <string name="f_brkPos">Pedal de freno</string>
 </resources>
