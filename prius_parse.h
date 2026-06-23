@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 330;   // 3.30: brkPos as 0-100% (drive tab field)
+inline constexpr int FW_VERSION = 331;   // 3.31: fuelIn flap-detector (boot bounce can outlast the fixed warm-up)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -190,7 +190,10 @@ inline bool refuel_dirty = false;       // YAML flushes this to the persistent g
 inline constexpr float REFUEL_DELTA = 12.0f;   // fuelIn is now % (0..100): a significant up-jump
 inline float    refuel_peak = 0;               // highest fuelIn during the current fill (plateau detect)
 inline constexpr uint32_t REFUEL_STABLE_MS = 8000;  // level must stop rising this long = fill finished
-inline constexpr uint32_t FUEL_WARMUP_MS = 15000;   // ignore fuelIn for 15 s after boot (b5 settles)
+inline constexpr uint32_t FUEL_WARMUP_MS = 15000;   // minimum: ignore fuelIn for 15 s after boot
+inline constexpr uint32_t FUEL_SETTLE_MS = 5000;    // and until 5 s after the last wild fuelIn jump
+inline float    fuel_fin_prev = NAN;                // previous raw fuelIn (flap detector)
+inline uint32_t fuel_flap_ms = 0;                   // last time fuelIn jumped wildly (boot bounce/glitch)
 inline constexpr float HSI_REGEN = -12.0f;          // HSI needle (signed, +-127) below this = CHG/regen
 inline constexpr float BRKPOS_REGEN = 3.0f;         // brake pedal position above this = braking (regen)
 // Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
@@ -1092,11 +1095,16 @@ inline void compute_derived(uint32_t now_ms) {
 
   // refuel detection: fuelIn (%) jumps up significantly while parked -> record the time
   float fin = V[FUELIN], sp2 = V[SPD];
-  // No fuel logic until (a) the previous fuel_ref baseline has been READ from NVS -- nothing to
-  // compare against before that -- and (b) a short settle window passes (the 0x612 b5 gauge bounces
-  // briefly after power-on). Until both, treat fuelIn as invalid: no refuel detection, no calibration,
-  // no fuelL, and fuel_ref is not corrupted by the boot transient.
-  if (!persist_loaded || now_ms - derive_boot_ms < FUEL_WARMUP_MS) fin = NAN;
+  // FLAP DETECTOR: the gauge (0x612 b5) flaps 0<->255 for up to ~1 min after power-on (and on
+  // glitches). A big per-sample jump marks flapping; we trust fuelIn only FUEL_SETTLE_MS after the
+  // LAST big jump -- so the gate self-extends for as long as the bounce actually lasts (a fixed
+  // warm-up can be too short). A real refuel rises GRADUALLY (no big jump) so it is NOT gated.
+  if (!std::isnan(fin) && !std::isnan(fuel_fin_prev) && fabsf(fin - fuel_fin_prev) > 30.0f) fuel_flap_ms = now_ms;
+  if (!std::isnan(fin)) fuel_fin_prev = fin;
+  // Gate (treat fuelIn invalid: no refuel/calibration/fuelL, fuel_ref untouched) until: the previous
+  // baseline is READ from NVS, the boot warm-up passed, AND the gauge has settled (no recent flap).
+  if (!persist_loaded || now_ms - derive_boot_ms < FUEL_WARMUP_MS
+      || (fuel_flap_ms && now_ms - fuel_flap_ms < FUEL_SETTLE_MS)) fin = NAN;
   if (!std::isnan(fin)) {
     if (fuel_ref < 0) fuel_ref = fin;
     bool parked = std::isnan(sp2) || sp2 < 3.0f;
