@@ -432,7 +432,7 @@ private fun Header(s: CanState) {
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         // TOP-aligned so the temp, icons and gauges share a common top line; the block is tall
         // enough for TWO icon rows (icons at the top, ODO pinned to the bottom).
-        Row(Modifier.fillMaxWidth().height(120.dp), verticalAlignment = Alignment.Top) {
+        Row(Modifier.fillMaxWidth().height(92.dp), verticalAlignment = Alignment.Top) {
             // coolant temperature, narrowed horizontally; no font padding so it hugs the top line
             Text(
                 s.coolant?.let { "${it.toInt()}" } ?: "–",
@@ -584,7 +584,7 @@ private fun FuelGauge(s: CanState) {
     val liters = s.d("fuelL")?.toFloat()
     val frac = (liters?.let { it / full } ?: ((s.d("fuelIn") ?: 0.0).toFloat() / 100f)).coerceIn(0f, 1f)
     val pct = liters?.let { (it / full * 100f).toInt() } ?: s.d("fuelIn")?.toInt()
-    Box(Modifier.width(60.dp).height(120.dp)) {
+    Box(Modifier.width(60.dp).height(88.dp)) {
         Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CYellow, battery = false) }
         Text(pct?.let { "$it%" } ?: "–",
             style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))   // % position unchanged
@@ -608,7 +608,7 @@ private fun BatteryGauge(s: CanState) {
     val soc = (s.d("soc") ?: 0.0).toFloat()
     val frac = ((soc - 35f) / (70f - 35f)).coerceIn(0f, 1f)   // operating band ~35..70%
     val hvA = s.d("hvA") ?: 0.0
-    Box(Modifier.width(60.dp).height(120.dp)) {
+    Box(Modifier.width(60.dp).height(88.dp)) {
         Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CGreen, battery = true) }
         Text(s.d("soc")?.let { "${it.toInt()}%" } ?: "–",
             style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))
