@@ -432,11 +432,11 @@ private fun Header(s: CanState) {
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         // TOP-aligned so the temp, icons and gauges share a common top line; the block is tall
         // enough for TWO icon rows (icons at the top, ODO pinned to the bottom).
-        Row(Modifier.fillMaxWidth().height(140.dp), verticalAlignment = Alignment.Top) {
+        Row(Modifier.fillMaxWidth().height(120.dp), verticalAlignment = Alignment.Top) {
             // coolant temperature, narrowed horizontally; no font padding so it hugs the top line
             Text(
                 s.coolant?.let { "${it.toInt()}" } ?: "–",
-                fontSize = 100.sp, fontWeight = FontWeight.Bold, color = coolantColor(s.coolant),
+                fontSize = 88.sp, fontWeight = FontWeight.Bold, color = coolantColor(s.coolant),
                 style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false)),
                 modifier = Modifier.graphicsLayer(scaleX = 0.78f),
             )
@@ -466,32 +466,38 @@ private fun Header(s: CanState) {
                 color = Color(0xFFFF5252), fontWeight = FontWeight.Bold, fontSize = 15.sp,
             )
         }
+        Spacer(Modifier.height(8.dp))   // margin so the HSI strip doesn't touch the row above
         HsiStrip(s)   // power/charge flow bar at the bottom of the dash-top
         BrakeBar(s)   // brake pedal position (for visual verification)
     }
 }
 
-/** Hybrid System Indicator: center-anchored bar from the total drive power (0x247), scaled +-100
- *  (the dial; raw +-127 overshoots). hsi>0 = PWR (amber right), hsi<0 = CHG/regen (green left).
- *  Dial ticks: ~50 = the engine joins MG2, ~75 = the EV-mode power limit. */
+/** Hybrid System Indicator dial (0x247, +-100). Zoned + stepped + non-linear, filled FROM the
+ *  HSI=0 point (at 15% width): hsi<0 fills left into CHG (green), hsi>0 fills right through ECO
+ *  (light green) into PWR (amber). Widths: CHG 15% (-100..0), ECO 70% (0..75, non-linear: bar
+ *  mid=HSI 50, ECO end=75), PWR 15% (75..100). Heights: CHG 1u bottom, ECO 2u full, PWR 1u top. */
 @Composable
 private fun HsiStrip(s: CanState) {
-    val pos = s.d("hsi")?.toFloat() ?: return
-    val centerFrac = 0.30f                               // PWR side gets the right 70% (like the dial)
-    val regen = ((-pos) / 100f).coerceIn(0f, 1f)         // CHG -> green left  (-100 = full)
-    val power = (pos / 100f).coerceIn(0f, 1f)            // PWR -> amber right (+100 = full)
-    Canvas(Modifier.fillMaxWidth().height(12.dp).padding(top = 4.dp)) {
-        val w = size.width; val h = size.height; val cx = w * centerFrac
-        val r = CornerRadius(h / 2f, h / 2f)
-        drawRoundRect(Color(0xFFCDD2D8), size = Size(w, h), cornerRadius = r)   // track
-        if (regen > 0f) drawRect(Color(0xFF2EA047), Offset(cx - regen * cx, 0f), Size(regen * cx, h))      // regen left
-        if (power > 0f) drawRect(Color(0xFFF5A028), Offset(cx, 0f), Size(power * (w - cx), h))             // power right
-        // dial ticks on the PWR side: engine-start (~50) and EV-limit (~75)
-        for (mark in intArrayOf(50, 75)) {
-            val mx = cx + (mark / 100f) * (w - cx)
-            drawLine(Color(0xFF707880), Offset(mx, 0f), Offset(mx, h), strokeWidth = 2f)
+    val hsi = s.d("hsi")?.toFloat() ?: return
+    val grey = Color(0xFFCDD2D8)
+    fun frac(h: Float): Float = (when {
+        h <= 0f  -> (h + 100f) / 100f * 0.15f               // -100..0 -> 0..15%
+        h <= 50f -> 0.15f + h / 50f * 0.35f                 // 0..50  -> 15..50%
+        h <= 75f -> 0.50f + (h - 50f) / 25f * 0.35f         // 50..75 -> 50..85%
+        else     -> 0.85f + (h - 75f) / 25f * 0.15f         // 75..100-> 85..100%
+    }).coerceIn(0f, 1f)
+    val xc = frac(hsi); val xa = 0.15f                      // anchor = HSI 0
+    val lo = minOf(xa, xc); val hi = maxOf(xa, xc)
+    Canvas(Modifier.fillMaxWidth().height(14.dp)) {
+        val w = size.width; val u = size.height / 2f        // 1 unit = half the height
+        fun zone(za: Float, zb: Float, yt: Float, yb: Float, col: Color) {
+            drawRect(grey, Offset(za * w, yt * u), Size((zb - za) * w, (yb - yt) * u))   // empty (grey)
+            val ca = maxOf(za, lo); val cb = minOf(zb, hi)
+            if (cb > ca) drawRect(col, Offset(ca * w, yt * u), Size((cb - ca) * w, (yb - yt) * u))  // fill
         }
-        drawLine(Color(0xFF282C32), Offset(cx, -2f), Offset(cx, h + 2f), strokeWidth = 3f)                // neutral tick
+        zone(0f, 0.15f, 1f, 2f, Color(0xFF2EA047))      // CHG  (bottom 1u)
+        zone(0.15f, 0.85f, 0f, 2f, Color(0xFF96C878))   // ECO  (full 2u)
+        zone(0.85f, 1f, 0f, 1f, Color(0xFFF5A028))      // PWR  (top 1u)
     }
 }
 
@@ -589,7 +595,7 @@ private fun FuelGauge(s: CanState) {
     val liters = s.d("fuelL")?.toFloat()
     val frac = (liters?.let { it / full } ?: ((s.d("fuelIn") ?: 0.0).toFloat() / 100f)).coerceIn(0f, 1f)
     val pct = liters?.let { (it / full * 100f).toInt() } ?: s.d("fuelIn")?.toInt()
-    Box(Modifier.width(60.dp).height(140.dp)) {
+    Box(Modifier.width(60.dp).height(120.dp)) {
         Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CYellow, battery = false) }
         Text(pct?.let { "$it%" } ?: "–",
             style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))   // % position unchanged
@@ -613,7 +619,7 @@ private fun BatteryGauge(s: CanState) {
     val soc = (s.d("soc") ?: 0.0).toFloat()
     val frac = ((soc - 35f) / (70f - 35f)).coerceIn(0f, 1f)   // operating band ~35..70%
     val hvA = s.d("hvA") ?: 0.0
-    Box(Modifier.width(60.dp).height(140.dp)) {
+    Box(Modifier.width(60.dp).height(120.dp)) {
         Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CGreen, battery = true) }
         Text(s.d("soc")?.let { "${it.toInt()}%" } ?: "–",
             style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))
