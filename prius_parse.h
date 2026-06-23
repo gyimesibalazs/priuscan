@@ -117,7 +117,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 331;   // 3.31: fuelIn flap-detector (boot bounce can outlast the fixed warm-up)
+inline constexpr int FW_VERSION = 332;   // 3.32: ignore fuelIn dropout glitches in fuel_ref (fix 06-23 false refuel)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -1131,7 +1131,10 @@ inline void compute_derived(uint32_t now_ms) {
       }
     } else {
       refuel_peak = 0; refuel_seen_ms = 0;       // not a refuel rise (or spike dropped back)
-      fuel_ref += 0.01f * (fin - fuel_ref);      // slow follow (consumption + noise)
+      // slow follow (consumption + noise) -- but IGNORE big sudden DROPS: a fuelIn dropout to ~0
+      // (sensor glitch, e.g. during engine start) would drag fuel_ref down, and the recovery would
+      // then look like a refuel. Consumption is gradual, so a >20% drop below fuel_ref is a glitch.
+      if (fin > fuel_ref - 20.0f) fuel_ref += 0.01f * (fin - fuel_ref);
     }
     // VIRTUAL fuel gauge: consumption-driven, anchored by the real gauge. While the gauge reads
     // 100% we assume a full 47 L tank and count down by consumption. The moment it first drops
