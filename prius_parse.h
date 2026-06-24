@@ -118,7 +118,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 338;   // 3.38: HSI CHG scale was inverted (d1 156=hardest regen -> -99)
+inline constexpr int FW_VERSION = 339;   // 3.39: capKwh uses nominal pack V (steady SOH); CAP_ALPHA 0.03
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -809,7 +809,9 @@ inline float cap_smin = NAN, cap_smax = NAN;  // running SoC min/max in the wind
 inline float cap_q_lo = 0, cap_q_hi = 0;      // charge integral at smin / smax
 inline float charge_ah = 0;                   // running charge integral (Ah)
 
-inline constexpr float    CAP_ALPHA    = 0.05f;  // EWMA weight over spans (slow: settles ~+-0.4 Ah)
+inline constexpr float    CAP_ALPHA    = 0.03f;  // EWMA weight over spans (slower -> steadier SOH)
+inline constexpr float    CAP_VNOM     = 201.6f; // Prius Gen3 nominal pack V (28 mod x 7.2 V): kWh uses
+                                                 // this, NOT the load/SoC-varying vl_avg (steady SOH metric)
 inline constexpr float    CAP_MIN_DSOC = 15.0f;  // % SoC swing required for a span (bigger = far less noise)
 inline constexpr float    CAP_CHG_EFF  = 0.93f;  // NiMH coulombic efficiency: charge spans overstate Ah
 inline constexpr float    CAP_MIN_AH   = 2.0f;   // plausibility window (reject glitches)
@@ -1125,7 +1127,7 @@ inline void compute_derived(uint32_t now_ms) {
   V[TFUEL] = boot_slot.fuel;
   V[TAVG]  = (boot_slot.dist > 0.1f) ? (boot_slot.fuel / boot_slot.dist * 100.0f) : NAN;  // l/100km
   V[CAPAH]  = (cap_n > 0) ? cap_ah : NAN;
-  V[CAPKWH] = (cap_n > 0 && vl_avg > 0) ? (cap_ah * vl_avg / 1000.0f) : NAN;
+  V[CAPKWH] = (cap_n > 0) ? (cap_ah * CAP_VNOM / 1000.0f) : NAN;   // nominal V -> steady (was vl_avg)
   V[TMOVE] = boot_slot.move_s;
   V[TSPD]  = (boot_slot.move_s > 5.0f) ? (boot_slot.dist / (boot_slot.move_s / 3600.0f)) : NAN;   // km/h since boot
   V[TEV]   = boot_slot.ev;
