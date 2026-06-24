@@ -38,9 +38,9 @@ globals:
   # prius_persist_load() — so NO redundant restore_value globals for them. fuel_corr is the only
   # firmware-owned value NOT in the blob, so it keeps its own global.
   - id: fuel_corr_g        # user fuel-consumption correction factor (calibrate to the pump)
-    type: float
-    restore_value: yes
-    initial_value: '1.0'
+    type: float            # default 1.0075: the trip computer under-reads ~0.3 L per full tank (measured)
+    restore_value: yes     # NOTE: restore_value keeps the device's saved value -> set it on-device too
+    initial_value: '1.0075'
 
 esp32:
   board: esp32-c3-devkitm-1

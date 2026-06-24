@@ -52,6 +52,9 @@ inline void prius_persist_save(uint32_t epoch) {
     uint32_t cb; std::memcpy(&cb, &prius::cons_ema, 4);  // key -> no PBlob struct change / magic risk)
     nvs_set_u32(h, "cema", cb);
   }
+  { uint32_t ab; std::memcpy(&ab, &prius::fuel_anchor, 4);   // virtual-gauge anchor + calibrated flag
+    nvs_set_u32(h, "fanc", ab);                             // (consumption itself lives in the tank slot[1])
+    nvs_set_u32(h, "tkn", prius::tank_known ? 1u : 0u); }
   nvs_commit(h);
   nvs_close(h);
 }
@@ -80,6 +83,9 @@ inline void prius_persist_load() {
       loaded = true;
     }
     uint32_t cb; if (nvs_get_u32(h, "cema", &cb) == ESP_OK) std::memcpy(&prius::cons_ema, &cb, 4);
+    uint32_t ab, tk;                                        // virtual-gauge anchor + calibrated flag
+    if (nvs_get_u32(h, "fanc", &ab) == ESP_OK) std::memcpy(&prius::fuel_anchor, &ab, 4);
+    if (nvs_get_u32(h, "tkn",  &tk) == ESP_OK) prius::tank_known = (tk != 0);
     nvs_close(h);
   }
   if (!loaded) {
@@ -89,6 +95,9 @@ inline void prius_persist_load() {
     prius::last_refuel_epoch = 1781952172u;
     prius::fuel_ref = 100.0f;   // tank is full -> don't let the first reading look like a refuel
   }
+  // the virtual gauge's "consumed since refuel" IS the tank slot's fuel (persisted in the blob) --
+  // sync it so fuelL = anchor - consumed continues across key-off (no re-anchor to the bouncy gauge).
+  prius::fuel_since_refuel = prius::slot[1].fuel;
   prius::persist_loaded = true;                // boot read attempt done -> writes allowed
 }
 

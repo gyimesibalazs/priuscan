@@ -118,7 +118,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 339;   // 3.39: capKwh uses nominal pack V (steady SOH); CAP_ALPHA 0.03
+inline constexpr int FW_VERSION = 340;   // 3.40: tank anchor persisted + sustained-leave calibration; HEAD 5.7/MEAS 32.95
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -200,9 +200,12 @@ inline constexpr float BRKPOS_REGEN = 3.0f;         // brake pedal position abov
 // Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
 // cross-check (head 3.14 + measured 35.51 + 0%-reserve = the fill). 47 L assumed (safety margin).
 inline constexpr float TANK_FULL   = 47.0f;
-inline constexpr float FUEL_HEAD   = 3.14f;    // top plateau: gauge pinned 100% for this much fuel
-inline constexpr float FUEL_MEAS   = 35.51f;   // span the gauge 0..100% actually measures
-inline constexpr float FUEL_BOTTOM = TANK_FULL - FUEL_HEAD - FUEL_MEAS;  // ~8.35 L reserve below 0%
+inline constexpr float FUEL_HEAD   = 5.7f;     // top plateau: gauge pinned 100% for this much fuel (measured)
+inline constexpr float FUEL_MEAS   = 32.95f;   // gauge 0..100% maps to this span (100% -> TANK_FULL-HEAD = 41.3 L)
+inline constexpr float FUEL_BOTTOM = TANK_FULL - FUEL_HEAD - FUEL_MEAS;  // 8.35 L reserve below 0%
+inline constexpr uint32_t FUEL_LEAVE_MS = 180000;  // fin must stay <99.8% this long (no return to 100%) before
+                                                   // it counts as "left 100%" -> calibrate. Filters terrain dips.
+inline uint32_t fuel_below_ms = 0;             // when fin first went <99.8% in the current streak (0 = at 100%)
 inline bool  tank_known = false;        // calibrated this tank's anchor (left 100% / immediate)?
 inline bool  fuel_saw_100 = false;      // did we see a 100% gauge reading since the last refuel?
 inline float fuel_anchor = 47.0f;       // learned fill size: remaining = fuel_anchor - fuel_since_refuel
@@ -1166,7 +1169,7 @@ inline void compute_derived(uint32_t now_ms) {
         refuel_dirty = true; persist_request = true;               // flush NVS on refuel
         fuel_ref = refuel_peak; refuel_peak = 0; refuel_seen_ms = 0;
         tank_known = false; fuel_since_refuel = 0;                  // new tank: assume full, recalibrate
-        fuel_saw_100 = false; fuel_anchor = TANK_FULL;
+        fuel_saw_100 = false; fuel_anchor = TANK_FULL; fuel_below_ms = 0;
       }
     } else {
       refuel_peak = 0; refuel_seen_ms = 0;       // not a refuel rise (or spike dropped back)
@@ -1175,18 +1178,19 @@ inline void compute_derived(uint32_t now_ms) {
       // then look like a refuel. Consumption is gradual, so a >20% drop below fuel_ref is a glitch.
       if (fin > fuel_ref - 20.0f) fuel_ref += 0.01f * (fin - fuel_ref);
     }
-    // VIRTUAL fuel gauge: consumption-driven, anchored by the real gauge. While the gauge reads
-    // 100% we assume a full 47 L tank and count down by consumption. The moment it first drops
-    // below 100% we learn THIS fill's size: the gauge leaves 100% at a fixed level (TANK_FULL-HEAD),
-    // so full_tank = that level + consumed-so-far. If we never saw 100% (a partial refuel, or a
-    // mid-tank boot) we calibrate immediately from the gauge's measured-range mapping. After that
-    // the level is purely consumption-driven (immune to the bouncy gauge): remaining = anchor - C.
-    if (fin >= 99.8f) fuel_saw_100 = true;
-    if (!tank_known && fin < 99.8f) {
-      float l_real = fuel_saw_100 ? (TANK_FULL - FUEL_HEAD)                  // gauge leaves 100% here
-                                  : (FUEL_BOTTOM + fin * 0.01f * FUEL_MEAS); // never saw 100% -> map gauge
-      fuel_anchor = l_real + fuel_since_refuel;
-      tank_known = true;
+    // VIRTUAL fuel gauge: consumption-driven, with a ONE-TIME anchor per tank. While the gauge still
+    // reads 100% we assume a full tank (47 L) and count down by consumption. We calibrate the anchor
+    // ONCE, at the first STABLE sub-100% level -- the gauge wobbles/dips near 100% (terrain/slosh)
+    // before truly leaving it, so we only accept "left 100%" after fin has stayed <99.8 for
+    // FUEL_LEAVE_MS WITHOUT returning to 100% (a dip that recovers resets the streak). At that point
+    // anchor = measured level (gauge mapping, precise here) + consumed-since-refuel -> recovers the
+    // ACTUAL fill (47 if full, 45.5 if first-click, any partial). anchor + tank_known are PERSISTED,
+    // so after key-off it continues (remaining = anchor - C); it never re-anchors to the bouncy gauge.
+    if (fin >= 99.8f) { fuel_saw_100 = true; fuel_below_ms = 0; }   // at/back to 100% -> reset the streak
+    else if (fuel_below_ms == 0) fuel_below_ms = now_ms;            // streak below 100% starts
+    if (!tank_known && fin < 99.8f && fuel_below_ms && now_ms - fuel_below_ms >= FUEL_LEAVE_MS) {
+      fuel_anchor = (FUEL_BOTTOM + fin * 0.01f * FUEL_MEAS) + fuel_since_refuel;
+      tank_known = true; persist_request = true;                   // flush the anchor to NVS
     }
     V[FUELL] = fmaxf(0.0f, (tank_known ? fuel_anchor : TANK_FULL) - fuel_since_refuel);
     // measured-gauge liters (for the calc-vs-measured drift indicator); only in the measured range
