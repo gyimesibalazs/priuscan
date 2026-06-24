@@ -153,6 +153,7 @@
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
     <string name="f_fuelIn">Brandstofniveau</string>
+    <string name="f_range">Bereik</string>
     <string name="f_battFan">Accukoelventilator</string>
     <string name="f_dtcCur">Actieve DTC\'s</string>
     <string name="f_dtcHist">Opgeslagen DTC\'s</string>

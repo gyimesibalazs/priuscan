@@ -153,6 +153,7 @@
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
     <string name="f_fuelIn">Tankfüllstand</string>
+    <string name="f_range">Reichweite</string>
     <string name="f_battFan">Batterie-Kühlgebläse</string>
     <string name="f_dtcCur">Aktive DTC</string>
     <string name="f_dtcHist">Gespeicherte DTC</string>

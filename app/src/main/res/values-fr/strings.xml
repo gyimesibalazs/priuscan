@@ -152,6 +152,7 @@
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
     <string name="f_fuelIn">Niveau de carburant</string>
+    <string name="f_range">Autonomie</string>
     <string name="f_battFan">Ventilateur de refroidissement batterie</string>
     <string name="f_dtcCur">DTC actifs</string>
     <string name="f_dtcHist">DTC enregistrés</string>

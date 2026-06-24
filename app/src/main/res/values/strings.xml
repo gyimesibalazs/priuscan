@@ -204,6 +204,7 @@
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
     <string name="f_fuelIn">Fuel level</string>
+    <string name="f_range">Range</string>
     <string name="f_battFan">Battery cooling fan</string>
     <string name="f_dtcCur">Active DTCs</string>
     <string name="f_dtcHist">Stored DTCs</string>

@@ -570,7 +570,8 @@ private fun OdoRow(s: CanState) {
         if (sp > 3.0) "%.1f l/100km".format(lh / sp * 100.0) else "%.1f l/h".format(lh)
     } ?: "– l/100km"
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        listOf(gear, spd, rpm, odo, cons).forEach {
+        val range = s.d("range")?.let { "->| ${it.toInt()} km" }   // distance-to-empty
+        listOfNotNull(gear, spd, rpm, odo, range, cons).forEach {
             Text(it, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
         }
     }

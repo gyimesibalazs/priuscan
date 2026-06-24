@@ -152,6 +152,7 @@
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
     <string name="f_fuelIn">Üzemanyagszint</string>
+    <string name="f_range">Hatótáv</string>
     <string name="f_battFan">Akku hűtőventilátor</string>
     <string name="f_dtcCur">Aktív DTC-k</string>
     <string name="f_dtcHist">Tárolt DTC-k</string>

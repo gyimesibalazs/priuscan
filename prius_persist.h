@@ -48,6 +48,10 @@ inline void prius_persist_save(uint32_t epoch) {
   b.cap_ah = prius::cap_ah; b.cap_n = prius::cap_n; b.vl_avg = prius::vl_avg;
   std::memcpy(b.lz, prius::lz, sizeof(b.lz)); b.lz_n = prius::lz_n;
   nvs_set_blob(h, "blob", &b, sizeof(b));
+  if (!std::isnan(prius::cons_ema)) {                    // distance-to-empty consumption EMA (separate
+    uint32_t cb; std::memcpy(&cb, &prius::cons_ema, 4);  // key -> no PBlob struct change / magic risk)
+    nvs_set_u32(h, "cema", cb);
+  }
   nvs_commit(h);
   nvs_close(h);
 }
@@ -75,6 +79,7 @@ inline void prius_persist_load() {
       std::memcpy(prius::lz, b.lz, sizeof(prius::lz)); prius::lz_n = b.lz_n;
       loaded = true;
     }
+    uint32_t cb; if (nvs_get_u32(h, "cema", &cb) == ESP_OK) std::memcpy(&prius::cons_ema, &cb, 4);
     nvs_close(h);
   }
   if (!loaded) {

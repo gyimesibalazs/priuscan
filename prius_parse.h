@@ -49,6 +49,7 @@ enum VKey {
   AMBL,                         // raw ambient light level, 0x620 b2:b3 BE (~31 bright .. ~600 dark, inverted)
   DMODE,                        // drive mode, 0x49B b4: 0=normal, 1=ECO (0x08), 2=PWR (0x04)
   EVMODE,                       // EV mode on/off, 0x49B b4 bit1 (0x02)
+  RANGE,                        // distance-to-empty (km) = fuelL / distance-weighted consumption EMA
   N_JSON,                       // number of fields that go into the JSON (length of FIELDS)
   RAW0 = N_JSON, RAW1, RAW2, RAW3, RAW4, RAW5, RAW6, RAW7,
   V_COUNT
@@ -77,7 +78,7 @@ inline const char *KEYS[V_COUNT] = {
   "tDist","tFuel","tAvg",
   "capAh","capKwh",
   "tMove","tSpd","tEv",
-  "odo","gasB","lights","ambL","dmode","ev",
+  "odo","gasB","lights","ambL","dmode","ev","range",
   "raw0","raw1","raw2","raw3","raw4","raw5","raw6","raw7",
 };
 
@@ -117,7 +118,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 336;   // 3.36: MG2R/MG2Q/MG1R/INV1/VL/VH poll->broadcast (0x245/0x499/0x49A/0x49D)
+inline constexpr int FW_VERSION = 337;   // 3.37: range (DTE) = fuelL / distance-weighted consumption EMA
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -206,6 +207,10 @@ inline bool  tank_known = false;        // calibrated this tank's anchor (left 1
 inline bool  fuel_saw_100 = false;      // did we see a 100% gauge reading since the last refuel?
 inline float fuel_anchor = 47.0f;       // learned fill size: remaining = fuel_anchor - fuel_since_refuel
 inline float fuel_since_refuel = 0;     // liters burned since the last refuel (drives the virtual gauge)
+// distance-to-empty: distance-weighted EMA of consumption (l/100km). NaN until seeded; persisted
+// in NVS ("cema") so it survives key-off. H = 25 km horizon (weight = step_km / RANGE_EMA_KM).
+inline constexpr float RANGE_EMA_KM = 25.0f;
+inline float cons_ema = NAN;
 
 // ===== Host wall-clock time (pushed from the head unit over serial) =====
 // The production firmware has no Wi-Fi/NTP, so the head unit is the only time
@@ -1066,6 +1071,14 @@ inline void compute_derived(uint32_t now_ms) {
     slot_add(boot_slot, d_dist, d_ev, d_fuel, d_move, d_re, d_be);
     for (int i = 0; i < NSLOT; i++) slot_add(slot[i], d_dist, d_ev, d_fuel, d_move, d_re, d_be);
     fuel_since_refuel += d_fuel;   // for the head-plateau liter count-down (calibrated tank)
+    // distance-to-empty: distance-weighted EMA of consumption (l/100km). Updates ONLY while moving
+    // (>5 m/step), so idling doesn't skew it. Seed (first ever boot, before NVS) from the tank avg.
+    if (d_dist > 0.005f && !std::isnan(d_fuel) && d_fuel >= 0.0f) {
+      if (std::isnan(cons_ema))
+        cons_ema = (slot[1].dist > 1.0f) ? (slot[1].fuel / slot[1].dist * 100.0f) : 5.0f;
+      cons_ema += (d_fuel / d_dist * 100.0f - cons_ema) * fminf(d_dist / RANGE_EMA_KM, 1.0f);
+      cons_ema = fmaxf(2.0f, fminf(30.0f, cons_ema));
+    }
     // distance = real odometer delta (drift-free) for any slot with a stamped start odo; the
     // spd-integral above only fills it until the odo is known / for slots without a start odo
     // (e.g. lifetime). Fixes the ~0.4% speed-integral drift seen vs the odometer.
@@ -1176,6 +1189,10 @@ inline void compute_derived(uint32_t now_ms) {
     // measured-gauge liters (for the calc-vs-measured drift indicator); only in the measured range
     V[FUELGM] = (tank_known && fin < 99.8f) ? (FUEL_BOTTOM + fin * 0.01f * FUEL_MEAS) : NAN;
   }
+  // distance-to-empty (km) = remaining fuel / recent consumption. Uses V[FUELL] (kept across the
+  // warm-up gate); range may rise if consumption drops (no rate-limit, per spec). Clamp for sanity.
+  V[RANGE] = (!std::isnan(cons_ema) && cons_ema > 0.3f && !std::isnan(V[FUELL]))
+             ? fminf(1500.0f, V[FUELL] / cons_ema * 100.0f) : NAN;
 }
 
 // JSON field table = the SINGLE source of the output contract. The order is
@@ -1212,7 +1229,7 @@ inline const Field FIELDS[] = {
   {BATTFAN,"\"battFan\":",10,2}, {ECUMODE,"\"ecuMode\":",10,0}, {FANMODE,"\"fanMode\":",10,0},
   {DTCCUR,"\"dtcCur\":",9,0}, {DTCHIST,"\"dtcHist\":",10,0},
   {ACAMB,"\"acAmb\":",8,2}, {BLOWER,"\"blower\":",9,0}, {ACPRESS,"\"acPress\":",10,2},
-  {FUELIN,"\"fuelIn\":",9,2}, {FUELL,"\"fuelL\":",8,1}, {FUELGM,"\"fuelGm\":",9,1},
+  {FUELIN,"\"fuelIn\":",9,2}, {FUELL,"\"fuelL\":",8,1}, {FUELGM,"\"fuelGm\":",9,1}, {RANGE,"\"range\":",8,0},
   {CTR,"\"ctR\":",6,2}, {WPRUN,"\"wpRun\":",8,0}, {WPW,"\"wpW\":",6,0}, {CELLW,"\"cellW\":",8,0},
   {ELEN,"\"eLen\":",7,2}, {EFF,"\"eFF\":",6,2}, {EOK,"\"eOK\":",6,2}, {LOOPS,"\"loops\":",8,2},
   {GEAR,"\"gear\":",7,0}, {TURN,"\"turn\":",7,0}, {SETSPD,"\"setSpd\":",9,0},

@@ -153,6 +153,7 @@
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->
     <string name="f_fuelIn">Poziom paliwa</string>
+    <string name="f_range">Zasięg</string>
     <string name="f_battFan">Wentylator chłodzenia akumulatora</string>
     <string name="f_dtcCur">Aktywne DTC</string>
     <string name="f_dtcHist">Zapisane DTC</string>

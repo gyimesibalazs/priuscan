@@ -146,6 +146,7 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
         }
         // state-like fields that are not in the Fields list (HA entity identity is the
         // topic/key, so the localized friendly name is safe to change with locale)
+        sensorConfig("range", ctx.getString(R.string.f_range), "km", "{{ value_json.range }}")
         sensorConfig("door", ctx.getString(R.string.ha_door), "", "{{ value_json.door }}")
         sensorConfig("cruise", ctx.getString(R.string.ha_cruise), "", "{{ value_json.cruise }}")
         sensorConfig("wpRun", ctx.getString(R.string.ha_wp_running), "", "{{ value_json.wpRun }}")

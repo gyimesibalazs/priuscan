@@ -19,6 +19,7 @@ object Fields {
     val trip = listOf(
         Field("odo", R.string.f_odo, "km", 0),
         Field("fuelIn", R.string.f_fuelIn, "%", 0),
+        Field("range", R.string.f_range, "km", 0),
         Field("tDist", R.string.f_tDist, "km", 1),
         Field("tEv", R.string.f_tEv, "km", 1),
         Field("tSpd", R.string.f_tSpd, "km/h", 0),
