@@ -118,7 +118,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 337;   // 3.37: range (DTE) = fuelL / distance-weighted consumption EMA
+inline constexpr int FW_VERSION = 338;   // 3.38: HSI CHG scale was inverted (d1 156=hardest regen -> -99)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -525,12 +525,13 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
     case 0x247: {  // Hybrid System Indicator dial, ZONE-BANDED. byte0 LOW nibble = band
       // (0x8=PWR, 0xC=ECO, 0xF=CHG; high nibble = status flags), byte1 = position within the band.
       // The bands form ONE continuous needle: ECO byte1 0..100, PWR byte1 101..150 (hsi = byte1
-      // directly), CHG byte1 156..255 (hsi = -(byte1-155) -> -1..-100). Validated: engine joins
-      // ECO at ~50, EV/PWR boundary 100, full PWR ~150, full regen -100. (The earlier int8(byte1)
-      // read WRAPPED PWR>127 into CHG; the 16-bit read broke the working ECO 0..100 range.)
+      // directly), CHG byte1 INVERTED -- byte1 255 = least regen (hsi 0, continuous with ECO),
+      // byte1 156 = hardest regen (hsi -99): hsi = byte1-255. Validated on dump 225502 (the hardest
+      // braking, dv=-5, was byte1=156; light/coast regen -> byte1 ~255). Engine joins ECO ~50,
+      // EV/PWR boundary 100, full PWR ~150. (Earlier -(byte1-155) had the CHG scale BACKWARDS.)
       if (x.size() >= 2) {
         int band = x[0] & 0x0F;
-        V[HSI] = (band == 0xF) ? -(float)((int)x[1] - 155) : (float)x[1];
+        V[HSI] = (band == 0xF) ? ((float)x[1] - 255.0f) : (float)x[1];
       }
       return;
     }
