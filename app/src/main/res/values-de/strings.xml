@@ -289,4 +289,8 @@
     <string name="warn_high_res">Hoher Widerstand: #%1$d</string>
     <string name="undo_refuel">Falsche Betankung rückgängig</string>
     <string name="f_brkPos">Bremspedal</string>
+    <string name="app_update_title">App-Update</string>
+    <string name="app_checking">Suche nach Updates…</string>
+    <string name="app_update_btn">Auf v%1$s aktualisieren</string>
+    <string name="app_uptodate">App ist aktuell</string>
 </resources>

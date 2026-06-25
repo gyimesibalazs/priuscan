@@ -289,4 +289,8 @@
     <string name="warn_high_res">Magas ellenállás: #%1$d</string>
     <string name="undo_refuel">Téves tankolás visszavonása</string>
     <string name="f_brkPos">Fékpedál</string>
+    <string name="app_update_title">App frissítés</string>
+    <string name="app_checking">Frissítés keresése…</string>
+    <string name="app_update_btn">Frissítés: v%1$s</string>
+    <string name="app_uptodate">Az app naprakész</string>
 </resources>

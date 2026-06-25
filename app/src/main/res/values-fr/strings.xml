@@ -289,4 +289,8 @@
     <string name="warn_high_res">Résistance élevée : #%1$d</string>
     <string name="undo_refuel">Annuler ravitaillement erroné</string>
     <string name="f_brkPos">Pédale de frein</string>
+    <string name="app_update_title">Mise à jour de l\'app</string>
+    <string name="app_checking">Recherche de mises à jour…</string>
+    <string name="app_update_btn">Mettre à jour vers v%1$s</string>
+    <string name="app_uptodate">L\'app est à jour</string>
 </resources>

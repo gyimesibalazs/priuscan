@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.github.luben.zstd.Zstd
 import com.uber.h3core.H3Core
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Arrays
@@ -22,7 +23,7 @@ import java.util.Arrays
 object BelteruletGeofence {
     private const val TAG = "Geofence"
     private var h3: H3Core? = null
-    private val regions = ArrayList<Region>()
+    @Volatile private var regions: List<Region> = emptyList()   // atomically replaced on reload
 
     @Volatile var ready = false
         private set
@@ -33,27 +34,33 @@ object BelteruletGeofence {
         val cells: LongArray,   // sorted ascending -> binary search
     )
 
-    /** Load once (e.g. from CanService.onCreate). Safe to call repeatedly. */
+    /** Load once (e.g. from CanService). Safe to call repeatedly. */
     @Synchronized
-    fun init(ctx: Context) {
-        if (ready || regions.isNotEmpty()) return
-        try {
-            h3 = H3Core.newSystemInstance()
-        } catch (e: Throwable) {
-            Log.e(TAG, "H3 native lib failed to load -> geofence disabled", e); return
+    fun init(ctx: Context) { if (!ready) load(ctx) }
+
+    /** Re-scan both sources — call after the updater downloads new .bgf. */
+    @Synchronized
+    fun reload(ctx: Context) { ready = false; load(ctx) }
+
+    // Downloaded sets in filesDir/geofence OVERRIDE the bundled assets/geofence baseline (by name),
+    // so the geofence data can grow/refresh without a full APK update.
+    private fun load(ctx: Context) {
+        if (h3 == null) {
+            try { h3 = H3Core.newSystemInstance() }
+            catch (e: Throwable) { Log.e(TAG, "H3 native lib failed to load -> geofence disabled", e); return }
         }
-        try {
-            val am = ctx.assets
-            val files = am.list("geofence")?.filter { it.endsWith(".bgf") }?.sorted() ?: emptyList()
-            var cells = 0
-            for (f in files) {
-                am.open("geofence/$f").use { ins -> parse(ins.readBytes()) }?.let { regions.add(it); cells += it.cells.size }
+        val out = ArrayList<Region>(); val seen = HashSet<String>(); var cells = 0
+        File(ctx.filesDir, "geofence").listFiles { f -> f.name.endsWith(".bgf") }?.sortedBy { it.name }?.forEach { f ->
+            if (seen.add(f.name)) runCatching { parse(f.readBytes()) }.getOrNull()?.let { out.add(it); cells += it.cells.size }
+        }
+        runCatching {
+            ctx.assets.list("geofence")?.filter { it.endsWith(".bgf") }?.sorted()?.forEach { f ->
+                if (seen.add(f)) ctx.assets.open("geofence/$f").use { parse(it.readBytes()) }?.let { out.add(it); cells += it.cells.size }
             }
-            ready = regions.isNotEmpty()
-            Log.i(TAG, "loaded ${regions.size} region(s), $cells cells (ready=$ready)")
-        } catch (e: Throwable) {
-            Log.e(TAG, "geofence asset load failed", e)
-        }
+        }.onFailure { Log.e(TAG, "geofence asset load failed", it) }
+        regions = out
+        ready = out.isNotEmpty()
+        Log.i(TAG, "loaded ${out.size} region(s), $cells cells (ready=$ready)")
     }
 
     private fun parse(raw: ByteArray): Region? {

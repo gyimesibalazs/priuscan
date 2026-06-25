@@ -290,4 +290,8 @@
     <string name="warn_high_res">Resistência alta: #%1$d</string>
     <string name="undo_refuel">Desfazer abastecimento errado</string>
     <string name="f_brkPos">Pedal de freio</string>
+    <string name="app_update_title">Atualização da app</string>
+    <string name="app_checking">A procurar atualizações…</string>
+    <string name="app_update_btn">Atualizar para v%1$s</string>
+    <string name="app_uptodate">A app está atualizada</string>
 </resources>

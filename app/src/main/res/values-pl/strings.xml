@@ -290,4 +290,8 @@
     <string name="warn_high_res">Wysoka rezystancja: #%1$d</string>
     <string name="undo_refuel">Cofnij błędne tankowanie</string>
     <string name="f_brkPos">Pedał hamulca</string>
+    <string name="app_update_title">Aktualizacja aplikacji</string>
+    <string name="app_checking">Szukanie aktualizacji…</string>
+    <string name="app_update_btn">Aktualizuj do v%1$s</string>
+    <string name="app_uptodate">Aplikacja jest aktualna</string>
 </resources>

@@ -12,8 +12,8 @@ android {
         applicationId = "hu.codingo.priuscan"
         minSdk = 26          // fejegysegek: Android 9-12, boven belefer
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2      // bump on every GitHub release; the in-app updater compares this
+        versionName = "1.1"
     }
 
     buildTypes {
@@ -22,7 +22,11 @@ android {
         }
     }
 
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
+
+    // .bgf are already zstd-compressed -> don't let aapt recompress (keeps openFd() usable for
+    // size checks, and avoids double work)
+    androidResources { noCompress += "bgf" }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

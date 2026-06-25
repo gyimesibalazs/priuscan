@@ -291,4 +291,8 @@
     <string name="warn_high_res">Hoge weerstand: #%1$d</string>
     <string name="undo_refuel">Foutieve tankbeurt ongedaan maken</string>
     <string name="f_brkPos">Rempedaal</string>
+    <string name="app_update_title">App-update</string>
+    <string name="app_checking">Zoeken naar updates…</string>
+    <string name="app_update_btn">Bijwerken naar v%1$s</string>
+    <string name="app_uptodate">App is up-to-date</string>
 </resources>

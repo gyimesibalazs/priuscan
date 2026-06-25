@@ -2,4 +2,6 @@
 <paths>
     <!-- getExternalFilesDir(null)/logs -> a helyi naplofajlok megosztasahoz -->
     <external-files-path name="logs" path="logs/" />
+    <!-- cacheDir/update -> the downloaded APK handed to the system package installer -->
+    <cache-path name="update" path="update/" />
 </paths>

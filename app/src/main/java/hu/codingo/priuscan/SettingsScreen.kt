@@ -263,6 +263,33 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
             }
         }
 
+        // ---- App update (over GitHub Releases) ----
+        val appSt by AppUpdater.state.collectAsState()
+        val appPct by AppUpdater.progress.collectAsState()
+        val appLatest by AppUpdater.latestName.collectAsState()
+        val appMsg by AppUpdater.msg.collectAsState()
+        val gfMsg by AppUpdater.geofenceMsg.collectAsState()
+        LaunchedEffect(Unit) { AppUpdater.check(ctx) }
+        Text(stringResource(R.string.app_update_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
+        Text(
+            "App: v" + BuildConfig.VERSION_NAME + (if (gfMsg.isNotEmpty()) "   ·   geo $gfMsg" else ""),
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        when (appSt) {
+            AppUpdater.State.CHECKING -> Text(stringResource(R.string.app_checking), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            AppUpdater.State.DOWNLOADING -> {
+                LinearProgressIndicator(progress = { appPct / 100f }, modifier = Modifier.fillMaxWidth())
+                Text("$appPct %", color = MaterialTheme.colorScheme.onBackground)
+            }
+            AppUpdater.State.AVAILABLE -> {
+                Button(onClick = { AppUpdater.update(ctx) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.app_update_btn, appLatest ?: ""))
+                }
+            }
+            AppUpdater.State.ERROR -> Text(appMsg, fontSize = 13.sp, color = Color(0xFFFF6B6B))
+            else -> Text(stringResource(R.string.app_uptodate), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
         // ---- Display: dark mode from the car's light sensor ----
         Text(stringResource(R.string.display_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
         Row(verticalAlignment = Alignment.CenterVertically) {
