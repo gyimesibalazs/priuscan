@@ -119,7 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 343;   // 3.43: emit cd/ce in the LIVE slots line too (put_slot; v3.42 only had them in history)
+inline constexpr int FW_VERSION = 344;   // 3.44: odo-anchored trip dist keeps 0.1 km precision (odo integer + speed-integral sub-km)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -733,6 +733,8 @@ inline uint32_t derive_last_ms = 0;
 inline bool derive_init = false;
 inline float trap_sp = NAN;   // previous speed/fuel-rate for trapezoidal integration
 inline float trap_fl = NAN;
+inline float odo_frac = 0.0f;     // sub-km distance since the (whole-km) odometer last ticked
+inline uint32_t odo_prev = 0;     // last odometer value seen (to detect a km tick)
 // current stop duration (s), shared by all slots (the "stops <=180 s still count as moving"
 // bridge for traffic lights). Starts HIGH so a just-started, still-standing car does NOT count
 // moving time until it actually moves once (then a move resets it to 0 and the bridge applies).
@@ -1103,9 +1105,14 @@ inline void compute_derived(uint32_t now_ms) {
     {
       uint32_t co = cur_odo();
       if (co) {
-        if (boot_slot.odo && co >= boot_slot.odo) boot_slot.dist = (float)(co - boot_slot.odo);
+        // the odometer is whole-km -> add the sub-km fraction from the speed integral so odo-anchored
+        // slots keep 0.1 km precision. Reset the fraction each time the odo ticks (drift-free integer).
+        if (odo_prev != 0 && co != odo_prev) odo_frac = 0.0f;
+        odo_prev = co;
+        odo_frac = fminf(odo_frac + (d_dist > 0 ? d_dist : 0.0f), 1.0f);
+        if (boot_slot.odo && co >= boot_slot.odo) boot_slot.dist = (float)(co - boot_slot.odo) + odo_frac;
         for (int i = 0; i < NSLOT; i++)
-          if (slot[i].odo && co >= slot[i].odo) slot[i].dist = (float)(co - slot[i].odo);
+          if (slot[i].odo && co >= slot[i].odo) slot[i].dist = (float)(co - slot[i].odo) + odo_frac;
       }
     }
 
