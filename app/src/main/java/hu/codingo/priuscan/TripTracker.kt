@@ -28,7 +28,7 @@ data class TripSlot(
         fun from(o: JSONObject) = TripSlot(
             o.optLong("e"), o.optLong("o"), o.optDouble("d"), o.optDouble("v"),
             o.optDouble("f"), o.optDouble("m"), o.optDouble("r"),
-            o.optDouble("cd"), o.optDouble("ce"),
+            o.optDouble("cd", 0.0), o.optDouble("ce", 0.0),   // default 0 (absent on pre-v3.42 firmware -> not NaN)
         )
         /** Parse a JSON array of slot objects (the firmware "slots"/"rhist"/"ohist"). */
         fun list(a: JSONArray?): List<TripSlot> =
