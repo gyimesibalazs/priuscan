@@ -56,6 +56,7 @@
     <!-- ===== Alerts (sound + overlay pop-up) ===== -->
     <string name="alert_overheat">TÚLMELEGEDÉS! %1$d°C</string>
     <string name="alert_cooling">Hűtési figyelmeztetés: %1$d°C</string>
+    <string name="alert_headlight">Külterület — kapcsold fel a tompított fényt</string>
     <string name="alert_hv_fault">HV AKKU HIBA! ΔU=%1$.2fV (blokk %2$d)</string>
     <string name="alert_hv_cell">HV cella figyelmeztetés: ΔU=%1$.2fV</string>
 

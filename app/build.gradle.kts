@@ -29,6 +29,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+
+    // the h3-java jar ships desktop native libs as resources (darwin/.dylib, windows/.dll, linux,
+    // freebsd) — useless on Android (we load the .so from jniLibs). Drop them to slim the APK.
+    packaging {
+        resources {
+            excludes += setOf("**/*.dylib", "**/*.dll", "darwin-*/**", "windows-*/**",
+                              "linux-*/**", "freebsd-*/**")
+        }
+    }
 }
 
 dependencies {
@@ -40,4 +49,8 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
+    // belterület geofence: H3 cell lookup (native .so in jniLibs/{arm64-v8a,armeabi-v7a})
+    // + zstd to decode the .bgf cell blob
+    implementation("com.uber:h3:4.1.1")
+    implementation("com.github.luben:zstd-jni:1.5.6-3@aar")
 }

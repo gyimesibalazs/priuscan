@@ -56,6 +56,7 @@
     <!-- ===== Alerts (sound + overlay pop-up) ===== -->
     <string name="alert_overheat">¡SOBRECALENTAMIENTO! %1$d°C</string>
     <string name="alert_cooling">Aviso de refrigeración: %1$d°C</string>
+    <string name="alert_headlight">Carretera — enciende las luces de cruce</string>
     <string name="alert_hv_fault">¡FALLO DE BATERÍA HV! ΔU=%1$.2fV (bloque %2$d)</string>
     <string name="alert_hv_cell">Aviso de celda HV: ΔU=%1$.2fV</string>
 

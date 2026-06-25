@@ -56,6 +56,7 @@
     <!-- ===== Alerts (sound + overlay pop-up) ===== -->
     <string name="alert_overheat">SURRISCALDAMENTO! %1$d°C</string>
     <string name="alert_cooling">Avviso raffreddamento: %1$d°C</string>
+    <string name="alert_headlight">Strada extraurbana — accendi gli anabbaglianti</string>
     <string name="alert_hv_fault">GUASTO BATTERIA HV! ΔU=%1$.2fV (blocco %2$d)</string>
     <string name="alert_hv_cell">Avviso cella HV: ΔU=%1$.2fV</string>
 

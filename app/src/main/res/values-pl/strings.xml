@@ -57,6 +57,7 @@
     <!-- ===== Alerts (sound + overlay pop-up) ===== -->
     <string name="alert_overheat">PRZEGRZANIE! %1$d°C</string>
     <string name="alert_cooling">Ostrzeżenie układu chłodzenia: %1$d°C</string>
+    <string name="alert_headlight">Poza terenem zabudowanym — włącz światła mijania</string>
     <string name="alert_hv_fault">AWARIA AKUMULATORA HV! ΔU=%1$.2fV (blok %2$d)</string>
     <string name="alert_hv_cell">Ostrzeżenie ogniwa HV: ΔU=%1$.2fV</string>
 

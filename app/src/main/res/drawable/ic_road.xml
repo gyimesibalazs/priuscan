@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- perspective road: two converging side edges + a dashed centre line -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M7.5,3 L8.5,3 L5.5,21 L4,21 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M16.5,3 L15.5,3 L18.5,21 L20,21 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M11.7,3.5 L12.3,3.5 L12.2,6.5 L11.8,6.5 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M11.5,9.5 L12.5,9.5 L12.4,13 L11.6,13 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M11.2,16 L12.8,16 L12.9,20.5 L11.1,20.5 Z" />
+</vector>

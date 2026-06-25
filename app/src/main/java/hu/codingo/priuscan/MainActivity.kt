@@ -535,6 +535,7 @@ private fun StatusIcons(s: CanState) {
     val brkPos = s.d("brkPos") ?: 0.0
     val cruise = (s.i("cruise") ?: 0) != 0
     val belt = (s.i("belt") ?: 0) != 0
+    val city by CanService.city.collectAsState()   // belterület geofence: true=city, false=open road
     val phys = brk > 0.55                          // physical (friction) brake = pressure rising
     // regen (green) = brake PEDAL pressed AND MG2 charging (generating), friction not yet engaged
     val regen = !phys && brkPos > 3.0 && mg2 < 0.0 && spd > 2
@@ -544,6 +545,12 @@ private fun StatusIcons(s: CanState) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        // belterület / országút (red road = open road with low-beam off -> headlight warning)
+        when (city) {
+            true -> Ic(R.drawable.ic_city, CGreen)
+            false -> Ic(R.drawable.ic_road, if (lt and 0x20 == 0) CRed else CBlue)
+            else -> {}
+        }
         if (lt and 0x10 != 0) Ic(R.drawable.ic_light_position, CGreen)
         if (lt and 0x20 != 0) Ic(R.drawable.ic_light_low, CGreen)
         if (lt and 0x40 != 0) Ic(R.drawable.ic_light_high, CBlue)

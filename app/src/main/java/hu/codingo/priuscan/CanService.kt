@@ -61,6 +61,8 @@ class CanService : Service() {
 
         // ---- GPS (head-unit location, via LocationManager) ----
         val gps = MutableStateFlow<Location?>(null)
+        // ---- belterület geofence: true=built-up area, false=open road, null=unknown/no fix ----
+        val city = MutableStateFlow<Boolean?>(null)
 
         // ---- Dark mode driven by the car's solar (sun-load) sensor ----
         val carDark = MutableStateFlow(false)   // true = dark (low ambient light)
@@ -84,7 +86,7 @@ class CanService : Service() {
         fun mergeLastRefuel() = sendCommand("M")   // merge the last refuel-history entry into the tank
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 340                        // bundled firmware version (3.40)
+        const val BUNDLED_FW = 341                        // bundled firmware version (3.41)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
@@ -161,16 +163,31 @@ class CanService : Service() {
 
     @Volatile private var lastLoc: Location? = null   // latest GPS fix (for log merge)
     private var gpsRunning = false
+    @Volatile private var inCity: Boolean? = null     // last geofence verdict (to detect flips)
+    private var lastHlWarn = 0L                        // last open-road headlight warning (ms)
     private val locListener = object : LocationListener {
-        override fun onLocationChanged(loc: Location) { lastLoc = loc; gps.value = loc }
+        override fun onLocationChanged(loc: Location) { lastLoc = loc; gps.value = loc; updateGeofence(loc) }
         override fun onProviderEnabled(provider: String) {}
         override fun onProviderDisabled(provider: String) {}
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
     }
 
+    // belterület geofence: on each fix, look up the .bgf set; on a city<->road FLIP update the UI
+    // flag and tell the firmware ("G1"=belterület / "G0"=országút -> it splits city km / city-EV km).
+    private fun updateGeofence(loc: Location) {
+        if (!BelteruletGeofence.ready) return
+        val nowCity = BelteruletGeofence.isInside(loc.latitude, loc.longitude)
+        if (nowCity != inCity) {
+            inCity = nowCity
+            city.value = nowCity
+            sendCommand(if (nowCity) "G1" else "G0")
+        }
+    }
+
     private fun startGps() {
         if (gpsRunning) return
         if (!hasLocPermission()) return
+        Thread { BelteruletGeofence.init(applicationContext) }.start()   // load the geofence .bgf set once
         val lm = getSystemService(LocationManager::class.java) ?: return
         try {
             if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
@@ -603,6 +620,13 @@ class CanService : Service() {
             alert(cw, if (cw >= 2) getString(R.string.alert_hv_fault, d, s.i("weakB"))
                       else getString(R.string.alert_hv_cell, d))
         }
+
+        // belterület geofence: OUTSIDE a built-up area with low-beam OFF while moving -> warn.
+        // (HU: dipped headlights are mandatory on the open road.) 0x20 = low-beam lamp bit.
+        val lowBeamOff = (s.i("lights") and 0x20) == 0
+        if (inCity == false && lowBeamOff && (s.d("spd") ?: 0.0) > 30.0) {
+            if (now - lastHlWarn > 60000L) { lastHlWarn = now; alert(1, getString(R.string.alert_headlight)) }
+        } else lastHlWarn = 0L   // condition cleared -> re-arm (fire immediately if it returns)
 
         // doors
         overlays.updateDoors(s.doorMask)
