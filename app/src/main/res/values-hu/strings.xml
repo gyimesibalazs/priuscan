@@ -222,6 +222,7 @@
     <string name="r_since_refuel">Utolsó tankolás óta</string>
     <string name="r_time">Idő</string>
     <string name="r_dist">Táv</string>
+    <string name="r_citydist">Belterület</string>
     <string name="r_avgspeed">Átlagsebesség</string>
     <string name="r_avgcons">Átlagfogyasztás</string>
     <string name="r_history">Előzmények</string>

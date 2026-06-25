@@ -319,6 +319,7 @@ private fun TripSection() {
         val s = slots.getOrNull(def.idx) ?: TripSlot.EMPTY
         val evPct = if (s.dist > 0.1) (s.ev / s.dist * 100).toInt() else 0
         SensorRow(stringResource(R.string.r_dist), "%.1f km / %.1f EV km (%d%%)".format(s.dist, s.ev, evPct))
+        SensorRow(stringResource(R.string.r_citydist), "%.1f km / %.1f EV km (%d%%)".format(s.cityDist, s.cityEv, s.cityEvPct))
         SensorRow(stringResource(R.string.r_fuelused), "%.2f L".format(s.fuel))
         SensorRow(stringResource(R.string.r_avgcons), "%.1f l/100km".format(s.avgCons))
         SensorRow(stringResource(R.string.r_avgspeed), "%.0f km/h".format(s.avgKmh))

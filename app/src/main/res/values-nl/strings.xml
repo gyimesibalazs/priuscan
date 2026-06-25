@@ -224,6 +224,7 @@
     <string name="r_since_refuel">Sinds laatste tankbeurt</string>
     <string name="r_time">Tijd</string>
     <string name="r_dist">Afstand</string>
+    <string name="r_citydist">Bebouwde kom</string>
     <string name="r_avgspeed">Gem. snelheid</string>
     <string name="r_avgcons">Gem. verbruik</string>
     <string name="r_history">Geschiedenis</string>

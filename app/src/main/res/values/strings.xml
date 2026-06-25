@@ -10,6 +10,7 @@
     <string name="r_since_refuel">Since last refuel</string>
     <string name="r_time">Time</string>
     <string name="r_dist">Distance</string>
+    <string name="r_citydist">Built-up</string>
     <string name="r_avgspeed">Avg speed</string>
     <string name="r_avgcons">Avg consumption</string>
     <string name="r_fuelused">Fuel used</string>

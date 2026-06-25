@@ -222,6 +222,7 @@
     <string name="r_since_refuel">Depuis le dernier plein</string>
     <string name="r_time">Temps</string>
     <string name="r_dist">Distance</string>
+    <string name="r_citydist">Agglomération</string>
     <string name="r_avgspeed">Vitesse moyenne</string>
     <string name="r_avgcons">Conso. moyenne</string>
     <string name="r_history">Historique</string>

@@ -222,6 +222,7 @@
     <string name="r_since_refuel">Seit letztem Tanken</string>
     <string name="r_time">Zeit</string>
     <string name="r_dist">Distanz</string>
+    <string name="r_citydist">Ortschaft</string>
     <string name="r_avgspeed">Ø Geschwindigkeit</string>
     <string name="r_avgcons">Ø Verbrauch</string>
     <string name="r_history">Verlauf</string>

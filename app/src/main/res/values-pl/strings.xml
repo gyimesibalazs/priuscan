@@ -223,6 +223,7 @@
     <string name="r_since_refuel">Od ostatniego tankowania</string>
     <string name="r_time">Czas</string>
     <string name="r_dist">Dystans</string>
+    <string name="r_citydist">Teren zabudowany</string>
     <string name="r_avgspeed">Śr. prędkość</string>
     <string name="r_avgcons">Śr. zużycie</string>
     <string name="r_history">Historia</string>
