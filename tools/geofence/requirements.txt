@@ -1,0 +1,4 @@
+requests>=2.31
+h3>=4.1
+shapely>=2.0
+zstandard>=0.22

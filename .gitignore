@@ -24,3 +24,6 @@ carlogs/
 # Python
 __pycache__/
 *.pyc
+
+# geofence build intermediates (raw OSM, geojson) — the .bgf is committed in app assets
+tools/geofence/build/

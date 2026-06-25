@@ -1,0 +1,9 @@
+# lat,lng,inside(1/0),label  — belterület=1, külterület=0
+47.515,19.105,1,Budapest Zuglo (lako)
+47.460,19.130,1,Budapest Kispest (lako)
+47.4979,19.0402,1,Budapest belvaros
+47.530,21.600,1,Debrecen lakoteruleti
+46.83,17.73,0,Balaton kozepe (viz)
+47.62,20.68,0,Tisza-to (viz)
+46.90,19.50,0,Kiskunsag szanto
+48.10,20.90,0,Bukk erdo
