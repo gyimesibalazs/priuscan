@@ -119,7 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 342;   // 3.42: geofence 3-state (0=unknown/1=belt/2=road), city km only in belt, state persisted
+inline constexpr int FW_VERSION = 343;   // 3.43: emit cd/ce in the LIVE slots line too (put_slot; v3.42 only had them in history)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -1302,6 +1302,8 @@ inline void put_slot(char *&p, const TripSlot &s) {
   std::memcpy(p, ",\"f\":", 5); p += 5; put_num(p, s.fuel, 2);
   std::memcpy(p, ",\"m\":", 5); p += 5; put_num(p, s.move_s, 0);
   std::memcpy(p, ",\"r\":", 5); p += 5; put_num(p, s.brake_e > 1.0f ? fminf(100.0f, s.regen_e / s.brake_e * 100.0f) : 0.0f, 0);
+  std::memcpy(p, ",\"cd\":", 6); p += 6; put_num(p, s.city_dist, 1);   // city km
+  std::memcpy(p, ",\"ce\":", 6); p += 6; put_num(p, s.city_ev, 1);     // city-EV km
   *p++ = '}';
 }
 
