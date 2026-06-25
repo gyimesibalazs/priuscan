@@ -25,13 +25,15 @@ echo "sdk.dir=${ANDROID_SDK_LINUX:-$HOME/Android/Sdk}" > local.properties
 [ -f /tmp/priuscan-lp.bak ] && cp /tmp/priuscan-lp.bak local.properties || true
 [ -f "$APK" ] || { echo "!! build produced no APK"; exit 1; }
 
-printf '{"versionCode":%s,"versionName":"%s","fw":%s}\n' "$VC" "$VN" "$FW" > /tmp/priuscan-update.json
+# the asset MUST be literally "update.json" (AppUpdater looks for that name) -> stage in a temp dir
+RELDIR=$(mktemp -d)
+printf '{"versionCode":%s,"versionName":"%s","fw":%s}\n' "$VC" "$VN" "$FW" > "$RELDIR/update.json"
 
 NREG=$(ls "$GEO"/*.bgf 2>/dev/null | wc -l)
 gh release create "$TAG" \
   --title "PriusCAN $VN" \
   --notes "App v$VN (versionCode $VC) · firmware v$FW · $NREG geofence regions. Open Settings in the app to update." \
-  "$APK#priuscan-$VN.apk" \
-  /tmp/priuscan-update.json \
+  "$APK" \
+  "$RELDIR/update.json" \
   "$GEO"/*.bgf
 echo ">> released $TAG ($NREG regions)"

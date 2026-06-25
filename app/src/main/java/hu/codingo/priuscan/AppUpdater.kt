@@ -79,7 +79,7 @@ object AppUpdater {
             val url = a.getString("browser_download_url")
             val size = a.optLong("size")
             when {
-                name == "update.json" -> updateJson = url
+                name.endsWith("update.json") -> updateJson = url
                 name.endsWith(".apk") -> { apkUrl = url; apkSize = size }
                 name.endsWith(".bgf") -> bgf.add(Triple(name.removeSuffix(".bgf"), url, size))
             }
