@@ -81,11 +81,19 @@ object BelteruletGeofence {
         return Region(resMax, resMin, minLat, minLng, maxLat, maxLng, cells)
     }
 
-    /** True if (lat,lng) is inside a built-up area. False if outside, unknown, or disabled. */
-    fun isInside(lat: Double, lng: Double): Boolean {
-        val core = h3 ?: return false
+    /**
+     * Geofence verdict for a GPS fix:
+     *   true  = inside a built-up area (belterület),
+     *   false = covered by a region but on the open road (országút),
+     *   null  = NOT covered by any loaded region, or the geofence is disabled (unknown — treat like
+     *           "no GPS": no city-km, no headlight warning).
+     */
+    fun cityState(lat: Double, lng: Double): Boolean? {
+        val core = h3 ?: return null
+        var covered = false
         for (r in regions) {
             if (lat < r.minLat || lat > r.maxLat || lng < r.minLng || lng > r.maxLng) continue
+            covered = true
             // the compacted set is mixed-resolution -> probe the res9 cell then walk up to resMin
             var c = core.latLngToCell(lat, lng, r.resMax)
             var res = r.resMax
@@ -95,6 +103,6 @@ object BelteruletGeofence {
                 res--
             }
         }
-        return false
+        return if (covered) false else null   // in a region's bbox but no cell hit = open road; else unknown
     }
 }

@@ -72,8 +72,9 @@ MQTT discovery must stay in sync; if you add a key, update all three. Trip data 
 **Host→ESP commands** (`parse_host_line`): `T<unix>` set time, `D0/D1/D2` dump,
 `H`/`HO` refuel/oil history, `F<factor>` fuel correction, `R<2..6>` reset slot,
 `C<dst><src>` copy a live trip into A/B/C (src `B`=since-boot/`H`=from-home),
-`B` emit per-block internal resistance, `G1`/`G0` app geofence belterület/országút
-(→ `in_city`; the firmware splits city km / city-EV km per slot). **On-demand responses**
+`B` emit per-block internal resistance, `G0`/`G1`/`G2` app geofence state
+(0=unknown/not-covered, 1=belterület, 2=országút → `city_state`, persisted across key-off;
+city km / city-EV km per slot accrue only in state 1). **On-demand responses**
 (not in the 4 Hz line): `{"rhist":…}`, `{"ohist":…}`, `{"rblk":[…14…],"rn":N}`.
 
 **Flash persistence**: trip slots + histories + learned capacity/weak-block in ONE NVS

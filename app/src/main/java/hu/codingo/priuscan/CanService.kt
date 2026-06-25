@@ -86,7 +86,7 @@ class CanService : Service() {
         fun mergeLastRefuel() = sendCommand("M")   // merge the last refuel-history entry into the tank
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 341                        // bundled firmware version (3.41)
+        const val BUNDLED_FW = 342                        // bundled firmware version (3.42)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
@@ -176,11 +176,12 @@ class CanService : Service() {
     // flag and tell the firmware ("G1"=belterület / "G0"=országút -> it splits city km / city-EV km).
     private fun updateGeofence(loc: Location) {
         if (!BelteruletGeofence.ready) return
-        val nowCity = BelteruletGeofence.isInside(loc.latitude, loc.longitude)
+        val nowCity = BelteruletGeofence.cityState(loc.latitude, loc.longitude)  // true/false/null
         if (nowCity != inCity) {
             inCity = nowCity
             city.value = nowCity
-            sendCommand(if (nowCity) "G1" else "G0")
+            // G1=belterület, G2=országút, G0=unknown (not covered) -> the FW only counts city km on G1
+            sendCommand(when (nowCity) { true -> "G1"; false -> "G2"; else -> "G0" })
         }
     }
 

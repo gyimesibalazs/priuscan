@@ -119,7 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 341;   // 3.41: city km / city-EV km per trip slot (app geofence "G1"/"G0"); blob v6 +migration
+inline constexpr int FW_VERSION = 342;   // 3.42: geofence 3-state (0=unknown/1=belt/2=road), city km only in belt, state persisted
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -185,7 +185,8 @@ inline char     copy_src  = 0;          // 'B' = since-boot, 'H' = from-home
 inline bool     merge_request = false;  // app sent "M" -> merge the last refuel-history entry into the tank (YAML)
 inline bool     persist_request = false; // ask the YAML to flush the NVS blob (refuel / reset / corrected epoch)
 inline bool     persist_loaded = false; // true after the boot NVS read -> only THEN may we write
-inline bool     in_city = false;         // app geofence: inside a built-up area? (host "G1"=belt / "G0"=kult)
+inline uint8_t  city_state = 0;          // geofence: 0=unknown (no fix / not covered), 1=belterület,
+                                         // 2=országút. Host "G0/G1/G2"; persisted across key-off.
 inline uint32_t last_refuel_ms = 0;     // millis() at refuel (for pending correction)
 inline uint32_t refuel_seen_ms = 0;     // when fin first crossed the up-jump (confirm window)
 inline bool refuel_pending = false;     // refuel seen BEFORE host time was known -> correct later
@@ -245,7 +246,7 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
     return;
   }
   if (line[0] == 'B') { rblk_request = true; return; }   // emit per-block internal resistance
-  if (line[0] == 'G') { in_city = (line[1] == '1'); return; }  // app geofence: G1=belterület, G0=országút
+  if (line[0] == 'G') { uint8_t g = line[1] - '0'; if (g <= 2) city_state = g; return; }  // geofence 0/1/2
   if (line[0] == 'M') { merge_request = true; return; }  // merge last refuel-history entry into the tank
   if (line[0] == 'H') { if (line[1] == 'O') ohist_request = true; else hist_request = true; return; }  // H/HO history
   if (line[0] == 'F') {                                   // fuel correction: "F<factor>" (e.g. F1.05)
@@ -1081,8 +1082,9 @@ inline void compute_derived(uint32_t now_ms) {
       }
     }
     // city km / city-EV km: only when the app reports we're inside a built-up area (belterület)
-    float d_cd = in_city ? d_dist : 0.0f, d_ce = in_city ? d_ev : 0.0f;
-    V[CITY] = in_city ? 1.0f : 0.0f;
+    // city km / city-EV km accrue ONLY when explicitly belterület (1); unknown(0)/országút(2) -> none
+    float d_cd = (city_state == 1) ? d_dist : 0.0f, d_ce = (city_state == 1) ? d_ev : 0.0f;
+    V[CITY] = (float)city_state;
     // accumulate into every slot (the only difference between slots is WHEN they reset)
     slot_add(boot_slot, d_dist, d_ev, d_fuel, d_move, d_re, d_be, d_cd, d_ce);
     for (int i = 0; i < NSLOT; i++) slot_add(slot[i], d_dist, d_ev, d_fuel, d_move, d_re, d_be, d_cd, d_ce);

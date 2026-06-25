@@ -286,7 +286,7 @@ The firmware reads `\n`-terminated text commands from the USB-Serial/JTAG consol
 | `H\n` / `HO\n` | dump the refuel / oil-change history array (on demand) |
 | `B\n` | dump **per-block internal resistance** — `{"rblk":[…14…],"rn":N}` (v3.17; not in the 4 Hz line) |
 | `C<dst><src>\n` | copy a live trip into slot *dst* (3=A 4=B 5=C) from *src* (`B`=since-boot, `H`=from-home) (v3.15) |
-| `G1\n` / `G0\n` | app **geofence**: belterület / országút (built-up area vs open road) → `in_city`; the firmware then splits **city km / city-EV km** into each slot's `cd`/`ce` (v3.41) |
+| `G0\n` / `G1\n` / `G2\n` | app **geofence** state → `city_state`: **0** unknown (no fix / area not covered by any `.bgf`), **1** belterület, **2** országút. Persisted across key-off; **city km / city-EV km** (each slot's `cd`/`ce`) accrue only in state 1; the top-level `"city"` echoes 0/1/2 (v3.42) |
 
 CAN dump emits `#XXX [len] BB BB..\n` lines for frames in `[lo,hi]`, **deduped**
 (only on change) → opening a door makes the relevant frame pop out (how the 0x620

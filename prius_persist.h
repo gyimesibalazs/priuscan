@@ -69,6 +69,7 @@ inline void prius_persist_save(uint32_t epoch) {
   { uint32_t ab; std::memcpy(&ab, &prius::fuel_anchor, 4);   // virtual-gauge anchor + calibrated flag
     nvs_set_u32(h, "fanc", ab);                             // (consumption itself lives in the tank slot[1])
     nvs_set_u32(h, "tkn", prius::tank_known ? 1u : 0u); }
+  nvs_set_u32(h, "csta", prius::city_state);                // geofence state -> resume on next boot
   nvs_commit(h);
   nvs_close(h);
 }
@@ -118,6 +119,7 @@ inline void prius_persist_load() {
     uint32_t ab, tk;                                        // virtual-gauge anchor + calibrated flag
     if (nvs_get_u32(h, "fanc", &ab) == ESP_OK) std::memcpy(&prius::fuel_anchor, &ab, 4);
     if (nvs_get_u32(h, "tkn",  &tk) == ESP_OK) prius::tank_known = (tk != 0);
+    uint32_t cs; if (nvs_get_u32(h, "csta", &cs) == ESP_OK && cs <= 2) prius::city_state = (uint8_t)cs;
     nvs_close(h);
   }
   if (!loaded) {
