@@ -30,7 +30,7 @@ the calibration status, and the open tasks.
   parser header (`prius_parse.h`).
 * Firmware polls four diagnostic ECUs over ISO-TP and listens to a couple of
   passive broadcast frames, decodes everything into a value store, and emits a
-  single-line JSON object on the native USB serial port (~2 Hz).
+  single-line JSON object on the native USB serial port (~4 Hz).
 * The **Android app** (head unit) reads that JSON over USB, displays it, raises
   audible/visual warnings, shows a draggable always-on status overlay and a
   top-down door-open overlay (pre-rendered PNGs), and opportunistically pushes
@@ -101,8 +101,8 @@ value, not the Sensor object). So:
 * An 80 ms `interval` lambda calls `prius::next_request(rid, req, millis())` and
   sends the request **only if it returns true** (it returns false while a
   multi-frame ISO-TP transfer is still in flight — see ISO-TP timing below).
-* A 1 s interval calls `prius::compute_derived()`, a 500 ms interval calls
-  `prius::emit_json(extra)`.
+* A 500 ms interval calls `prius::compute_derived()`, a 250 ms interval calls
+  `prius::emit_json(extra)` (the 4 Hz JSON line).
 
 ### ISO-TP handling & full request↔response serialization
 Multi-frame responses (e.g. `2101`, the 14 block voltages) arrive as
@@ -174,7 +174,7 @@ Passive broadcast frames (no request):
   decoder (`setSpd`) is kept but stays `null`.
 
 ### JSON output schema
-One object per line on stdout (USB serial), ~2 Hz. All numeric values are
+One object per line on stdout (USB serial), ~4 Hz. All numeric values are
 floats with 2 decimals, or `null` if not yet received. Keys (see
 `emit_json` KEYS array in `prius_parse.h` for the authoritative list):
 
@@ -282,7 +282,7 @@ The firmware reads `\n`-terminated text commands from the USB-Serial/JTAG consol
 | `F<factor>\n` | fuel-consumption correction (× 0.5–2.0), persisted in `fuel_corr_g` |
 | `R<2..6>\n` | reset trip slot *i* (2=oil 3..5=A/B/C 6=home); oil push to `ohist` first |
 | `H\n` / `HO\n` | dump the refuel / oil-change history array (on demand) |
-| `B\n` | dump **per-block internal resistance** — `{"rblk":[…14…],"rn":N}` (v3.17; not in the 2 Hz line) |
+| `B\n` | dump **per-block internal resistance** — `{"rblk":[…14…],"rn":N}` (v3.17; not in the 4 Hz line) |
 | `C<dst><src>\n` | copy a live trip into slot *dst* (3=A 4=B 5=C) from *src* (`B`=since-boot, `H`=from-home) (v3.15) |
 
 CAN dump emits `#XXX [len] BB BB..\n` lines for frames in `[lo,hi]`, **deduped**
@@ -526,7 +526,7 @@ within-day single-block scatter, well below the mΩ-per-month aging signal. The 
 is **RAM-only** (refills in 1–2 min of varied driving); the latest medians ride along in
 the daily flash record and **seed the display at boot**. It is **slow-changing → emitted
 on demand** (`B` command → `{"rblk":[…],"rn":N}`) and auto every ~15 events — **never in
-the 2 Hz line**.
+the 4 Hz line**.
 
 **Pack-capacity smoothing (v3.16).** `CAP_MIN_DSOC` 8→15 % (bigger swing → far less
 noise), `CAP_ALPHA` 0.25→0.05 (slower EWMA), and a `CAP_CHG_EFF = 0.93` NiMH coulombic

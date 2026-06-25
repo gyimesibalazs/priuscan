@@ -61,7 +61,7 @@ Assistant. Two halves:
   a PID, sanity-check ranges against §6 of the guide.
 
 ## JSON contract
-The firmware emits one JSON object per line at ~2 Hz on USB serial. The authoritative
+The firmware emits one JSON object per line at ~4 Hz on USB serial. The authoritative
 key list is the `KEYS[]` array (order = the `VKey` enum) in `prius_parse.h`; the emitted
 subset + formatting is `FIELDS[]` (each prefix must equal the key and end in `":`, and
 its `preflen` must equal `strlen(prefix)` — host-tested). `CanState`/`Fields` and `HaPusher`
@@ -72,7 +72,7 @@ MQTT discovery must stay in sync; if you add a key, update all three. Trip data 
 **Host→ESP commands** (`parse_host_line`): `T<unix>` set time, `D0/D1/D2` dump,
 `H`/`HO` refuel/oil history, `F<factor>` fuel correction, `R<2..6>` reset slot,
 `C<dst><src>` copy a live trip into A/B/C (src `B`=since-boot/`H`=from-home),
-`B` emit per-block internal resistance. **On-demand responses** (not in the 2 Hz line):
+`B` emit per-block internal resistance. **On-demand responses** (not in the 4 Hz line):
 `{"rhist":…}`, `{"ohist":…}`, `{"rblk":[…14…],"rn":N}`.
 
 **Flash persistence**: trip slots + histories + learned capacity/weak-block in ONE NVS
