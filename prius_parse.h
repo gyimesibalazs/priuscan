@@ -50,6 +50,7 @@ enum VKey {
   DMODE,                        // drive mode, 0x49B b4: 0=normal, 1=ECO (0x08), 2=PWR (0x04)
   EVMODE,                       // EV mode on/off, 0x49B b4 bit1 (0x02)
   RANGE,                        // distance-to-empty (km) = fuelL / distance-weighted consumption EMA
+  CITY,                         // 1 = inside a built-up area (belterület), set by app geofence via "G1"/"G0"
   N_JSON,                       // number of fields that go into the JSON (length of FIELDS)
   RAW0 = N_JSON, RAW1, RAW2, RAW3, RAW4, RAW5, RAW6, RAW7,
   V_COUNT
@@ -78,7 +79,7 @@ inline const char *KEYS[V_COUNT] = {
   "tDist","tFuel","tAvg",
   "capAh","capKwh",
   "tMove","tSpd","tEv",
-  "odo","gasB","lights","ambL","dmode","ev","range",
+  "odo","gasB","lights","ambL","dmode","ev","range","city",
   "raw0","raw1","raw2","raw3","raw4","raw5","raw6","raw7",
 };
 
@@ -118,7 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 340;   // 3.40: tank anchor persisted + sustained-leave calibration; HEAD 5.7/MEAS 32.95
+inline constexpr int FW_VERSION = 341;   // 3.41: city km / city-EV km per trip slot (app geofence "G1"/"G0"); blob v6 +migration
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -184,6 +185,7 @@ inline char     copy_src  = 0;          // 'B' = since-boot, 'H' = from-home
 inline bool     merge_request = false;  // app sent "M" -> merge the last refuel-history entry into the tank (YAML)
 inline bool     persist_request = false; // ask the YAML to flush the NVS blob (refuel / reset / corrected epoch)
 inline bool     persist_loaded = false; // true after the boot NVS read -> only THEN may we write
+inline bool     in_city = false;         // app geofence: inside a built-up area? (host "G1"=belt / "G0"=kult)
 inline uint32_t last_refuel_ms = 0;     // millis() at refuel (for pending correction)
 inline uint32_t refuel_seen_ms = 0;     // when fin first crossed the up-jump (confirm window)
 inline bool refuel_pending = false;     // refuel seen BEFORE host time was known -> correct later
@@ -243,6 +245,7 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
     return;
   }
   if (line[0] == 'B') { rblk_request = true; return; }   // emit per-block internal resistance
+  if (line[0] == 'G') { in_city = (line[1] == '1'); return; }  // app geofence: G1=belterület, G0=országút
   if (line[0] == 'M') { merge_request = true; return; }  // merge last refuel-history entry into the tank
   if (line[0] == 'H') { if (line[1] == 'O') ohist_request = true; else hist_request = true; return; }  // H/HO history
   if (line[0] == 'F') {                                   // fuel correction: "F<factor>" (e.g. F1.05)
@@ -744,6 +747,8 @@ struct TripSlot {
   float move_s;     // active moving seconds (stops <=180 s count)
   float regen_e;    // J recovered into the pack while braking
   float brake_e;    // J of kinetic energy shed while braking (ratio = regen_e/brake_e)
+  float city_dist;  // km driven inside a built-up area (belterület; app geofence -> "G1"/"G0")
+  float city_ev;    // pure-EV km inside a built-up area
 };
 inline TripSlot boot_slot = {};        // SINCE BOOT — memory only, NOT persisted
 inline TripSlot slot[7] = {};          // PERSISTED: [0]=lifetime(never reset) [1]=tank
@@ -755,8 +760,10 @@ inline TripSlot ohist[HISTN] = {}; inline uint8_t ohist_n = 0, ohist_head = 0;  
 
 inline uint32_t cur_odo() { float o = V[ODO]; return std::isnan(o) ? 0u : (uint32_t)o; }
 inline void slot_start(TripSlot &s, uint32_t epoch, uint32_t odo) { s = {}; s.epoch = epoch; s.odo = odo; }
-inline void slot_add(TripSlot &s, float dd, float de, float df, float dm, float dre, float dbe) {
+inline void slot_add(TripSlot &s, float dd, float de, float df, float dm, float dre, float dbe,
+                     float dcd, float dce) {
   s.dist += dd; s.ev += de; s.fuel += df; s.move_s += dm; s.regen_e += dre; s.brake_e += dbe;
+  s.city_dist += dcd; s.city_ev += dce;
 }
 // reset a slot (2..5): oil-service (2) is pushed into the oil history first; 3..5 are user
 // trips. Slot 0 (lifetime) and 1 (tank, reset only on refuel) are not user-resettable here.
@@ -1073,9 +1080,12 @@ inline void compute_derived(uint32_t now_ms) {
         }
       }
     }
+    // city km / city-EV km: only when the app reports we're inside a built-up area (belterület)
+    float d_cd = in_city ? d_dist : 0.0f, d_ce = in_city ? d_ev : 0.0f;
+    V[CITY] = in_city ? 1.0f : 0.0f;
     // accumulate into every slot (the only difference between slots is WHEN they reset)
-    slot_add(boot_slot, d_dist, d_ev, d_fuel, d_move, d_re, d_be);
-    for (int i = 0; i < NSLOT; i++) slot_add(slot[i], d_dist, d_ev, d_fuel, d_move, d_re, d_be);
+    slot_add(boot_slot, d_dist, d_ev, d_fuel, d_move, d_re, d_be, d_cd, d_ce);
+    for (int i = 0; i < NSLOT; i++) slot_add(slot[i], d_dist, d_ev, d_fuel, d_move, d_re, d_be, d_cd, d_ce);
     fuel_since_refuel += d_fuel;   // for the head-plateau liter count-down (calibrated tank)
     // distance-to-empty: distance-weighted EMA of consumption (l/100km). Updates ONLY while moving
     // (>5 m/step), so idling doesn't skew it. Seed (first ever boot, before NVS) from the tank avg.
@@ -1237,6 +1247,7 @@ inline const Field FIELDS[] = {
   {DTCCUR,"\"dtcCur\":",9,0}, {DTCHIST,"\"dtcHist\":",10,0},
   {ACAMB,"\"acAmb\":",8,2}, {BLOWER,"\"blower\":",9,0}, {ACPRESS,"\"acPress\":",10,2},
   {FUELIN,"\"fuelIn\":",9,2}, {FUELL,"\"fuelL\":",8,1}, {FUELGM,"\"fuelGm\":",9,1}, {RANGE,"\"range\":",8,0},
+  {CITY,"\"city\":",7,0},
   {CTR,"\"ctR\":",6,2}, {WPRUN,"\"wpRun\":",8,0}, {WPW,"\"wpW\":",6,0}, {CELLW,"\"cellW\":",8,0},
   {ELEN,"\"eLen\":",7,2}, {EFF,"\"eFF\":",6,2}, {EOK,"\"eOK\":",6,2}, {LOOPS,"\"loops\":",8,2},
   {GEAR,"\"gear\":",7,0}, {TURN,"\"turn\":",7,0}, {SETSPD,"\"setSpd\":",9,0},
@@ -1330,8 +1341,9 @@ inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
 // one TripSlot as JSON: e=epoch o=odo d=dist v=ev f=fuel m=move_s r=regen%
 inline void emit_slot_json(char *&p, char *end, const TripSlot &s) {
   float r = s.brake_e > 1.0f ? fminf(100.0f, s.regen_e / s.brake_e * 100.0f) : 0.0f;
-  p += snprintf(p, end - p, "{\"e\":%u,\"o\":%u,\"d\":%.1f,\"v\":%.1f,\"f\":%.2f,\"m\":%.0f,\"r\":%.0f}",
-                (unsigned)s.epoch, (unsigned)s.odo, s.dist, s.ev, s.fuel, s.move_s, r);
+  p += snprintf(p, end - p,
+                "{\"e\":%u,\"o\":%u,\"d\":%.1f,\"v\":%.1f,\"f\":%.2f,\"m\":%.0f,\"r\":%.0f,\"cd\":%.1f,\"ce\":%.1f}",
+                (unsigned)s.epoch, (unsigned)s.odo, s.dist, s.ev, s.fuel, s.move_s, r, s.city_dist, s.city_ev);
 }
 // On-demand history dump: ONE array (50 records max ~4.3 KB) so a single response never
 // blows the buffer. The live slots (with their epochs) come from the regular line, so the
