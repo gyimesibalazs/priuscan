@@ -202,10 +202,12 @@ Debug:    eFF eOK eLen loops · raw0..raw7 (0x7B8/2147 response — G-sensor cal
 
 **Trip slots** (firmware-owned, persisted in NVS; the app only displays). Every
 counter is one uniform `TripSlot {epoch, odo, dist, ev, fuel, move_s, regen_e,
-brake_e}`. The regular line carries a `"slots"` array of 8 live slots in order:
-`[0] since-boot (memory only)`, `[1] lifetime`, `[2] tank`, `[3] oil`, `[4-6]
-A/B/C`, `[7] home-departure`. Each slot object is `{e,o,d,v,f,m,r}` (r = regen %,
-derived from `regen_e/brake_e`). The app derives avg consumption (`fuel/dist`),
+brake_e, city_dist, city_ev}`. The regular line carries a `"slots"` array of 8 live
+slots in order: `[0] since-boot (memory only)`, `[1] lifetime`, `[2] tank`, `[3] oil`,
+`[4-6] A/B/C`, `[7] home-departure`. Each slot object is `{e,o,d,v,f,m,r,cd,ce}`
+(r = regen %, derived from `regen_e/brake_e`; **`cd` = city km, `ce` = city-EV km** —
+accumulated only while the app's geofence reports `in_city`, see the `G1`/`G0` command;
+the top-level `"city"` flag echoes the current state). The app derives avg consumption (`fuel/dist`),
 avg speed (`dist/move_s`) and the regen ratio. Refuel history (`rhist`) and
 oil-change history (`ohist`), 50 entries each, are fetched on demand (`H` / `HO`).
 
@@ -284,6 +286,7 @@ The firmware reads `\n`-terminated text commands from the USB-Serial/JTAG consol
 | `H\n` / `HO\n` | dump the refuel / oil-change history array (on demand) |
 | `B\n` | dump **per-block internal resistance** — `{"rblk":[…14…],"rn":N}` (v3.17; not in the 4 Hz line) |
 | `C<dst><src>\n` | copy a live trip into slot *dst* (3=A 4=B 5=C) from *src* (`B`=since-boot, `H`=from-home) (v3.15) |
+| `G1\n` / `G0\n` | app **geofence**: belterület / országút (built-up area vs open road) → `in_city`; the firmware then splits **city km / city-EV km** into each slot's `cd`/`ce` (v3.41) |
 
 CAN dump emits `#XXX [len] BB BB..\n` lines for frames in `[lo,hi]`, **deduped**
 (only on change) → opening a door makes the relevant frame pop out (how the 0x620
@@ -399,7 +402,7 @@ pre-rendered PNGs now).
 
 ### Helper scripts (`tools/`)
 * `install-app.sh [--no-build] [IP]` — build the debug APK with the **Linux** SDK and
-  install it on the head unit over **network adb** (port `:9876`).
+  install    it on the head unit over **network adb** (port `:9876`).
 * `pull-logs.sh [IP]` — download new `.jsonl`/`.gz` logs + CAN dumps into `carlogs/`
   (only what's missing locally or larger on the device, e.g. the growing daily JSONL).
 * `priuscan-device.sh` — shared helper that finds the head unit on the (dynamic) hotspot

@@ -72,12 +72,14 @@ MQTT discovery must stay in sync; if you add a key, update all three. Trip data 
 **Host→ESP commands** (`parse_host_line`): `T<unix>` set time, `D0/D1/D2` dump,
 `H`/`HO` refuel/oil history, `F<factor>` fuel correction, `R<2..6>` reset slot,
 `C<dst><src>` copy a live trip into A/B/C (src `B`=since-boot/`H`=from-home),
-`B` emit per-block internal resistance. **On-demand responses** (not in the 4 Hz line):
-`{"rhist":…}`, `{"ohist":…}`, `{"rblk":[…14…],"rn":N}`.
+`B` emit per-block internal resistance, `G1`/`G0` app geofence belterület/országút
+(→ `in_city`; the firmware splits city km / city-EV km per slot). **On-demand responses**
+(not in the 4 Hz line): `{"rhist":…}`, `{"ohist":…}`, `{"rblk":[…14…],"rn":N}`.
 
 **Flash persistence**: trip slots + histories + learned capacity/weak-block in ONE NVS
-blob (`prius_persist.h`, namespace `priuscan`, magic `0x5043000x` — bump = old data lost,
-so avoid changing `TripSlot`). A SEPARATE NVS namespace `priusday` holds an 8-year daily
+blob (`prius_persist.h`, namespace `priuscan`, magic `0x5043000x`). Changing `TripSlot`
+bumps the magic; provide an `OldPBlobV<n>` + `migrate_slot_v<n>` path in `prius_persist_load`
+so old data is carried forward (see the v5→v6 city-km migration), never silently lost. A SEPARATE NVS namespace `priusday` holds an 8-year daily
 health/trip ring (`DailyRec`, one record/day accumulated across drives, written on the
 shutdown/quiet detection). NVS partition is ~446 KB.
 
