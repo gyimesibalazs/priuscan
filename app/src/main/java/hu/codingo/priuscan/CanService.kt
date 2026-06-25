@@ -624,7 +624,7 @@ class CanService : Service() {
         // belterület geofence: OUTSIDE a built-up area with low-beam OFF while moving -> warn.
         // (HU: dipped headlights are mandatory on the open road.) 0x20 = low-beam lamp bit.
         val lowBeamOff = (s.i("lights") and 0x20) == 0
-        if (inCity == false && lowBeamOff && (s.d("spd") ?: 0.0) > 30.0) {
+        if (inCity == false && lowBeamOff && (s.d("spd") ?: 0.0) > 5.0) {
             if (now - lastHlWarn > 60000L) { lastHlWarn = now; alert(1, getString(R.string.alert_headlight)) }
         } else lastHlWarn = 0L   // condition cleared -> re-arm (fire immediately if it returns)
 
