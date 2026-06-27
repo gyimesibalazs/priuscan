@@ -313,6 +313,11 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
                 Text(stringResource(R.string.btn_save))
             }
         }
+        // Manual refuel: use when the firmware missed the auto-detection (e.g. tanked across a
+        // power-off). Closes the current tank into the history and starts a fresh one.
+        TextButton(onClick = { CanService.sendCommand("K") }) {
+            Text(stringResource(R.string.refuel_btn))
+        }
 
         // ---- TPMS pairing ----
         Text(stringResource(R.string.tpms_section), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)

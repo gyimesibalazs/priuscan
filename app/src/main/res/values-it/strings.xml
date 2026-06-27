@@ -277,6 +277,7 @@
     <string name="f_illum">Luce (decisione)</string>
     <string name="f_ambL">Livello luce</string>
     <string name="fuel_corr_label">Correzione consumo (×)</string>
+    <string name="refuel_btn">Rifornito (manuale)</string>
     <string name="btn_save">Salva</string>
     <string name="grp_cruise">Cruise / frecce</string>
     <string name="grp_drivemode">Modalità guida</string>

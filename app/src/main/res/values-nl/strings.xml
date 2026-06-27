@@ -279,6 +279,7 @@
     <string name="f_illum">Licht (besluit)</string>
     <string name="f_ambL">Lichtniveau</string>
     <string name="fuel_corr_label">Verbruikscorrectie (×)</string>
+    <string name="refuel_btn">Getankt (handmatig)</string>
     <string name="btn_save">Opslaan</string>
     <string name="grp_cruise">Cruise / richting</string>
     <string name="grp_drivemode">Rijmodus</string>

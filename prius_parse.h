@@ -119,7 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 344;   // 3.44: odo-anchored trip dist keeps 0.1 km precision (odo integer + speed-integral sub-km)
+inline constexpr int FW_VERSION = 345;   // 3.45: refuel baseline can't freeze high (auto-detect fix) + manual "K" refuel
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -183,6 +183,7 @@ inline int      reset_req = -1;         // app sent "R<i>" -> reset slot i (YAML
 inline int      copy_dst  = -1;         // app sent "C<dst><src>" -> copy a live trip into slot dst (YAML consumes)
 inline char     copy_src  = 0;          // 'B' = since-boot, 'H' = from-home
 inline bool     merge_request = false;  // app sent "M" -> merge the last refuel-history entry into the tank (YAML)
+inline bool     force_refuel = false;   // app sent "K" -> manual refuel (auto-detect missed it); YAML commits it
 inline bool     persist_request = false; // ask the YAML to flush the NVS blob (refuel / reset / corrected epoch)
 inline bool     persist_loaded = false; // true after the boot NVS read -> only THEN may we write
 inline uint8_t  city_state = 0;          // geofence: 0=unknown (no fix / not covered), 1=belterület,
@@ -198,6 +199,7 @@ inline constexpr uint32_t FUEL_WARMUP_MS = 15000;   // minimum: ignore fuelIn fo
 inline constexpr uint32_t FUEL_SETTLE_MS = 5000;    // and until 5 s after the last wild fuelIn jump
 inline float    fuel_fin_prev = NAN;                // previous raw fuelIn (flap detector)
 inline uint32_t fuel_flap_ms = 0;                   // last time fuelIn jumped wildly (boot bounce/glitch)
+inline uint8_t  fuel_lowcnt = 0;                    // consecutive samples fuelIn held well below fuel_ref
 inline constexpr float HSI_REGEN = -12.0f;          // HSI needle (signed, +-127) below this = CHG/regen
 inline constexpr float BRKPOS_REGEN = 3.0f;         // brake pedal position above this = braking (regen)
 // Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
@@ -248,6 +250,7 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
   if (line[0] == 'B') { rblk_request = true; return; }   // emit per-block internal resistance
   if (line[0] == 'G') { uint8_t g = line[1] - '0'; if (g <= 2) city_state = g; return; }  // geofence 0/1/2
   if (line[0] == 'M') { merge_request = true; return; }  // merge last refuel-history entry into the tank
+  if (line[0] == 'K') { force_refuel = true; return; }   // manual "I refueled" (auto-detect missed it)
   if (line[0] == 'H') { if (line[1] == 'O') ohist_request = true; else hist_request = true; return; }  // H/HO history
   if (line[0] == 'F') {                                   // fuel correction: "F<factor>" (e.g. F1.05)
     float f; if (sscanf(line + 1, " %f", &f) == 1 && f > 0.5f && f < 2.0f) fuel_corr = f;  // YAML flushes it to NVS
@@ -807,6 +810,25 @@ inline void merge_last_refuel() {
   persist_request = true;
 }
 
+// Commit a refuel: archive the just-finished tank (slot[1]) into the rotating history, start a
+// fresh tank at now/odo, re-anchor the virtual gauge to "full". new_ref = the post-fill gauge
+// baseline (NaN = leave fuel_ref untouched). Shared by the auto-detector and the manual "K" command
+// (used when the auto-detect missed a refuel, e.g. the gauge plateaued across an unlogged key-off).
+inline void commit_refuel(uint32_t now_ms, float new_ref) {
+  rhist[rhist_head] = slot[1];
+  rhist_head = (rhist_head + 1) % HISTN;
+  if (rhist_n < HISTN) rhist_n++;
+  uint32_t ep = host_time_set ? cur_epoch(now_ms) : 0u;
+  slot_start(slot[1], ep, cur_odo());                        // new tank starts now
+  if (host_time_set) { last_refuel_epoch = ep; refuel_pending = false; }
+  else { last_refuel_ms = now_ms; refuel_pending = true; }   // correct the epoch later (#4)
+  refuel_dirty = true; persist_request = true;               // flush NVS on refuel
+  if (!std::isnan(new_ref)) fuel_ref = new_ref;
+  refuel_peak = 0; refuel_seen_ms = 0; fuel_lowcnt = 0;
+  tank_known = false; fuel_since_refuel = 0;                 // new tank: assume full, recalibrate
+  fuel_saw_100 = false; fuel_anchor = TANK_FULL; fuel_below_ms = 0;
+}
+
 // Self-learning pack capacity via coulomb counting between SoC points (persisted).
 // capacity[Ah] = integral(I dt) / dSoC; learned by EWMA over many spans. kWh uses
 // the measured pack voltage VL (no cell-count assumption). NOTE: relies on the BMS
@@ -1177,25 +1199,22 @@ inline void compute_derived(uint32_t now_ms) {
       if (fin > refuel_peak + 0.3f) {                  // still rising
         refuel_peak = fin; refuel_seen_ms = now_ms;
       } else if (refuel_seen_ms && now_ms - refuel_seen_ms >= REFUEL_STABLE_MS) {
-        // plateaued -> push the just-finished tank (slot[1]) into the rotating history, restart it
-        rhist[rhist_head] = slot[1];
-        rhist_head = (rhist_head + 1) % HISTN;
-        if (rhist_n < HISTN) rhist_n++;
-        uint32_t ep = host_time_set ? cur_epoch(now_ms) : 0u;
-        slot_start(slot[1], ep, cur_odo());                        // new tank starts now
-        if (host_time_set) { last_refuel_epoch = ep; refuel_pending = false; }
-        else { last_refuel_ms = now_ms; refuel_pending = true; }   // correct later (#4)
-        refuel_dirty = true; persist_request = true;               // flush NVS on refuel
-        fuel_ref = refuel_peak; refuel_peak = 0; refuel_seen_ms = 0;
-        tank_known = false; fuel_since_refuel = 0;                  // new tank: assume full, recalibrate
-        fuel_saw_100 = false; fuel_anchor = TANK_FULL; fuel_below_ms = 0;
+        commit_refuel(now_ms, refuel_peak);            // plateaued -> archive tank, start fresh
       }
     } else {
       refuel_peak = 0; refuel_seen_ms = 0;       // not a refuel rise (or spike dropped back)
-      // slow follow (consumption + noise) -- but IGNORE big sudden DROPS: a fuelIn dropout to ~0
-      // (sensor glitch, e.g. during engine start) would drag fuel_ref down, and the recovery would
-      // then look like a refuel. Consumption is gradual, so a >20% drop below fuel_ref is a glitch.
-      if (fin > fuel_ref - 20.0f) fuel_ref += 0.01f * (fin - fuel_ref);
+      // Track the baseline toward the gauge. A transient dropout (fuelIn spikes to ~0 during engine
+      // start) is already NaN-gated by the flap detector above; here we additionally require a much-
+      // lower reading to HOLD for ~3 s before snapping fuel_ref down to it -- so a brief dip can't
+      // crater the baseline (which would make the recovery look like a refuel). Crucially there is NO
+      // absolute floor: a baseline left too high (wrong full-tank seed, or lag after a long key-off)
+      // would otherwise FREEZE forever and kill refuel detection -- that was the real bug.
+      if (fin + REFUEL_DELTA <= fuel_ref) {            // gauge sits a full DELTA below the baseline
+        if (++fuel_lowcnt >= 6) { fuel_ref = fin; fuel_lowcnt = 0; }   // sustained -> snap down
+      } else {
+        fuel_lowcnt = 0;
+        fuel_ref += 0.05f * (fin - fuel_ref);          // normal gentle follow (both directions)
+      }
     }
     // VIRTUAL fuel gauge: consumption-driven, with a ONE-TIME anchor per tank. While the gauge still
     // reads 100% we assume a full tank (47 L) and count down by consumption. We calibrate the anchor

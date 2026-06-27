@@ -277,6 +277,7 @@
     <string name="f_illum">Fény (döntés)</string>
     <string name="f_ambL">Fényszint</string>
     <string name="fuel_corr_label">Fogyasztás-korrekció (×)</string>
+    <string name="refuel_btn">Tankoltam (kézi)</string>
     <string name="btn_save">Mentés</string>
     <string name="grp_cruise">Tempomat / index</string>
     <string name="grp_drivemode">Vezetési mód</string>

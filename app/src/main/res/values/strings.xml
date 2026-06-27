@@ -279,6 +279,7 @@
     <string name="f_illum">Light (decision)</string>
     <string name="f_ambL">Light level</string>
     <string name="fuel_corr_label">Fuel correction (×)</string>
+    <string name="refuel_btn">Refueled (manual)</string>
     <string name="btn_save">Save</string>
     <string name="grp_cruise">Cruise / turn</string>
     <string name="grp_drivemode">Drive mode</string>

@@ -278,6 +278,7 @@
     <string name="f_illum">Światło (decyzja)</string>
     <string name="f_ambL">Poziom światła</string>
     <string name="fuel_corr_label">Korekta zużycia (×)</string>
+    <string name="refuel_btn">Zatankowano (ręcznie)</string>
     <string name="btn_save">Zapisz</string>
     <string name="grp_cruise">Tempomat / kier.</string>
     <string name="grp_drivemode">Tryb jazdy</string>
