@@ -62,8 +62,12 @@ class SerialLink(private val ctx: Context) {
         return try {
             port.open(conn)
             port.setParameters(BAUD, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-            port.dtr = true
-            port.rts = true
+            // DON'T assert DTR/RTS: on the ESP32-C3 native USB Serial/JTAG these map internally to
+            // CHIP_PU (reset) and GPIO9 (boot), so asserting them on connect REBOOTS the ESP (and
+            // wipes its in-RAM trip state since the last NVS flush). USB-JTAG carries data regardless
+            // of the control lines, so keep them deasserted -> the firmware keeps running on connect.
+            port.dtr = false
+            port.rts = false
             Opened(port, device)
         } catch (e: Exception) {
             try { port.close() } catch (_: Exception) {}

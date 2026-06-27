@@ -12,8 +12,8 @@ android {
         applicationId = "hu.codingo.priuscan"
         minSdk = 26          // fejegysegek: Android 9-12, boven belefer
         targetSdk = 35
-        versionCode = 8      // bump on every GitHub release; the in-app updater compares this
-        versionName = "1.7"
+        versionCode = 9      // bump on every GitHub release; the in-app updater compares this
+        versionName = "1.8"
     }
 
     buildTypes {
