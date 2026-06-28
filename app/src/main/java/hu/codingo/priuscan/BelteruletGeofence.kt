@@ -101,7 +101,7 @@ object BelteruletGeofence {
         for (r in regions) {
             if (lat < r.minLat || lat > r.maxLat || lng < r.minLng || lng > r.maxLng) continue
             covered = true
-            // the compacted set is mixed-resolution -> probe the res9 cell then walk up to resMin
+            // the compacted set is mixed-resolution -> probe at the file's resMax then walk up to resMin
             var c = core.latLngToCell(lat, lng, r.resMax)
             var res = r.resMax
             while (res >= r.resMin) {

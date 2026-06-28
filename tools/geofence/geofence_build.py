@@ -73,10 +73,10 @@ def download_pbf(unit, out_dir):
         sh("curl", "-sL", "--retry", "3", "--fail", "-o", pbf, pbf_url(unit, out_dir))
     return pbf
 
-def pbf_to_geojsonseq(unit, pbf, tags, out_dir):
-    res = os.path.join(out_dir, f"{unit}.res.pbf")
-    gjs = os.path.join(out_dir, f"{unit}.res.geojsonseq")
-    log(unit, "pbf", os.path.getsize(pbf) // 1_000_000, "MB; osmium filter+export")
+def pbf_to_geojsonseq(unit, pbf, tags, out_dir, suffix="res"):
+    res = os.path.join(out_dir, f"{unit}.{suffix}.pbf")
+    gjs = os.path.join(out_dir, f"{unit}.{suffix}.geojsonseq")
+    log(unit, "pbf", os.path.getsize(pbf) // 1_000_000, f"MB; osmium filter+export ({suffix})")
     sh("osmium", "tags-filter", "--overwrite", "-o", res, pbf, *osmium_tags(tags))
     sh("osmium", "export", "--overwrite", "-f", "geojsonseq", "-o", gjs, res)
     os.remove(res)
@@ -119,6 +119,26 @@ def polys_from_geojsonseq(path):
         n += 1
         yield g
     log("  polygons read:", n)
+
+def lines_from_geojsonseq(path):
+    """Yield LineString / MultiLineString geoms (roads). add_cells() buffers them into corridors."""
+    n = 0
+    for line in open(path, encoding="utf-8", errors="ignore"):
+        line = line.strip().lstrip("\x1e")
+        if not line:
+            continue
+        try:
+            geom = json.loads(line).get("geometry")
+            if not geom:
+                continue
+            g = shape(geom)
+        except Exception:
+            continue
+        if g.is_empty or g.geom_type not in ("LineString", "MultiLineString"):
+            continue
+        n += 1
+        yield g
+    log("  lines read:", n)
 
 def polys_from_overpass(path):
     from shapely.geometry import Polygon, LineString
@@ -254,6 +274,11 @@ def main():
     ap.add_argument("--min-res", type=int, default=5)
     ap.add_argument("--buffer-deg", type=float, default=0.0006)
     ap.add_argument("--landuse-tags", default="landuse=residential")
+    # gyorsforgalmi úthálózat: carve the motorway/expressway corridor OUT of the built-up set so a
+    # car on it doesn't read "belterület" (no city-km, no headlight warning). HU: motorway=autópálya,
+    # trunk=autóút. Empty = no subtraction.
+    ap.add_argument("--subtract-tags", default="")
+    ap.add_argument("--subtract-buffer-deg", type=float, default=0.00025)  # ~28 m each side (road + GPS slop)
     ap.add_argument("--out", default="./build")
     ap.add_argument("--name", default="belterulet")
     ap.add_argument("--test-points", default=None)
@@ -263,6 +288,8 @@ def main():
     meta_p = os.path.join(a.out, f"{a.name}.meta.json")
     tags = [(k.strip(), v.strip()) for p in a.landuse_tags.split(",") if "=" in p
             for k, v in [p.split("=", 1)]]
+    sub_tags = [(k.strip(), v.strip()) for p in a.subtract_tags.split(",") if "=" in p
+                for k, v in [p.split("=", 1)]]
     regions = [r.strip().upper() for r in a.region.split(",") if r.strip()]
 
     if a.cmd == "verify":
@@ -316,25 +343,41 @@ def main():
 
     # all: accumulate the (auto-expanded) units into ONE combined .bgf
     units = expand_units(regions, a.out) if a.source == "geofabrik" else [r.lower() for r in regions]
-    acc = set(); t0 = time.time()
+    acc = set(); roads = set(); t0 = time.time()
     for u in units:
         log("===== unit", u, "=====")
         try:
-            src = (fetch_geofabrik if a.source == "geofabrik" else fetch_overpass)(u, tags, a.out)
-            loader = polys_from_geojsonseq if a.source == "geofabrik" else polys_from_overpass
-            add_cells(loader(src), a.res, a.buffer_deg, acc)
-            for ext in (".osm.pbf", ".res.pbf", ".res.geojsonseq", ".overpass.json"):
-                p = os.path.join(a.out, u + ext)
+            if a.source == "geofabrik":
+                pbf = download_pbf(u, a.out)
+                belt_gjs = pbf_to_geojsonseq(u, pbf, tags, a.out, "res")     # built-up areas (polygons)
+                add_cells(polys_from_geojsonseq(belt_gjs), a.res, a.buffer_deg, acc)
+                os.remove(belt_gjs)
+                if sub_tags:                                                  # roads to carve out (lines)
+                    road_gjs = pbf_to_geojsonseq(u, pbf, sub_tags, a.out, "roads")
+                    add_cells(lines_from_geojsonseq(road_gjs), a.res, a.subtract_buffer_deg, roads)
+                    os.remove(road_gjs)
+                os.remove(pbf)
+            else:
+                src = fetch_overpass(u, tags, a.out)
+                add_cells(polys_from_overpass(src), a.res, a.buffer_deg, acc)
+                p = os.path.join(a.out, u + ".overpass.json")
                 if os.path.exists(p): os.remove(p)
         except Exception as e:
             log("!! unit", u, "FAILED:", e)
     if not acc: raise SystemExit("no cells produced")
+    belt_n = len(acc)
+    if roads:
+        acc.difference_update(roads)
+        log("subtracted gyorsforgalmi:", belt_n, "-", len(roads), "road cells ->", len(acc),
+            "(", belt_n - len(acc), "removed)")
     ints = compact_set(acc, a.min_res)
     log("compacted ->", len(ints), "cells")
     bbox = cells_bbox(ints)
     pack(ints, a.res, a.min_res, bbox, bgf)
     json.dump({"regions": regions, "units": units, "cell_count": len(ints), "bbox_latlng": list(bbox),
-               "tags": a.landuse_tags, "res": a.res, "min_res": a.min_res, "seconds": round(time.time() - t0),
+               "tags": a.landuse_tags, "subtract_tags": a.subtract_tags, "res": a.res, "min_res": a.min_res,
+               "belt_cells_res": belt_n, "road_cells_res": len(roads), "removed_res": belt_n - len(acc),
+               "subtract_buffer_deg": a.subtract_buffer_deg, "seconds": round(time.time() - t0),
                "built": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, open(meta_p, "w"), indent=2)
     rep = verify(bgf, len(ints), a.test_points)
     json.dump(rep, open(os.path.join(a.out, "verify-report.json"), "w"), indent=2)
