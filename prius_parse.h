@@ -119,7 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 345;   // 3.45: refuel baseline can't freeze high (auto-detect fix) + manual "K" refuel
+inline constexpr int FW_VERSION = 346;   // 3.46: "S" force-save command (flush NVS before head-unit reboot cuts ESP power)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -251,6 +251,7 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
   if (line[0] == 'G') { uint8_t g = line[1] - '0'; if (g <= 2) city_state = g; return; }  // geofence 0/1/2
   if (line[0] == 'M') { merge_request = true; return; }  // merge last refuel-history entry into the tank
   if (line[0] == 'K') { force_refuel = true; return; }   // manual "I refueled" (auto-detect missed it)
+  if (line[0] == 'S') { persist_request = true; return; } // flush trip state to NVS NOW (host shutting down)
   if (line[0] == 'H') { if (line[1] == 'O') ohist_request = true; else hist_request = true; return; }  // H/HO history
   if (line[0] == 'F') {                                   // fuel correction: "F<factor>" (e.g. F1.05)
     float f; if (sscanf(line + 1, " %f", &f) == 1 && f > 0.5f && f < 2.0f) fuel_corr = f;  // YAML flushes it to NVS

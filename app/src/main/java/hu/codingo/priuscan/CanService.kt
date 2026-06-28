@@ -6,8 +6,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.Manifest
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
@@ -86,7 +88,7 @@ class CanService : Service() {
         fun mergeLastRefuel() = sendCommand("M")   // merge the last refuel-history entry into the tank
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 345                        // bundled firmware version (3.45)
+        const val BUNDLED_FW = 346                        // bundled firmware version (3.46)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
@@ -157,6 +159,12 @@ class CanService : Service() {
         }
 
     @Volatile private var running = true
+
+    // The head unit powers the ESP over USB: a reboot/shutdown cuts its power. Android broadcasts
+    // ACTION_SHUTDOWN first -> tell the ESP to flush trip/fuel state to NVS before the power dies.
+    private val shutdownReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) { sendCommand("S") }
+    }
     private var ioThread: Thread? = null
     private var tpmsThread: Thread? = null
     private val tb = ArrayList<Int>()   // TPMS byte accumulator (reader thread only)
@@ -247,6 +255,11 @@ class CanService : Service() {
         haPusher = HaPusher(this, prefs)
         haPusher.start()
         prefs.sp.registerOnSharedPreferenceChangeListener(prefsListener)
+        if (Build.VERSION.SDK_INT >= 33)
+            registerReceiver(shutdownReceiver, IntentFilter(Intent.ACTION_SHUTDOWN), Context.RECEIVER_NOT_EXPORTED)
+        else
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(shutdownReceiver, IntentFilter(Intent.ACTION_SHUTDOWN))
         // restore learned TPMS ids for display
         tpmsIds.value = prefs.tpmsIds.mapNotNull { (k, v) ->
             Wheel.values().firstOrNull { it.name == k }?.let { it to v }
@@ -280,7 +293,10 @@ class CanService : Service() {
     }
 
     override fun onDestroy() {
+        sendCommand("S")   // service tearing down (app stop / task removed) -> flush NVS while still connected
+        try { Thread.sleep(600) } catch (_: Exception) {}   // give the IO loop one read+drain cycle (<=500 ms)
         running = false
+        try { unregisterReceiver(shutdownReceiver) } catch (_: Exception) {}
         ioThread?.interrupt()
         tpmsThread?.interrupt()
         try { getSystemService(LocationManager::class.java)?.removeUpdates(locListener) } catch (_: Exception) {}
@@ -314,6 +330,7 @@ class CanService : Service() {
                 var valid = false
                 val openedAt = System.currentTimeMillis()
                 var lastTimeWrite = 0L   // push head-unit wall-clock time to the ESP
+                var lastSaveWrite = 0L   // periodic "flush NVS" so a head-unit reboot loses < this interval
                 line.setLength(0)
                 try {
                     while (running) {
@@ -346,6 +363,13 @@ class CanService : Service() {
                         if (valid && nowMs - lastTimeWrite > 30_000L) {
                             lastTimeWrite = nowMs
                             sendCommand("T${nowMs / 1000}")
+                        }
+                        // periodically force an NVS flush so a head-unit reboot (cuts ESP USB power)
+                        // loses at most ~this interval of trip/fuel data. Only while moving, to spare
+                        // flash wear when parked-idle (key-off already saves via quiet-detection).
+                        if (valid && nowMs - lastSaveWrite > 120_000L && (state.value.d("spd") ?: 0.0) > 0.0) {
+                            lastSaveWrite = nowMs
+                            sendCommand("S")
                         }
                         // drain the command queue (time + dump on/off) to the ESP
                         while (true) {
