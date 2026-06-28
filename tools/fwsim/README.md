@@ -8,11 +8,19 @@ fix before flashing, or recover trip/fuel/refuel data the device lost to a reboo
 ## Run
 ```bash
 tools/fwsim/run.sh                                   # build + replay carlogs/*.jsonl*
-tools/fwsim/run.sh --since 2026-06-20 --per-tank     # one date onward, per-tank breakdown
+tools/fwsim/run.sh --since 2026-06-20 --per-tank     # one date onward, per-tank breakdown (ALL tanks)
 tools/fwsim/run.sh --fuel-corr 1.0 --per-tank        # force a fuel_corr (calibration sweep)
+tools/fwsim/run.sh --per-tank \
+    --geofence app/src/main/assets/geofence/hungary.bgf   # recompute city km vs the CURRENT map
 tools/fwsim/run.sh --json                            # raw JSON lines from the harness
 ```
-`run.sh` compiles `fwsim` (g++) then calls `replay.py`. Needs `python3` only (no extra deps).
+`run.sh` compiles `fwsim` (g++) then calls `replay.py`. Needs `python3`; `--geofence` also needs
+`h3`/`zstandard` (already in tools/geofence/requirements.txt).
+
+`--per-tank` splits at every detected refuel and reports each tank in full (it does **all** tanks
+present in the logs). `--geofence <file|dir>` re-derives belterület from the logged `lat`/`lon` via a
+.bgf set, so city km reflects the **current** map (res11 + motorway carve) instead of the stale
+geofence state the device logged at the time.
 
 ## What it reports
 - **FW-detected refuels** — exactly what the ESP's parked-plateau auto-detect would fire. (Often 0

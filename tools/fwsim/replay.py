@@ -16,7 +16,7 @@ Output: per-refuel JSON lines (completed tank dist/fuel/l100), then a summary + 
 current-tank slots. Distances are odo-anchored (gap-immune); fuel is integrated over logged
 samples -> see "coverage" / "*_full_est" to correct for un-logged gaps.
 """
-import argparse, glob, gzip, json, subprocess, sys, datetime
+import argparse, glob, gzip, json, os, subprocess, sys, datetime
 
 def lines(path):
     op = gzip.open if path.endswith(".gz") else open
@@ -70,11 +70,38 @@ def refuel_candidates(rows, delta=25, gap_min=10, settle_s=90, bin_min=5, lookba
     return cand
 
 # keys the firmware never reads as VKey inputs (containers / app-side / output-only) -> skip
-SKIP = {"slots", "rhN", "ohN", "fCorr", "door", "cruise", "belt", "ts", "lat", "lng",
+SKIP = {"slots", "rhN", "ohN", "fCorr", "door", "cruise", "belt", "ts", "lat", "lng", "lon",
         "epoch", "fuelTs", "offTs", "offN", "fw", "city"}
 
-def to_line(ts, d, fc_override):
-    city = d.get("city"); city = city if isinstance(city, int) else -1
+class Geofence:
+    """Re-derive the belterület state from the logged GPS using a .bgf set, so city km can be
+    recomputed against the CURRENT map (res11 + motorway carve) instead of the stale logged state.
+    Mirrors the app: 1=belterület (cell hit), 2=országút (in a region's bbox but no hit), 0=unknown."""
+    def __init__(self, path):
+        import geofence_build as gb
+        self.gb = gb
+        files = []
+        if os.path.isdir(path): files = sorted(glob.glob(os.path.join(path, "*.bgf")))
+        elif path: files = [path]
+        self.regions = []
+        for f in files:
+            ints, rmax, rmin, bbox = gb.unpack(f)
+            self.regions.append((set(ints), rmax, rmin, bbox))
+        print(f"[geofence] {len(self.regions)} region(s) from {path}", file=sys.stderr)
+    def state(self, lat, lng):
+        if lat is None or lng is None: return -1
+        covered = False
+        for cells, rmax, rmin, bb in self.regions:
+            if lat < bb[0] or lat > bb[2] or lng < bb[1] or lng > bb[3]: continue
+            covered = True
+            if self.gb.lookup(cells, lat, lng, rmax, rmin): return 1
+        return 2 if covered else 0
+
+def to_line(ts, d, fc_override, gf=None):
+    if gf is not None:
+        city = gf.state(d.get("lat"), d.get("lon"))
+    else:
+        city = d.get("city"); city = city if isinstance(city, int) else -1
     fc = fc_override if fc_override is not None else (d.get("fCorr") or 1.0)
     parts = [f"{int(ts)}", f"{city}", f"{fc}"]
     for k, v in d.items():
@@ -82,11 +109,11 @@ def to_line(ts, d, fc_override):
         if isinstance(v, (int, float)): parts.append(f"{k}={v}")
     return " ".join(parts)
 
-def run_sim(binpath, rows, fc_override):
+def run_sim(binpath, rows, fc_override, gf=None):
     """Stream rows through the fwsim harness; return (refuels[], summary, slots[])."""
     proc = subprocess.Popen([binpath], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     for ts, d in rows:
-        proc.stdin.write(to_line(ts, d, fc_override) + "\n")
+        proc.stdin.write(to_line(ts, d, fc_override, gf) + "\n")
     proc.stdin.close()
     out = proc.stdout.read(); proc.wait()
     refuels, summary, slots = [], None, []
@@ -116,8 +143,14 @@ def main():
     ap.add_argument("--since", default=None, help="YYYY-MM-DD: ignore samples before this date")
     ap.add_argument("--fuel-corr", type=float, default=None, help="override fuel_corr for every sample")
     ap.add_argument("--per-tank", action="store_true", help="also break totals down per tank (split at refuel candidates)")
+    ap.add_argument("--geofence", default=None, help="recompute city km from logged GPS via a .bgf file or dir (current map)")
     ap.add_argument("--json", action="store_true", help="raw JSON lines from the harness (full run)")
     a = ap.parse_args()
+
+    gf = None
+    if a.geofence:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "geofence"))
+        gf = Geofence(a.geofence)
 
     since_ms = None
     if a.since:
@@ -128,7 +161,7 @@ def main():
     print(f"[replay] {len(files)} files, {len(rows)} samples"
           + (f", fuel_corr={a.fuel_corr}" if a.fuel_corr is not None else ""), file=sys.stderr)
 
-    out, refuels, summary, slots = run_sim(a.bin, rows, a.fuel_corr)
+    out, refuels, summary, slots = run_sim(a.bin, rows, a.fuel_corr, gf)
     if a.json:
         print(out, end=""); return
 
@@ -160,7 +193,7 @@ def main():
         for i in range(len(bounds) - 1):
             seg = [(ts, d) for ts, d in rows if bounds[i] <= ts < bounds[i + 1]]
             if len(seg) < 50: continue
-            _, _, s2, sl2 = run_sim(a.bin, seg, a.fuel_corr)
+            _, _, s2, sl2 = run_sim(a.bin, seg, a.fuel_corr, gf)
             tot = next((x for x in sl2 if x["slot"] == "total"), None)
             print(f"\n  TANK {i+1}: {epms(bounds[i])} -> {epms(bounds[i+1]-1)}")
             if s2: print(fmt_summary(s2))
