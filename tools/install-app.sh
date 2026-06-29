@@ -46,5 +46,12 @@ DEV="$(find_device "$IPARG")" || { echo "!! Head unit not reachable. Pass the IP
 echo ">> Installing on $DEV"
 adb -s "$DEV" install -r "$APK"
 
+# re-grant the special perm for device-wide auto dark mode (UiModeManager.setNightMode +
+# Settings.Secure ui_night_mode). A reinstall can revoke it -> the system dark mode then
+# silently stops following (the in-app theme still works without it).
+adb -s "$DEV" shell pm grant hu.codingo.priuscan android.permission.WRITE_SECURE_SETTINGS 2>/dev/null \
+  && echo ">> WRITE_SECURE_SETTINGS granted (auto dark mode)" \
+  || echo "!! could not grant WRITE_SECURE_SETTINGS (auto system dark mode may not work)"
+
 FW="$(grep -oE 'BUNDLED_FW = [0-9]+' "$CANSVC" | grep -oE '[0-9]+' || true)"
 echo ">> Done. Bundled FW: ${FW:-?}  (OTA it on the head unit if the ESP is older)"
