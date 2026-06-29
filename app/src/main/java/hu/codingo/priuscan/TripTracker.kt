@@ -22,8 +22,12 @@ data class TripSlot(
     val avgCons: Double get() = if (dist > 0.1) fuel / dist * 100.0 else 0.0
     val avgKmh: Double get() = if (moveS > 5.0) dist / (moveS / 3600.0) else 0.0
     val cityEvPct: Int get() = if (cityDist > 0.1) (cityEv / cityDist * 100.0).toInt() else 0
+    // recovered energy as equivalent EV distance. 15 km/kWh = this car's measured EV efficiency
+    // (227 EV km logged: 15.3 km/kWh distance-weighted; per-drive CoV ~21%, stable in aggregate).
+    val regenKm: Double get() = regenKwh * EV_KM_PER_KWH
 
     companion object {
+        const val EV_KM_PER_KWH = 15.0
         val EMPTY = TripSlot(0, 0, 0.0, 0.0, 0.0, 0.0, 0.0)
         fun from(o: JSONObject) = TripSlot(
             o.optLong("e"), o.optLong("o"), o.optDouble("d"), o.optDouble("v"),

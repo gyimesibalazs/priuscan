@@ -40,25 +40,6 @@ inline void migrate_slot_v5(TripSlot &n, const OldTripSlotV5 &o) {
   n.move_s = o.move_s; n.regen_e = o.regen_e; n.brake_e = o.brake_e; n.city_dist = 0; n.city_ev = 0;
 }
 
-// ---- one-time log-replay SEED (fw 3.47) -------------------------------------------------------
-// Values recomputed by tools/fwsim over carlogs (real firmware code, odo-anchored dist, gap-
-// corrected fuel/ev/city/regen, geofence-derived city km). Applied ONCE, gated on SEED_SERIAL:
-// overwrites the trip slots + refuel history so the device matches reality, then normal
-// accumulation continues. TripSlot = {epoch, odo, dist, ev, fuel, move_s, regen_e(J), brake_e(J),
-// city_dist, city_ev}.
-inline constexpr uint32_t SEED_SERIAL = 1;
-inline uint32_t persisted_seed = 0;        // SEED_SERIAL last applied (read from NVS)
-inline void apply_replay_seed() {
-  slot[0] = { 0u, 423636u, 1827.96f, 245.13f, 107.943f, 110188.0f, 40102635.0f, 66278212.0f, 329.03f, 118.43f }; // lifetime (since log start)
-  slot[1] = { 1782572447u, 424655u, 808.96f, 111.09f, 45.675f, 41359.0f, 20740722.0f, 30787736.0f, 51.97f, 20.87f }; // CURRENT tank (since 06-27 refuel)
-  slot[2] = { 0u, 423636u, 1827.96f, 245.13f, 107.943f, 110188.0f, 40102635.0f, 66278212.0f, 329.03f, 118.43f }; // oil = since log start
-  rhist[0] = { 1781952172u, 423903u, 752.45f, 98.06f, 46.046f, 50736.0f, 15561457.0f, 28374763.0f, 217.87f, 81.45f }; // completed tank 06-20..06-27
-  rhist_n = 1; rhist_head = 1;
-  last_refuel_epoch = slot[1].epoch;
-  fuel_ref = 8.0f; tank_known = false; fuel_anchor = TANK_FULL;   // tank near-empty now; re-anchor to the live gauge
-  persisted_seed = SEED_SERIAL;
-}
-
 } // namespace prius
 
 // Save everything (power-off / refuel / slot reset). epoch = current wall clock.
@@ -89,7 +70,6 @@ inline void prius_persist_save(uint32_t epoch) {
     nvs_set_u32(h, "fanc", ab);                             // (consumption itself lives in the tank slot[1])
     nvs_set_u32(h, "tkn", prius::tank_known ? 1u : 0u); }
   nvs_set_u32(h, "csta", prius::city_state);                // geofence state -> resume on next boot
-  nvs_set_u32(h, "seed", prius::persisted_seed);            // one-time log-replay seed applied?
   nvs_commit(h);
   nvs_close(h);
 }
@@ -140,7 +120,6 @@ inline void prius_persist_load() {
     if (nvs_get_u32(h, "fanc", &ab) == ESP_OK) std::memcpy(&prius::fuel_anchor, &ab, 4);
     if (nvs_get_u32(h, "tkn",  &tk) == ESP_OK) prius::tank_known = (tk != 0);
     uint32_t cs; if (nvs_get_u32(h, "csta", &cs) == ESP_OK && cs <= 2) prius::city_state = (uint8_t)cs;
-    nvs_get_u32(h, "seed", &prius::persisted_seed);        // one-time log-replay seed marker
     nvs_close(h);
   }
   if (!loaded) {
@@ -149,10 +128,6 @@ inline void prius_persist_load() {
     prius::slot[1] = { 1781952172u, 423903u, 63.9f, 20.6f, 2.85f, 5337.0f, 4070000.0f, 7022000.0f };
     prius::last_refuel_epoch = 1781952172u;
     prius::fuel_ref = 100.0f;   // tank is full -> don't let the first reading look like a refuel
-  }
-  if (prius::persisted_seed < prius::SEED_SERIAL) {   // one-time: overwrite slots/history from the log replay
-    prius::apply_replay_seed();
-    prius::persist_request = true;                    // flush the seeded state (incl. the new seed marker)
   }
   // the virtual gauge's "consumed since refuel" IS the tank slot's fuel (persisted in the blob) --
   // sync it so fuelL = anchor - consumed continues across key-off (no re-anchor to the bouncy gauge).

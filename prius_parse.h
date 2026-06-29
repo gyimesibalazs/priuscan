@@ -119,7 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 347;   // 3.47: fuel cal baked into INJ_K (corr->1.0), regen as recovered kWh, log-replay seed
+inline constexpr int FW_VERSION = 348;   // 3.48: fuel cal baked into INJ_K (corr->1.0), regen as recovered kWh (3.47 seed removed)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 

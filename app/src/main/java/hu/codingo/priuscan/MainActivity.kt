@@ -324,7 +324,7 @@ private fun TripSection() {
         SensorRow(stringResource(R.string.r_avgcons), "%.1f l/100km".format(s.avgCons))
         SensorRow(stringResource(R.string.r_avgspeed), "%.0f km/h".format(s.avgKmh))
         SensorRow(stringResource(R.string.r_movetime), fmtDur(s.moveS.toLong()))
-        SensorRow(stringResource(R.string.r_regen), "%.2f kWh".format(s.regenKwh))
+        SensorRow(stringResource(R.string.r_regen), "%.2f kWh (~%.0f km)".format(s.regenKwh, s.regenKm))
         if (s.epoch > 0) {
             Text(
                 fmtDate(s.epoch) + (if (s.odo > 0) "  ·  " + stringResource(R.string.trip_at, "%,d".format(s.odo)) else ""),
@@ -372,7 +372,7 @@ private fun TripSection() {
                 h.asReversed().forEach { r ->   // newest first
                     SensorRow(
                         fmtDate(r.epoch),
-                        "%.1f km · %.1f EV · %.1f l/100km · %.2f kWh".format(r.dist, r.ev, r.avgCons, r.regenKwh),
+                        "%.1f km · %.1f EV · %.1f l/100km · %.2f kWh (~%.0f km)".format(r.dist, r.ev, r.avgCons, r.regenKwh, r.regenKm),
                     )
                 }
             }
