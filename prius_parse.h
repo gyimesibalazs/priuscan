@@ -119,7 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 349;   // 3.49: refuel detect works moving (no parked req, DELTA 25) + speed-dependent fuel cal k(spd)
+inline constexpr int FW_VERSION = 350;   // 3.50: virtual fuel gauge re-fit (HEAD 6.8 / MEAS 33.8 from 2 tanks, TANK_FULL 47 kept)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -207,9 +207,9 @@ inline constexpr float BRKPOS_REGEN = 3.0f;         // brake pedal position abov
 // Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
 // cross-check (head 3.14 + measured 35.51 + 0%-reserve = the fill). 47 L assumed (safety margin).
 inline constexpr float TANK_FULL   = 47.0f;
-inline constexpr float FUEL_HEAD   = 5.7f;     // top plateau: gauge pinned 100% for this much fuel (measured)
-inline constexpr float FUEL_MEAS   = 32.95f;   // gauge 0..100% maps to this span (100% -> TANK_FULL-HEAD = 41.3 L)
-inline constexpr float FUEL_BOTTOM = TANK_FULL - FUEL_HEAD - FUEL_MEAS;  // 8.35 L reserve below 0%
+inline constexpr float FUEL_HEAD   = 6.8f;     // top plateau: gauge pinned 100% for this much fuel. Re-fit
+inline constexpr float FUEL_MEAS   = 33.8f;    // 2026-06 from 2 full tanks (k(spd) fuel vs fuelIn%, common-
+inline constexpr float FUEL_BOTTOM = TANK_FULL - FUEL_HEAD - FUEL_MEAS;  // slope MEAS fit) -> BOTTOM ~6.4 L reserve below 0%. TANK_FULL=47 validated by the 46.26 L fill.
 inline constexpr uint32_t FUEL_LEAVE_MS = 180000;  // fin must stay <99.8% this long (no return to 100%) before
                                                    // it counts as "left 100%" -> calibrate. Filters terrain dips.
 inline uint32_t fuel_below_ms = 0;             // when fin first went <99.8% in the current streak (0 = at 100%)
