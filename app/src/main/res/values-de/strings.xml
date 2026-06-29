@@ -257,7 +257,7 @@
     <string name="sl_oil">Ölservice</string>
     <string name="sl_trip">Trip %1$s</string>
     <string name="btn_reset">Zurücksetzen</string>
-    <string name="r_regen">Rekuperationsquote</string>
+    <string name="r_regen">Rückgewonnene Energie</string>
     <string name="trip_boot">Seit Start</string>
     <string name="trip_home">Von zuhause</string>
     <string name="trip_tank">Tank</string>

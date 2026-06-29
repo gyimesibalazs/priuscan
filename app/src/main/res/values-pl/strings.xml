@@ -258,7 +258,7 @@
     <string name="sl_oil">Wymiana oleju</string>
     <string name="sl_trip">Trip %1$s</string>
     <string name="btn_reset">Zeruj</string>
-    <string name="r_regen">Udział rekup.</string>
+    <string name="r_regen">Odzyskana energia</string>
     <string name="trip_boot">Od startu</string>
     <string name="trip_home">Z domu</string>
     <string name="trip_tank">Tankowanie</string>

@@ -119,7 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 346;   // 3.46: "S" force-save command (flush NVS before head-unit reboot cuts ESP power)
+inline constexpr int FW_VERSION = 347;   // 3.47: fuel cal baked into INJ_K (corr->1.0), regen as recovered kWh, log-replay seed
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -981,10 +981,11 @@ inline void compute_derived(uint32_t now_ms) {
   float maf = V[MAF], r = V[RPM], inj = V[INJML];
   // l/h per (injml * rpm). Calibrated to the PUMP-REAL consumption: the car trip computer reads
   // ~5.6% low (5.2 shown vs 5.5 real on a full 45-47 L tank), so 0.00923 (car-match) * 5.5/5.2.
-  constexpr float INJ_K = 0.00976f;            // fuel_corr (default 1.0) fine-tunes at a full refuel
+  constexpr float INJ_K = 0.00983808f;         // 0.00976 * 1.008 pump-calibration baked in (fwsim: 45.89 L
+                                               // @1.0 vs 46.26 L pump) -> fuel_corr default 1.0 = calibrated
   if (r < 100) V[FUEL] = 0.0f;                  // engine off
   else if (!std::isnan(inj)) V[FUEL] = INJ_K * inj * r * fuel_corr;       // injector-based (incl. enrichment / fuel-cut)
-  else if (!std::isnan(maf)) V[FUEL] = maf/14.7f*3600.0f/745.0f * fuel_corr;   // MAF fallback
+  else if (!std::isnan(maf)) V[FUEL] = maf/14.7f*3600.0f/739.09f * fuel_corr;  // MAF fallback (745/1.008, same cal)
 
   float ct = V[CT], rate = NAN;
   if (!std::isnan(ct)) {
@@ -1328,7 +1329,7 @@ inline void put_slot(char *&p, const TripSlot &s) {
   std::memcpy(p, ",\"v\":", 5); p += 5; put_num(p, s.ev, 1);
   std::memcpy(p, ",\"f\":", 5); p += 5; put_num(p, s.fuel, 2);
   std::memcpy(p, ",\"m\":", 5); p += 5; put_num(p, s.move_s, 0);
-  std::memcpy(p, ",\"r\":", 5); p += 5; put_num(p, s.brake_e > 1.0f ? fminf(100.0f, s.regen_e / s.brake_e * 100.0f) : 0.0f, 0);
+  std::memcpy(p, ",\"r\":", 5); p += 5; put_num(p, s.regen_e / 3.6e6f, 2);   // recovered electrical energy, kWh
   std::memcpy(p, ",\"cd\":", 6); p += 6; put_num(p, s.city_dist, 1);   // city km
   std::memcpy(p, ",\"ce\":", 6); p += 6; put_num(p, s.city_ev, 1);     // city-EV km
   *p++ = '}';
@@ -1369,9 +1370,9 @@ inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
   out_write(buf, (int)(p - buf));
 }
 
-// one TripSlot as JSON: e=epoch o=odo d=dist v=ev f=fuel m=move_s r=regen%
+// one TripSlot as JSON: e=epoch o=odo d=dist v=ev f=fuel m=move_s r=recovered kWh
 inline void emit_slot_json(char *&p, char *end, const TripSlot &s) {
-  float r = s.brake_e > 1.0f ? fminf(100.0f, s.regen_e / s.brake_e * 100.0f) : 0.0f;
+  float r = s.regen_e / 3.6e6f;   // recovered electrical energy, kWh (was regen ratio %)
   p += snprintf(p, end - p,
                 "{\"e\":%u,\"o\":%u,\"d\":%.1f,\"v\":%.1f,\"f\":%.2f,\"m\":%.0f,\"r\":%.0f,\"cd\":%.1f,\"ce\":%.1f}",
                 (unsigned)s.epoch, (unsigned)s.odo, s.dist, s.ev, s.fuel, s.move_s, r, s.city_dist, s.city_ev);

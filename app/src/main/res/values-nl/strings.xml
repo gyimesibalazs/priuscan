@@ -259,7 +259,7 @@
     <string name="sl_oil">Olieservice</string>
     <string name="sl_trip">Trip %1$s</string>
     <string name="btn_reset">Reset</string>
-    <string name="r_regen">Regen-ratio</string>
+    <string name="r_regen">Teruggewonnen energie</string>
     <string name="trip_boot">Sinds start</string>
     <string name="trip_home">Vanaf thuis</string>
     <string name="trip_tank">Tank</string>

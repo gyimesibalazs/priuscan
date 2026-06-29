@@ -88,7 +88,7 @@ class CanService : Service() {
         fun mergeLastRefuel() = sendCommand("M")   // merge the last refuel-history entry into the tank
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 346                        // bundled firmware version (3.46)
+        const val BUNDLED_FW = 347                        // bundled firmware version (3.47)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
@@ -379,6 +379,9 @@ class CanService : Service() {
                         // flash requested -> stream the bundled image via serial OTA (same port)
                         if (pendingFlash && valid) {
                             pendingFlash = false
+                            // OTA reboots the ESP -> flush trip/fuel state to NVS first (give it one tick)
+                            try { port.write("S\n".toByteArray(), 200) } catch (_: Exception) {}
+                            try { Thread.sleep(400) } catch (_: Exception) {}
                             flashState.value = FlashState.FLASHING
                             doSerialOta(port)     // streams image; sets DONE/ERROR; ESP reboots on success
                             break                 // reconnect to the rebooted ESP

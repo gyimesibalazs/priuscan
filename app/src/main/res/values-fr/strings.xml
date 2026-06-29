@@ -257,7 +257,7 @@
     <string name="sl_oil">Vidange</string>
     <string name="sl_trip">Trip %1$s</string>
     <string name="btn_reset">Réinit.</string>
-    <string name="r_regen">Taux régén.</string>
+    <string name="r_regen">Énergie récupérée</string>
     <string name="trip_boot">Depuis démarrage</string>
     <string name="trip_home">Depuis maison</string>
     <string name="trip_tank">Plein</string>

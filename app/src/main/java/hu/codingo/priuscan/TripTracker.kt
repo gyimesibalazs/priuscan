@@ -6,7 +6,7 @@ import org.json.JSONObject
 /**
  * One trip slot (live or a history record), straight from the firmware. The firmware owns and
  * persists everything; the app only displays. Fields: e=epoch o=odo d=dist v=ev f=fuel
- * m=move_s r=regen%. Derived: avg consumption (l/100km) and avg speed (km/h).
+ * m=move_s r=recovered electrical energy (kWh). Derived: avg consumption (l/100km), avg speed (km/h).
  */
 data class TripSlot(
     val epoch: Long,
@@ -15,7 +15,7 @@ data class TripSlot(
     val ev: Double,
     val fuel: Double,
     val moveS: Double,
-    val regen: Double,
+    val regenKwh: Double,   // recovered electrical energy into the HV pack (kWh)
     val cityDist: Double = 0.0,   // km driven in a built-up area (belterület)
     val cityEv: Double = 0.0,     // pure-EV km in a built-up area
 ) {

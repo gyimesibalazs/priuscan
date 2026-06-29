@@ -258,7 +258,7 @@
     <string name="sl_oil">Mudança óleo</string>
     <string name="sl_trip">Trip %1$s</string>
     <string name="btn_reset">Repor</string>
-    <string name="r_regen">Rácio regen.</string>
+    <string name="r_regen">Energia recuperada</string>
     <string name="trip_boot">Desde arranque</string>
     <string name="trip_home">De casa</string>
     <string name="trip_tank">Depósito</string>

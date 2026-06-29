@@ -257,7 +257,7 @@
     <string name="sl_oil">Olajcsere</string>
     <string name="sl_trip">Trip %1$s</string>
     <string name="btn_reset">Nullázás</string>
-    <string name="r_regen">Regeneratív fékezés aránya</string>
+    <string name="r_regen">Visszanyert energia</string>
     <string name="trip_boot">Indítás óta</string>
     <string name="trip_home">Otthonról</string>
     <string name="trip_tank">Tankolás</string>
