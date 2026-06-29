@@ -41,8 +41,11 @@ int main() {
     const double GAP_MS = 5000;
     uint8_t prev_rhn = 0; uint32_t prev_tank_ep = 0;
     long samples = 0; double log_dist = 0, prev_sp = NAN, cov_prev_ts = 0;  // parallel spd-integral
+    float prev_run = NAN;   // firmware uptime (s); a drop = the ESP power-cycled (true reboot signal)
 
     host_time_set = true; host_epoch_ms = 0;
+    persist_loaded = true;   // the device sets this after the boot NVS read; the refuel detection
+                             // (both the parked+plateau and the boot-jump paths) is gated on it.
 
     while ((len = getline(&buf, &cap, stdin)) > 0) {
         char *save = nullptr;
@@ -55,10 +58,6 @@ int main() {
         if (first) { t0 = ts; host_epoch = (uint32_t)(ts / 1000.0); first = false; prev_ts = ts; }
         double now = ts - t0;
         bool gap = (ts - prev_ts) > GAP_MS;
-        if (gap) {   // model a reboot: clear in-RAM integration state; slots + fuel_ref persist (NVS)
-            derive_init = false; derive_boot_ms = 0; trap_sp = NAN; trap_fl = NAN;
-            fuel_fin_prev = NAN; refuel_peak = 0; refuel_seen_ms = 0; fuel_lowcnt = 0; prev_sp = NAN;
-        }
         prev_ts = ts;
         if (city >= 0 && city <= 2) city_state = (uint8_t)city;
         if (fc > 0.4f && fc < 2.5f) fuel_corr = fc;
@@ -67,6 +66,17 @@ int main() {
             char *eq = strchr(tok, '='); if (!eq) continue; *eq = 0;
             auto it = kidx.find(tok); if (it == kidx.end()) continue;
             V[it->second] = (float)atof(eq + 1);
+        }
+
+        // Reboot = a data gap OR uptime (run) went backwards. The head unit often keeps logging
+        // continuously across an ESP power-cycle (USB), so a ts-gap alone misses it -> use `run`.
+        // Model the reboot: clear in-RAM state (warmup, trap, refuel detect); slots + fuel_ref persist.
+        float run = V[RUN];
+        bool reboot = gap || (!std::isnan(run) && !std::isnan(prev_run) && run < prev_run - 1.0f);
+        prev_run = run;
+        if (reboot) {
+            derive_init = false; derive_boot_ms = 0; trap_sp = NAN; trap_fl = NAN;
+            fuel_fin_prev = NAN; refuel_peak = 0; refuel_seen_ms = 0; fuel_lowcnt = 0; prev_sp = NAN;
         }
 
         // coverage: parallel trapezoid spd-integral over logged (non-gap) samples, so we can tell

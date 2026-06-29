@@ -119,7 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 348;   // 3.48: fuel cal baked into INJ_K (corr->1.0), regen as recovered kWh (3.47 seed removed)
+inline constexpr int FW_VERSION = 349;   // 3.49: refuel detect works moving (no parked req, DELTA 25) + speed-dependent fuel cal k(spd)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -192,7 +192,9 @@ inline uint32_t last_refuel_ms = 0;     // millis() at refuel (for pending corre
 inline uint32_t refuel_seen_ms = 0;     // when fin first crossed the up-jump (confirm window)
 inline bool refuel_pending = false;     // refuel seen BEFORE host time was known -> correct later
 inline bool refuel_dirty = false;       // YAML flushes this to the persistent global
-inline constexpr float REFUEL_DELTA = 12.0f;   // fuelIn is now % (0..100): a significant up-jump
+inline constexpr float REFUEL_DELTA = 25.0f;   // fuelIn % up-jump for a refuel. 25 (was 12): without the
+                                               // "parked" guard, full-tank SLOSH (~±20) must not trip it;
+                                               // a real fill is a big jump (near-empty->full ~+90).
 inline float    refuel_peak = 0;               // highest fuelIn during the current fill (plateau detect)
 inline constexpr uint32_t REFUEL_STABLE_MS = 8000;  // level must stop rising this long = fill finished
 inline constexpr uint32_t FUEL_WARMUP_MS = 15000;   // minimum: ignore fuelIn for 15 s after boot
@@ -981,11 +983,17 @@ inline void compute_derived(uint32_t now_ms) {
   float maf = V[MAF], r = V[RPM], inj = V[INJML];
   // l/h per (injml * rpm). Calibrated to the PUMP-REAL consumption: the car trip computer reads
   // ~5.6% low (5.2 shown vs 5.5 real on a full 45-47 L tank), so 0.00923 (car-match) * 5.5/5.2.
-  constexpr float INJ_K = 0.00983808f;         // 0.00976 * 1.008 pump-calibration baked in (fwsim: 45.89 L
-                                               // @1.0 vs 46.26 L pump) -> fuel_corr default 1.0 = calibrated
+  constexpr float INJ_K = 0.00976f;            // raw injector constant; k(spd) below applies the pump cal
+  // SPEED-DEPENDENT pump calibration k(spd) = clamp(A + B*spd, 0.90, 1.25). The injml*rpm model's
+  // error is NOT constant: fit to two full tanks (fwsim vs pump, 46.26 L @54 km/h-avg & 43.8 L
+  // @71 km/h-avg) it UNDER-reads at low speed and OVER-reads on the highway. Clamped against
+  // extrapolation (idle / >130 km/h). fuel_corr stays the user's overall trim (default 1.0).
+  // 2-tank fit -> refine as more tanks accumulate (the device now auto-detects refuels).
+  float kspd = fuel_corr * fminf(1.25f, fmaxf(0.90f,
+                 1.2422f - 0.002804f * (std::isnan(V[SPD]) ? 0.0f : V[SPD])));
   if (r < 100) V[FUEL] = 0.0f;                  // engine off
-  else if (!std::isnan(inj)) V[FUEL] = INJ_K * inj * r * fuel_corr;       // injector-based (incl. enrichment / fuel-cut)
-  else if (!std::isnan(maf)) V[FUEL] = maf/14.7f*3600.0f/739.09f * fuel_corr;  // MAF fallback (745/1.008, same cal)
+  else if (!std::isnan(inj)) V[FUEL] = INJ_K * inj * r * kspd;            // injector-based (incl. enrichment / fuel-cut)
+  else if (!std::isnan(maf)) V[FUEL] = maf/14.7f*3600.0f/745.0f * kspd;   // MAF fallback
 
   float ct = V[CT], rate = NAN;
   if (!std::isnan(ct)) {
@@ -1179,7 +1187,7 @@ inline void compute_derived(uint32_t now_ms) {
   V[TEV]   = boot_slot.ev;
 
   // refuel detection: fuelIn (%) jumps up significantly while parked -> record the time
-  float fin = V[FUELIN], sp2 = V[SPD];
+  float fin = V[FUELIN];
   // FLAP DETECTOR: the gauge (0x612 b5) flaps 0<->255 for up to ~1 min after power-on (and on
   // glitches). A big per-sample jump marks flapping; we trust fuelIn only FUEL_SETTLE_MS after the
   // LAST big jump -- so the gate self-extends for as long as the bounce actually lasts (a fixed
@@ -1192,12 +1200,14 @@ inline void compute_derived(uint32_t now_ms) {
       || (fuel_flap_ms && now_ms - fuel_flap_ms < FUEL_SETTLE_MS)) fin = NAN;
   if (!std::isnan(fin)) {
     if (fuel_ref < 0) fuel_ref = fin;
-    bool parked = std::isnan(sp2) || sp2 < 3.0f;
-    if (persist_loaded && parked && fin - fuel_ref >= REFUEL_DELTA) {
-      // A refuel is in progress. A slow 40-90 s fill rises through MANY DELTA steps, so we must
-      // NOT record per step: track the peak and record exactly ONE event once the level PLATEAUS
-      // (the fill finished). refuel_seen_ms = the last time the level rose. (ESP-off case: the
-      // jump is already plateaued at boot -> still exactly one event.)
+    // A refuel = fuelIn jumped >= DELTA above the baseline and the new level PLATEAUS for ~8 s. NO
+    // "parked" requirement: a fill happens with the engine off, and the head unit (USB-powered by
+    // the ESP) often reconnects only after the car is already driving away from the pump -- so the
+    // jump is first SEEN while moving. The 8 s plateau is what rejects glitches/slosh (those don't
+    // hold a new high), so it works moving too: a full tank reads ~100 stably regardless of motion.
+    if (persist_loaded && fin - fuel_ref >= REFUEL_DELTA) {
+      // A slow 40-90 s fill rises through MANY DELTA steps; an ESP-off fill is already plateaued at
+      // boot. Either way: track the peak, record ONE event once the level stops rising for STABLE_MS.
       if (fin > refuel_peak + 0.3f) {                  // still rising
         refuel_peak = fin; refuel_seen_ms = now_ms;
       } else if (refuel_seen_ms && now_ms - refuel_seen_ms >= REFUEL_STABLE_MS) {
@@ -1206,16 +1216,16 @@ inline void compute_derived(uint32_t now_ms) {
     } else {
       refuel_peak = 0; refuel_seen_ms = 0;       // not a refuel rise (or spike dropped back)
       // Track the baseline toward the gauge. A transient dropout (fuelIn spikes to ~0 during engine
-      // start) is already NaN-gated by the flap detector above; here we additionally require a much-
-      // lower reading to HOLD for ~3 s before snapping fuel_ref down to it -- so a brief dip can't
-      // crater the baseline (which would make the recovery look like a refuel). Crucially there is NO
-      // absolute floor: a baseline left too high (wrong full-tank seed, or lag after a long key-off)
-      // would otherwise FREEZE forever and kill refuel detection -- that was the real bug.
+      // start / shutdown) is already NaN-gated by the flap detector above; here we additionally
+      // require a much-lower reading to HOLD for ~3 s before snapping fuel_ref down -- AND ignore the
+      // ~0 % shutdown glitch (fin < 2) so the baseline can't crater to 0 (which would make every
+      // boot-time full tank look like a +100 refuel). NO absolute floor otherwise: a baseline left
+      // too high (wrong full-tank seed / long key-off lag) would FREEZE and kill detection.
       if (fin + REFUEL_DELTA <= fuel_ref) {            // gauge sits a full DELTA below the baseline
-        if (++fuel_lowcnt >= 6) { fuel_ref = fin; fuel_lowcnt = 0; }   // sustained -> snap down
+        if (fin >= 2.0f && ++fuel_lowcnt >= 6) { fuel_ref = fin; fuel_lowcnt = 0; }  // sustained real low -> snap down
       } else {
         fuel_lowcnt = 0;
-        fuel_ref += 0.05f * (fin - fuel_ref);          // normal gentle follow (both directions)
+        if (fin >= 2.0f) fuel_ref += 0.05f * (fin - fuel_ref);   // gentle follow (ignore the ~0 glitch)
       }
     }
     // VIRTUAL fuel gauge: consumption-driven, with a ONE-TIME anchor per tank. While the gauge still
