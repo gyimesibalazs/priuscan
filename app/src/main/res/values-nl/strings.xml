@@ -253,6 +253,9 @@
     <string name="flash_err">Flashen mislukt</string>
     <string name="display_title">Weergave</string>
     <string name="theme_auto_car">Donkere modus via lichtsensor van de auto</string>
+    <string name="home_title">Thuis (auto-reset rit)</string>
+    <string name="home_unset">Niet ingesteld</string>
+    <string name="home_set_btn">Hier instellen</string>
     <string name="dump_unknown">Alleen onbekende frames (ontdekking)</string>
     <string name="r_distances">Afstanden</string>
     <string name="sl_odo">Kilometerteller</string>

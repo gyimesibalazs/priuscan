@@ -251,6 +251,9 @@
     <string name="flash_err">Fallo al flashear</string>
     <string name="display_title">Pantalla</string>
     <string name="theme_auto_car">Modo oscuro según el sensor de luz del coche</string>
+    <string name="home_title">Casa (auto-reinicio viaje)</string>
+    <string name="home_unset">Sin definir</string>
+    <string name="home_set_btn">Fijar aquí</string>
     <string name="dump_unknown">Solo tramas desconocidas (descubrimiento)</string>
     <string name="r_distances">Distancias</string>
     <string name="sl_odo">Odómetro</string>

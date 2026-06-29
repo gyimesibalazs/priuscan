@@ -251,6 +251,9 @@
     <string name="flash_err">Flashelés sikertelen</string>
     <string name="display_title">Megjelenítés</string>
     <string name="theme_auto_car">Sötét mód az autó fényszenzora szerint</string>
+    <string name="home_title">Otthon (hazulról-trip auto-reset)</string>
+    <string name="home_unset">Nincs beállítva</string>
+    <string name="home_set_btn">Rögzítés</string>
     <string name="dump_unknown">Csak ismeretlen frame-ek (felderítés)</string>
     <string name="r_distances">Távolságok</string>
     <string name="sl_odo">Kilométeróra</string>

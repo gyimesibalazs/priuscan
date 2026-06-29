@@ -251,6 +251,9 @@
     <string name="flash_err">Flash non riuscito</string>
     <string name="display_title">Display</string>
     <string name="theme_auto_car">Modalità scura dal sensore di luce dell\'auto</string>
+    <string name="home_title">Casa (auto-reset viaggio)</string>
+    <string name="home_unset">Non impostato</string>
+    <string name="home_set_btn">Imposta qui</string>
     <string name="dump_unknown">Solo frame sconosciuti (scoperta)</string>
     <string name="r_distances">Distanze</string>
     <string name="sl_odo">Contachilometri</string>

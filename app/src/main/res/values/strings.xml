@@ -69,6 +69,9 @@
     <string name="flash_err">Flash failed</string>
     <string name="display_title">Display</string>
     <string name="theme_auto_car">Dark mode from the car light sensor</string>
+    <string name="home_title">Home (auto-reset from-home trip)</string>
+    <string name="home_unset">Not set</string>
+    <string name="home_set_btn">Set here</string>
     <string name="ha_desc">Home Assistant connection (MQTT). Sensors appear automatically in HA via MQTT Discovery. Without internet, batches are buffered with timestamps and sent to %1$s/backlog on reconnect.</string>
     <string name="ha_enabled">HA integration enabled</string>
     <string name="mqtt_broker">MQTT broker (host/IP)</string>

@@ -173,8 +173,9 @@ class CanService : Service() {
     private var gpsRunning = false
     @Volatile private var inCity: Boolean? = null     // last geofence verdict (to detect flips)
     private var lastHlWarn = 0L                        // last open-road headlight warning (ms)
+    @Volatile private var atHome: Boolean? = null     // within the home radius? (null until first fix)
     private val locListener = object : LocationListener {
-        override fun onLocationChanged(loc: Location) { lastLoc = loc; gps.value = loc; updateGeofence(loc) }
+        override fun onLocationChanged(loc: Location) { lastLoc = loc; gps.value = loc; updateGeofence(loc); checkHomeDeparture(loc) }
         override fun onProviderEnabled(provider: String) {}
         override fun onProviderDisabled(provider: String) {}
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
@@ -191,6 +192,19 @@ class CanService : Service() {
             // G1=belterület, G2=országút, G0=unknown (not covered) -> the FW only counts city km on G1
             sendCommand(when (nowCity) { true -> "G1"; false -> "G2"; else -> "G0" })
         }
+    }
+
+    // Auto-reset the "from-home" trip (firmware slot[6]) when the car DEPARTS the saved home spot.
+    // Hysteresis: "home" until >250 m away, re-enters home only within 120 m -> GPS drift / parking
+    // jitter can't double-trigger. Fires R6 exactly on the at-home -> away transition.
+    private fun checkHomeDeparture(loc: Location) {
+        val hLat = prefs.homeLat; val hLon = prefs.homeLon
+        if (hLat.isNaN() || hLon.isNaN()) return                      // home not set
+        val d = FloatArray(1)
+        Location.distanceBetween(loc.latitude, loc.longitude, hLat.toDouble(), hLon.toDouble(), d)
+        val nowHome = if (atHome == true) d[0] < 250f else d[0] < 120f
+        if (atHome == true && !nowHome) sendCommand("R6")            // departed home -> restart the trip
+        atHome = nowHome
     }
 
     private fun startGps() {

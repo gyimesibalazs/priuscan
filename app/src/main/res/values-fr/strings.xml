@@ -251,6 +251,9 @@
     <string name="flash_err">Échec du flash</string>
     <string name="display_title">Affichage</string>
     <string name="theme_auto_car">Mode sombre via le capteur de lumière de la voiture</string>
+    <string name="home_title">Domicile (reset auto trajet)</string>
+    <string name="home_unset">Non défini</string>
+    <string name="home_set_btn">Définir ici</string>
     <string name="dump_unknown">Trames inconnues seulement (découverte)</string>
     <string name="r_distances">Distances</string>
     <string name="sl_odo">Odomètre</string>

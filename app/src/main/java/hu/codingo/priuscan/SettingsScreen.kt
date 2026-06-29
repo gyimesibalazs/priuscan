@@ -298,6 +298,26 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
             Text(stringResource(R.string.theme_auto_car), color = MaterialTheme.colorScheme.onBackground)
         }
 
+        // ---- Home location: auto-resets the "from-home" trip (slot 6) when the car departs here ----
+        var homeLat by remember { mutableStateOf(prefs.homeLat) }
+        var homeLon by remember { mutableStateOf(prefs.homeLon) }
+        val gpsLoc by CanService.gps.collectAsState()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.home_title), color = MaterialTheme.colorScheme.onBackground)
+                Text(
+                    if (!homeLat.isNaN() && !homeLon.isNaN()) "%.5f, %.5f".format(homeLat, homeLon)
+                    else stringResource(R.string.home_unset),
+                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(enabled = gpsLoc != null, onClick = {
+                gpsLoc?.let {
+                    prefs.homeLat = it.latitude.toFloat(); prefs.homeLon = it.longitude.toFloat()
+                    homeLat = prefs.homeLat; homeLon = prefs.homeLon
+                }
+            }) { Text(stringResource(R.string.home_set_btn)) }
+        }
+
         // ---- HV battery ----
         OutlinedTextField(refAh, { refAh = it.filter { c -> c.isDigit() || c == '.' } },
             label = { Text(stringResource(R.string.battery_ref_label)) },

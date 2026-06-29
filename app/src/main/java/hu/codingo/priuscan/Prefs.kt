@@ -66,6 +66,15 @@ class Prefs(ctx: Context) {
         get() = sp.getFloat("battery_ref_ah", 6.5f)
         set(v) = sp.edit().putFloat("battery_ref_ah", v.coerceIn(1f, 20f)).apply()
 
+    /** Home location for the auto "from-home" trip reset (NaN = not set). The app resets the
+     *  home slot (R6) when the car departs this spot. Set from the current GPS in Settings. */
+    var homeLat: Float
+        get() = sp.getFloat("home_lat", Float.NaN)
+        set(v) = sp.edit().putFloat("home_lat", v).apply()
+    var homeLon: Float
+        get() = sp.getFloat("home_lon", Float.NaN)
+        set(v) = sp.edit().putFloat("home_lon", v).apply()
+
     /** Learned TPMS sensor IDs per wheel (key = Wheel.name, value = hex id), JSON-encoded. */
     var tpmsIds: Map<String, String>
         get() {

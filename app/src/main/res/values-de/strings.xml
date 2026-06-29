@@ -251,6 +251,9 @@
     <string name="flash_err">Flashen fehlgeschlagen</string>
     <string name="display_title">Anzeige</string>
     <string name="theme_auto_car">Dunkelmodus per Auto-Lichtsensor</string>
+    <string name="home_title">Zuhause (Von-Zuhause-Fahrt Auto-Reset)</string>
+    <string name="home_unset">Nicht gesetzt</string>
+    <string name="home_set_btn">Hier setzen</string>
     <string name="dump_unknown">Nur unbekannte Frames (Erkundung)</string>
     <string name="r_distances">Distanzen</string>
     <string name="sl_odo">Kilometerzähler</string>

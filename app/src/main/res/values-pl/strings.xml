@@ -252,6 +252,9 @@
     <string name="flash_err">Flashowanie nie powiodło się</string>
     <string name="display_title">Wyświetlanie</string>
     <string name="theme_auto_car">Tryb ciemny wg czujnika światła auta</string>
+    <string name="home_title">Dom (auto-reset trasy)</string>
+    <string name="home_unset">Nie ustawiono</string>
+    <string name="home_set_btn">Ustaw tutaj</string>
     <string name="dump_unknown">Tylko nieznane ramki (wykrywanie)</string>
     <string name="r_distances">Odległości</string>
     <string name="sl_odo">Licznik km</string>

@@ -252,6 +252,9 @@
     <string name="flash_err">Falha ao gravar</string>
     <string name="display_title">Ecrã</string>
     <string name="theme_auto_car">Modo escuro pelo sensor de luz do carro</string>
+    <string name="home_title">Casa (auto-reset viagem)</string>
+    <string name="home_unset">Não definido</string>
+    <string name="home_set_btn">Definir aqui</string>
     <string name="dump_unknown">Só tramas desconhecidas (descoberta)</string>
     <string name="r_distances">Distâncias</string>
     <string name="sl_odo">Odómetro</string>
