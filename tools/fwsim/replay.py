@@ -83,9 +83,15 @@ class Geofence:
         files = []
         if os.path.isdir(path): files = sorted(glob.glob(os.path.join(path, "*.bgf")))
         elif path: files = [path]
+        # H3 hexagon edge length (km) by res -- pads the file bbox (computed from cell CENTERS,
+        # so points inside EDGE cells can fall outside it; mirrors BelteruletGeofence.kt)
+        EDGE_KM = [1107.7, 418.7, 158.2, 59.8, 22.6, 8.54, 3.23, 1.22,
+                   0.46, 0.174, 0.066, 0.025, 0.009, 0.0035, 0.0013, 0.0005]
         self.regions = []
         for f in files:
             ints, rmax, rmin, bbox = gb.unpack(f)
+            pad = (EDGE_KM[rmin] if rmin < len(EDGE_KM) else 10.0) * 1.2 / 111.0
+            bbox = (bbox[0] - pad, bbox[1] - pad, bbox[2] + pad, bbox[3] + pad)
             self.regions.append((set(ints), rmax, rmin, bbox))
         print(f"[geofence] {len(self.regions)} region(s) from {path}", file=sys.stderr)
     def state(self, lat, lng):

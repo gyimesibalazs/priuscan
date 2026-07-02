@@ -24,9 +24,9 @@ struct PBlob {
   float    cap_ah; uint32_t cap_n; float vl_avg;   // learned capacity
   float    lz[14]; uint32_t lz_n;                   // learned weak-block layer
 };
-inline constexpr uint32_t PBLOB_MAGIC = 0x50430006;  // "PC" + ver 6 (TripSlot += city_dist, city_ev)
+inline constexpr uint32_t PBLOB_MAGIC = 0x50430007;  // "PC" + ver 7 (TripSlot += start_frac)
 
-// ---- previous on-flash layout (magic ...05, 8-field TripSlot) -> read once + migrate forward ----
+// ---- previous on-flash layouts -> read once + migrate forward ----
 struct OldTripSlotV5 { uint32_t epoch, odo; float dist, ev, fuel, move_s, regen_e, brake_e; };
 struct OldPBlobV5 {
   uint32_t magic, off_n, off_ts; float fuel_ref; uint32_t refuel_epoch;
@@ -36,8 +36,24 @@ struct OldPBlobV5 {
 };
 inline constexpr uint32_t PBLOB_MAGIC_V5 = 0x50430005;
 inline void migrate_slot_v5(TripSlot &n, const OldTripSlotV5 &o) {
+  n = {};
   n.epoch = o.epoch; n.odo = o.odo; n.dist = o.dist; n.ev = o.ev; n.fuel = o.fuel;
-  n.move_s = o.move_s; n.regen_e = o.regen_e; n.brake_e = o.brake_e; n.city_dist = 0; n.city_ev = 0;
+  n.move_s = o.move_s; n.regen_e = o.regen_e; n.brake_e = o.brake_e;
+}
+// v6 (magic ...06): 10-field TripSlot (city_dist/city_ev, no start_frac)
+struct OldTripSlotV6 { uint32_t epoch, odo; float dist, ev, fuel, move_s, regen_e, brake_e, city_dist, city_ev; };
+struct OldPBlobV6 {
+  uint32_t magic, off_n, off_ts; float fuel_ref; uint32_t refuel_epoch;
+  OldTripSlotV6 slot[7]; uint8_t rhist_n, rhist_head, ohist_n, ohist_head;
+  OldTripSlotV6 rhist[HISTN], ohist[HISTN];
+  float cap_ah; uint32_t cap_n; float vl_avg; float lz[14]; uint32_t lz_n;
+};
+inline constexpr uint32_t PBLOB_MAGIC_V6 = 0x50430006;
+inline void migrate_slot_v6(TripSlot &n, const OldTripSlotV6 &o) {
+  n = {};
+  n.epoch = o.epoch; n.odo = o.odo; n.dist = o.dist; n.ev = o.ev; n.fuel = o.fuel;
+  n.move_s = o.move_s; n.regen_e = o.regen_e; n.brake_e = o.brake_e;
+  n.city_dist = o.city_dist; n.city_ev = o.city_ev;
 }
 
 } // namespace prius
@@ -68,7 +84,8 @@ inline void prius_persist_save(uint32_t epoch) {
   }
   { uint32_t ab; std::memcpy(&ab, &prius::fuel_anchor, 4);   // virtual-gauge anchor + calibrated flag
     nvs_set_u32(h, "fanc", ab);                             // (consumption itself lives in the tank slot[1])
-    nvs_set_u32(h, "tkn", prius::tank_known ? 1u : 0u); }
+    nvs_set_u32(h, "tkn", prius::tank_known ? 1u : 0u);
+    nvs_set_u32(h, "gver", prius::GAUGE_CAL_VER); }         // which HEAD/MEAS the anchor was computed with
   nvs_set_u32(h, "csta", prius::city_state);                // geofence state -> resume on next boot
   nvs_commit(h);
   nvs_close(h);
@@ -96,10 +113,26 @@ inline void prius_persist_load() {
       prius::cap_ah = b.cap_ah; prius::cap_n = b.cap_n; prius::vl_avg = b.vl_avg;
       std::memcpy(prius::lz, b.lz, sizeof(prius::lz)); prius::lz_n = b.lz_n;
       loaded = true;
-    } else {                                     // no v6 blob -> try the previous (v5) layout + migrate
+    } else {                                     // no v7 blob -> try v6, then v5, and migrate forward
+      static prius::OldPBlobV6 o6; size_t o6z = sizeof(o6);
       static prius::OldPBlobV5 ob; size_t osz = sizeof(ob);
-      if (nvs_get_blob(h, "blob", &ob, &osz) == ESP_OK && osz == sizeof(ob)
-          && ob.magic == prius::PBLOB_MAGIC_V5) {
+      if (nvs_get_blob(h, "blob", &o6, &o6z) == ESP_OK && o6z == sizeof(o6)
+          && o6.magic == prius::PBLOB_MAGIC_V6) {
+        prius::save_count = o6.off_n; prius::boot_off_n = o6.off_n; prius::boot_off_epoch = o6.off_ts;
+        prius::fuel_ref = o6.fuel_ref; prius::last_refuel_epoch = o6.refuel_epoch;
+        for (int i = 0; i < 7; i++) prius::migrate_slot_v6(prius::slot[i], o6.slot[i]);
+        prius::rhist_n = o6.rhist_n; prius::rhist_head = o6.rhist_head;
+        prius::ohist_n = o6.ohist_n; prius::ohist_head = o6.ohist_head;
+        for (int i = 0; i < prius::HISTN; i++) {
+          prius::migrate_slot_v6(prius::rhist[i], o6.rhist[i]);
+          prius::migrate_slot_v6(prius::ohist[i], o6.ohist[i]);
+        }
+        prius::cap_ah = o6.cap_ah; prius::cap_n = o6.cap_n; prius::vl_avg = o6.vl_avg;
+        std::memcpy(prius::lz, o6.lz, sizeof(prius::lz)); prius::lz_n = o6.lz_n;
+        loaded = true;
+        prius::persist_request = true;           // re-save in the v7 format on the next flush
+      } else if (nvs_get_blob(h, "blob", &ob, &osz) == ESP_OK && osz == sizeof(ob)
+                 && ob.magic == prius::PBLOB_MAGIC_V5) {
         prius::save_count = ob.off_n; prius::boot_off_n = ob.off_n; prius::boot_off_epoch = ob.off_ts;
         prius::fuel_ref = ob.fuel_ref; prius::last_refuel_epoch = ob.refuel_epoch;
         for (int i = 0; i < 7; i++) prius::migrate_slot_v5(prius::slot[i], ob.slot[i]);
@@ -112,13 +145,19 @@ inline void prius_persist_load() {
         prius::cap_ah = ob.cap_ah; prius::cap_n = ob.cap_n; prius::vl_avg = ob.vl_avg;
         std::memcpy(prius::lz, ob.lz, sizeof(prius::lz)); prius::lz_n = ob.lz_n;
         loaded = true;
-        prius::persist_request = true;           // re-save in the v6 format on the next flush
+        prius::persist_request = true;           // re-save in the v7 format on the next flush
       }
     }
     uint32_t cb; if (nvs_get_u32(h, "cema", &cb) == ESP_OK) std::memcpy(&prius::cons_ema, &cb, 4);
-    uint32_t ab, tk;                                        // virtual-gauge anchor + calibrated flag
-    if (nvs_get_u32(h, "fanc", &ab) == ESP_OK) std::memcpy(&prius::fuel_anchor, &ab, 4);
-    if (nvs_get_u32(h, "tkn",  &tk) == ESP_OK) prius::tank_known = (tk != 0);
+    // virtual-gauge anchor + calibrated flag -- ONLY if it was computed with the CURRENT gauge
+    // constants ("gver" matches): an anchor from old HEAD/MEAS would bias fuelL by ~1-2 L until
+    // the next refuel. On mismatch we keep the defaults -> re-anchor from the live gauge.
+    uint32_t gv = 0; nvs_get_u32(h, "gver", &gv);
+    if (gv == prius::GAUGE_CAL_VER) {
+      uint32_t ab, tk;
+      if (nvs_get_u32(h, "fanc", &ab) == ESP_OK) std::memcpy(&prius::fuel_anchor, &ab, 4);
+      if (nvs_get_u32(h, "tkn",  &tk) == ESP_OK) prius::tank_known = (tk != 0);
+    }
     uint32_t cs; if (nvs_get_u32(h, "csta", &cs) == ESP_OK && cs <= 2) prius::city_state = (uint8_t)cs;
     nvs_close(h);
   }
@@ -138,7 +177,11 @@ inline void prius_persist_load() {
 // ---- daily health/trip ring on flash (separate NVS namespace "priusday"; 8-year ring) ----
 // One record per day, accumulated across the day's drives, overwritten in place; a new day moves
 // to the next ring slot; at 8 years the oldest is overwritten. Independent of the trip-slot blob.
-inline constexpr uint32_t DAILY_N = 2920;    // ~8 years of one-record-per-day
+inline constexpr uint32_t DAILY_N = 2200;    // ~6 years of one-record-per-day. NVS budget: one 78-B blob
+                                             // costs ~5 entries; the ~446 KB partition holds ~13.7k entries
+                                             // total, and the main blob + ESPHome keys need headroom too —
+                                             // 2920 records would EXCEED the partition and every later
+                                             // nvs_set (incl. the trip blob) would start failing silently.
 
 // Fold the current drive into today's record on shutdown (also refuel/parked). epoch = wall clock.
 inline void prius_daily_save(uint32_t epoch) {

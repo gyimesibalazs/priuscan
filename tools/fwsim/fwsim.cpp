@@ -57,6 +57,13 @@ int main() {
 
         if (first) { t0 = ts; host_epoch = (uint32_t)(ts / 1000.0); first = false; prev_ts = ts; }
         double now = ts - t0;
+        // (uint32_t)now wraps after ~49.7 days of log span -> the epoch chain breaks silently.
+        // Warn once; feed the harness a narrower window (--since) instead.
+        static bool span_warned = false;
+        if (!span_warned && now > 4.0e9) {
+            fprintf(stderr, "fwsim: WARNING log span > 46 days -- uint32 ms wrap, epochs unreliable; use --since\n");
+            span_warned = true;
+        }
         bool gap = (ts - prev_ts) > GAP_MS;
         prev_ts = ts;
         if (city >= 0 && city <= 2) city_state = (uint8_t)city;
@@ -77,6 +84,8 @@ int main() {
         if (reboot) {
             derive_init = false; derive_boot_ms = 0; trap_sp = NAN; trap_fl = NAN;
             fuel_fin_prev = NAN; refuel_peak = 0; refuel_seen_ms = 0; fuel_lowcnt = 0; prev_sp = NAN;
+            stop_s = 1000.0f;               // boot value: parked-idle must NOT count as moving time
+            odo_frac = 0.0f; odo_prev = 0;  // sub-km fraction restarts on the device too
         }
 
         // coverage: parallel trapezoid spd-integral over logged (non-gap) samples, so we can tell

@@ -18,11 +18,15 @@ GEO=app/src/main/assets/geofence
 
 echo ">> App v$VN (versionCode $VC), FW $FW, tag $TAG"
 
-# build with the Linux SDK (WSL: local.properties holds the Windows path)
-cp local.properties /tmp/priuscan-lp.bak 2>/dev/null || true
+# build with the Linux SDK (WSL: local.properties holds the Windows path). The restore runs
+# via an EXIT trap: with `set -e` a failing gradlew would otherwise skip an inline restore,
+# leaving local.properties on the Linux path — and the NEXT run's backup would then overwrite
+# the user's Windows SDK path for good. Backup in-repo (gitignored), not /tmp (WSL clears it).
+LP_BAK="local.properties.bak"
+cp local.properties "$LP_BAK" 2>/dev/null || true
+trap '[ -f "$LP_BAK" ] && mv "$LP_BAK" local.properties' EXIT
 echo "sdk.dir=${ANDROID_SDK_LINUX:-$HOME/Android/Sdk}" > local.properties
 ./gradlew :app:assembleDebug
-[ -f /tmp/priuscan-lp.bak ] && cp /tmp/priuscan-lp.bak local.properties || true
 [ -f "$APK" ] || { echo "!! build produced no APK"; exit 1; }
 
 # the asset MUST be literally "update.json" (AppUpdater looks for that name) -> stage in a temp dir

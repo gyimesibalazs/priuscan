@@ -25,6 +25,7 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
     private val main = Handler(Looper.getMainLooper())
 
     private var alertView: View? = null
+    private var alertDismiss: Runnable? = null   // pending auto-dismiss (cancelled on a new alert)
     private var statusView: TextView? = null
     private var doorImg: DoorImageView? = null
     private var doorContainer: View? = null
@@ -151,12 +152,16 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
         try {
             wm.addView(tv, lp)
             alertView = tv
-            // level 1: disappears after 8 s; level 2: 20 s (or a tap)
-            main.postDelayed({ removeAlert() }, if (level >= 2) 20000L else 8000L)
+            // level 1: disappears after 8 s; level 2: 20 s (or a tap). Cancel the PREVIOUS alert's
+            // pending dismiss first -- a stale timer must not remove a newer (higher-level) alert early.
+            alertDismiss?.let { main.removeCallbacks(it) }
+            Runnable { removeAlert() }.also { alertDismiss = it; main.postDelayed(it, if (level >= 2) 20000L else 8000L) }
         } catch (_: Exception) {}
     }
 
     private fun removeAlert() {
+        alertDismiss?.let { main.removeCallbacks(it) }
+        alertDismiss = null
         alertView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         alertView = null
     }

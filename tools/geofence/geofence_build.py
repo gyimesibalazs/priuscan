@@ -261,9 +261,17 @@ def verify(bgf, cell_count, test_csv):
 
 # ------------------------------------------------------------ main
 def cells_bbox(ints):
-    lls = [h3.cell_to_latlng(h3.int_to_str(i)) for i in ints]
+    lls = []; min_res = 15
+    for i in ints:
+        c = h3.int_to_str(i)
+        lls.append(h3.cell_to_latlng(c))
+        r = h3.get_resolution(c)
+        if r < min_res: min_res = r
     lats = [x for x, _ in lls]; lngs = [y for _, y in lls]
-    return (min(lats), min(lngs), max(lats), max(lngs))
+    # the bbox is computed from cell CENTERS: pad it by the coarsest stored cell's reach so a
+    # point inside an EDGE cell can't fall outside the consumers' bbox pre-cut (~edge length).
+    pad = h3.average_hexagon_edge_length(min_res, unit="km") * 1.2 / 111.0
+    return (min(lats) - pad, min(lngs) - pad, max(lats) + pad, max(lngs) + pad)
 
 def main():
     ap = argparse.ArgumentParser(prog="geofence-build")

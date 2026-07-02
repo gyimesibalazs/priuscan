@@ -112,10 +112,10 @@ aborted and the data never completes.
 
 `next_request` enforces this in two stages:
 1. **In-progress guard** — while an ISO-TP transfer is mid-flight it waits (up
-   to a 120 ms timeout, tracked via `tp_started_ms`).
+   to a 60 ms timeout, tracked via `tp_started_ms`).
 2. **Full serialization** (`awaiting` / `await_resp`) — after sending a request
    it refuses to send another until that request's response has *completed*
-   (single frame, multi-frame, or even a negative `7F`), or 120 ms elapses.
+   (single frame, multi-frame, or even a negative `7F`), or 60 ms elapses.
    This closes the earlier race: between sending a request and its first frame
    arriving, `tp_active` was still false, so the next 80 ms tick could fire a
    second request and another ECU's first frame would clobber the shared
@@ -202,14 +202,16 @@ Debug:    eFF eOK eLen loops · raw0..raw7 (0x7B8/2147 response — G-sensor cal
 
 **Trip slots** (firmware-owned, persisted in NVS; the app only displays). Every
 counter is one uniform `TripSlot {epoch, odo, dist, ev, fuel, move_s, regen_e,
-brake_e, city_dist, city_ev}`. The regular line carries a `"slots"` array of 8 live
+brake_e, city_dist, city_ev, start_frac}`. The regular line carries a `"slots"` array of 8 live
 slots in order: `[0] since-boot (memory only)`, `[1] lifetime`, `[2] tank`, `[3] oil`,
 `[4-6] A/B/C`, `[7] home-departure`. Each slot object is `{e,o,d,v,f,m,r,cd,ce}`
-(r = regen %, derived from `regen_e/brake_e`; **`cd` = city km, `ce` = city-EV km** —
+(**r = recovered electrical energy in kWh** (`regen_e/3.6e6`, fw ≥3.47; older firmware sent
+the regen ratio % — the app zeroes `r` for fw <347); **`cd` = city km, `ce` = city-EV km** —
 accumulated only while the app's geofence reports `in_city`, see the `G1`/`G0` command;
 the top-level `"city"` flag echoes the current state). The app derives avg consumption (`fuel/dist`),
-avg speed (`dist/move_s`) and the regen ratio. Refuel history (`rhist`) and
-oil-change history (`ohist`), 50 entries each, are fetched on demand (`H` / `HO`).
+avg speed (`dist/move_s`) and a recovered-km equivalent (`r × 15 km/kWh`, the measured EV
+efficiency). Refuel history (`rhist`) and oil-change history (`ohist`), 50 entries each,
+are fetched on demand (`H` / `HO`).
 
 `epoch`, `fuelTs`, `fw` are appended by `emit_json` as **integers** (a unix epoch /
 version does not fit a 24-bit-mantissa float, so they bypass the float `V[]` store).
@@ -219,15 +221,15 @@ from `0x612` byte[5] /255×100), `odo` (km, `0x611` bytes[5..7]), rear doors (`0
 byte[5] / `0x626` byte[2]).
 
 ### Derived values & warnings (`compute_derived`)
-* **fuel** (l/h) — **injector-based** (primary): `INJ_K * injml * rpm * fuel_corr`,
+* **fuel** (l/h) — **injector-based** (primary): `INJ_K * injml * rpm * k(spd)`,
   0 when rpm < 100. `injml` (injected volume) tracks the *real* commanded fuel, so it
-  includes power-enrichment (the engine runs mostly at high load → the old MAF/14.7
-  stoichiometric estimate read ~7 % low) **and** decel fuel-cut (injectors off → 0,
-  where MAF over-counted). `INJ_K = 0.00976` is an empirical one-trip fit:
-  `∫(injml·rpm·dt)` over the 2026-06-20 tank trip set equal to the car trip computer
-  (3.05 L), then ×5.5/5.2 because the car itself reads ~5.6 % below the pump. **MAF
-  fallback** (`maf/14.7*3600/745`) only while the injector PID hasn't arrived. The
-  single source `V[FUEL]` feeds both the instant display and the trip accumulation.
+  includes power-enrichment **and** decel fuel-cut (injectors off → 0, where MAF
+  over-counted). `INJ_K = 0.00976` (raw); the pump calibration is **speed-dependent**
+  (fw ≥3.49): `k(spd) = fuel_corr × clamp(1.2422 − 0.002804·spd, 0.90, 1.25)` — fit to
+  two full pump-measured tanks (46.26 L @54 km/h avg, 43.8 L @71 km/h avg): the raw model
+  under-reads at low speed and over-reads on the highway; both tanks reproduce to ~1 %.
+  **MAF fallback** (`maf/14.7*3600/745`, same k) only while the injector PID hasn't
+  arrived. The single source `V[FUEL]` feeds the instant display and trip accumulation.
 * **fuel_corr** — user fuel-consumption correction (×, default 1.0), set via the `F`
   command, persisted as an ESPHome global. Refine at a full refuel (accumulated L vs
   pump litres). Affects instant *and* trip fuel.
@@ -259,15 +261,18 @@ byte[5] / `0x626` byte[2]).
   clamps the ratio to 100 %. Persisted in NVS (power-off / refuel / reset) and restored
   first at boot, behind a load guard. The since-boot slot is memory-only (resets each
   power-on). Slots can be **copied** from since-boot/from-home into A/B/C (`C` command, v3.15).
-* **Refuel** (`fuelTs` = `slot[1].epoch`): **plateau-based since v3.19** — a slow
-  fill rises through many `REFUEL_DELTA` (12 %) steps, so the firmware tracks the peak
-  while `fuelIn` keeps rising and records **exactly one event** once the level stops
-  rising for `REFUEL_STABLE_MS` (8 s). This fixes multi-counting a slow fill while the
-  ESP stays powered (the ESP-off case is already plateaued at boot → still one event).
+* **Refuel** (`fuelTs` = `slot[1].epoch`): **plateau-based since v3.19, works while
+  MOVING since v3.49** — a jump of `REFUEL_DELTA` (25 %) above the tracked baseline
+  (`fuel_ref`) arms the detector; it tracks the peak while `fuelIn` keeps rising and
+  records **exactly one event** once the level stops rising for `REFUEL_STABLE_MS` (8 s).
+  There is deliberately NO "parked" requirement: the head unit (which USB-powers the ESP)
+  usually reconnects only after the car is already driving away from the pump, so a
+  parked-only detector never saw the fill; the 8 s plateau alone rejects glitches/slosh
+  (25 % > the ~±20 % full-tank slosh). The baseline follows the gauge both ways but
+  ignores the <2 % shutdown glitch (else a boot-time full tank looks like a +100 jump).
   On the event: push `slot[1]` into `rhist`, reset it, stamp `cur_epoch` + odometer
-  (host-time back-correction as before). Detection is gated on `persist_loaded`
-  (`fuel_ref` = the restored baseline, or 100 % for an empty flash), avoiding the boot
-  fuelIn-sentinel false refuel.
+  (host-time back-correction as before). Detection is gated on `persist_loaded`.
+  Manual fallback: the `K` command ("Tankoltam" button) commits a refuel by hand.
 * **fuelL** (calibrated tank litres, v3.20) — see the tank-calibration note in §6.
 
 ### Serial command protocol (app/PC → ESP)
@@ -461,16 +466,21 @@ pre-rendered PNGs now).
    per-block-R display). **Needs on-device verification** that records accumulate and
    roll over correctly across real power cycles.
 
-### Tank-litre calibration (`fuelL`, v3.20)
+### Tank-litre calibration (`fuelL`, v3.20; constants re-fit v3.50)
 The gauge `fuelIn` (0x612 byte5, 0..100 %) is non-linear at the ends, so litres are
-derived with three constants (`prius_parse.h`): `TANK_FULL = 47` L (safety assumption),
-`FUEL_HEAD = 3.14` L (the top plateau where the gauge stays pinned at 100 %),
-`FUEL_MEAS = 35.51` L (the span the gauge actually measures 0..100 %), and
-`FUEL_BOTTOM = TANK_FULL − FUEL_HEAD − FUEL_MEAS = 8.35` L (reserve below 0 %). On a fresh
-tank the firmware **assumes full and counts down** (`fuel_since_refuel`) until the gauge
-first drops below 100 % (`tank_known` — the reference point); thereafter
-`fuelL = FUEL_BOTTOM + fuelIn/100 × FUEL_MEAS`. **Cross-checked against a measured 39.42 L
-refuel.** The app shows `fuelL` (L) under the % on the tank gauge.
+derived with three constants (`prius_parse.h`): `TANK_FULL = 47` L (validated by a
+46.26 L fill — the tank went to ~0.7 L), `FUEL_HEAD = 6.8` L (the top plateau where the
+gauge stays pinned at 100 %), `FUEL_MEAS = 33.8` L (the span the gauge actually measures
+0..100 %), and `FUEL_BOTTOM = TANK_FULL − FUEL_HEAD − FUEL_MEAS ≈ 6.4` L (reserve below
+0 %). Fit: common-slope regression of k(spd)-model fuel burned vs `fuelIn`% across two
+full pump-measured tanks (tools/fwsim replay); the gauge- and consumption-based remaining
+litres then agree to ~1 L over the whole measured span. On a fresh tank the firmware
+**assumes full and counts down** (`fuel_since_refuel`) until the gauge stably leaves
+100 % (`tank_known` — anchor calibration, `FUEL_LEAVE_MS` streak); thereafter
+`fuelL = anchor − consumed`. The anchor is persisted WITH a calibration-version key
+(`gver` = `GAUGE_CAL_VER`): after an OTA that changes HEAD/MEAS, a stale anchor is
+discarded (it would bias `fuelL` by ~1–2 L) and re-calibrated from the live gauge.
+The app shows `fuelL` (L) under the % on the tank gauge.
 
 ### Deliberately NOT done (safety / not feasible)
 * SRS airbag DTCs — separate diag protocol, Techstream territory.

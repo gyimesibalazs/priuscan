@@ -55,7 +55,11 @@ object BelteruletGeofence {
         }
         runCatching {
             ctx.assets.list("geofence")?.filter { it.endsWith(".bgf") }?.sorted()?.forEach { f ->
-                if (seen.add(f)) ctx.assets.open("geofence/$f").use { parse(it.readBytes()) }?.let { out.add(it); cells += it.cells.size }
+                // per-file guard: ONE corrupt asset must not abort every later region
+                if (seen.add(f)) runCatching {
+                    ctx.assets.open("geofence/$f").use { parse(it.readBytes()) }
+                }.onFailure { Log.e(TAG, "geofence asset $f failed", it) }
+                    .getOrNull()?.let { out.add(it); cells += it.cells.size }
             }
         }.onFailure { Log.e(TAG, "geofence asset load failed", it) }
         regions = out
@@ -63,14 +67,23 @@ object BelteruletGeofence {
         Log.i(TAG, "loaded ${out.size} region(s), $cells cells (ready=$ready)")
     }
 
+    // approx. H3 hexagon edge length (km) by resolution -- used to pad the file bbox: the stored
+    // bbox is computed from cell CENTERS, so a point inside an EDGE cell can fall outside it.
+    private val EDGE_KM = doubleArrayOf(1107.7, 418.7, 158.2, 59.8, 22.6, 8.54, 3.23, 1.22,
+                                        0.46, 0.174, 0.066, 0.025, 0.009, 0.0035, 0.0013, 0.0005)
+
     private fun parse(raw: ByteArray): Region? {
-        if (raw.size < 28 || raw[0].toInt() != 'B'.code || raw[1].toInt() != 'G'.code) return null
+        // full magic + version check: a future BGF2/v2 layout must be rejected, not misparsed
+        if (raw.size < 28 || raw[0].toInt() != 'B'.code || raw[1].toInt() != 'G'.code ||
+            raw[2].toInt() != 'F'.code || raw[3].toInt() != '1'.code || raw[4].toInt() != 1) return null
         val bb = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
         val resMax = raw[5].toInt() and 0xff
         val resMin = raw[6].toInt() and 0xff
         val n = bb.getInt(8)
-        val minLat = bb.getFloat(12); val minLng = bb.getFloat(16)
-        val maxLat = bb.getFloat(20); val maxLng = bb.getFloat(24)
+        // pad by the coarsest stored cell's reach (center -> farthest boundary point ~= edge length)
+        val pad = (EDGE_KM.getOrElse(resMin) { 10.0 } * 1.2 / 111.0).toFloat()
+        val minLat = bb.getFloat(12) - pad; val minLng = bb.getFloat(16) - pad
+        val maxLat = bb.getFloat(20) + pad; val maxLng = bb.getFloat(24) + pad
         val comp = raw.copyOfRange(28, raw.size)
         val payload = Zstd.decompress(comp, Zstd.decompressedSize(comp).toInt())
         val cells = LongArray(n)

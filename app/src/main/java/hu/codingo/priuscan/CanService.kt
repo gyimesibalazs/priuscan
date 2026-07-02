@@ -88,7 +88,7 @@ class CanService : Service() {
         fun mergeLastRefuel() = sendCommand("M")   // merge the last refuel-history entry into the tank
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 350                        // bundled firmware version (3.50)
+        const val BUNDLED_FW = 351                        // bundled firmware version (3.51)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
@@ -105,10 +105,13 @@ class CanService : Service() {
         val dumpActive = MutableStateFlow(false)
         val dumpBytes = MutableStateFlow(0L)            // live dump-file size
         val dumpFile = MutableStateFlow<String?>(null)  // path of the finished file (to share)
-        private val cmdQueue = ConcurrentLinkedQueue<ByteArray>()   // T<unix> / D1 / D0 to the ESP
+        // command -> ESP, with an enqueue timestamp: entries older than 30 s are DROPPED at drain
+        // (queued while disconnected / during a device probe). A stale R6/S delivered minutes later
+        // would reset a trip or flush at the wrong moment.
+        private val cmdQueue = ConcurrentLinkedQueue<Pair<Long, ByteArray>>()
 
         /** Enqueue a text command (newline added); the reader thread writes it to the ESP. */
-        fun sendCommand(s: String) { cmdQueue.offer((s + "\n").toByteArray()) }
+        fun sendCommand(s: String) { cmdQueue.offer(System.currentTimeMillis() to (s + "\n").toByteArray()) }
 
         /** Toggle the ESP CAN dump. unknown=false -> FULL dump (every frame 0x000-0x7FF + dedup);
          *  unknown=true -> D2 (only frames we don't already decode, for discovery). */
@@ -202,7 +205,19 @@ class CanService : Service() {
         if (hLat.isNaN() || hLon.isNaN()) return                      // home not set
         val d = FloatArray(1)
         Location.distanceBetween(loc.latitude, loc.longitude, hLat.toDouble(), hLon.toDouble(), d)
-        val nowHome = if (atHome == true) d[0] < 250f else d[0] < 120f
+        val nowHome = when (atHome) {
+            true -> d[0] < 250f
+            false -> d[0] < 120f
+            // FIRST fix (service restart): classify only while slow/parked, and with the OUTER
+            // radius. Moving-first-fix must not classify -- driving PAST home at ~200 m would set
+            // atHome=true and the next fix would fire a spurious mid-drive R6. And using 120 m here
+            // would leave a 120-250 m dead zone where a real at-home start never arms the departure.
+            null -> {
+                val spd = state.value.d("spd") ?: (if (loc.hasSpeed()) loc.speed * 3.6 else 0.0)
+                if (spd > 15.0) return
+                d[0] < 250f
+            }
+        }
         if (atHome == true && !nowHome) sendCommand("R6")            // departed home -> restart the trip
         atHome = nowHome
     }
@@ -357,6 +372,10 @@ class CanService : Service() {
                                     valid = true
                                     connected.value = true
                                     deviceInfo.value = link.describe(opened.device)
+                                    // re-sync the geofence state: a flip sent while disconnected was
+                                    // dropped from the queue. (Only when KNOWN -- G0 would overwrite
+                                    // the ESP's persisted city_state with "unknown".)
+                                    inCity?.let { sendCommand(if (it) "G1" else "G2") }
                                     // re-arm after a finished update once the ESP is back
                                     if (flashState.value == FlashState.DONE || flashState.value == FlashState.ERROR)
                                         flashState.value = FlashState.IDLE
@@ -385,9 +404,12 @@ class CanService : Service() {
                             lastSaveWrite = nowMs
                             sendCommand("S")
                         }
-                        // drain the command queue (time + dump on/off) to the ESP
-                        while (true) {
-                            val c = cmdQueue.poll() ?: break
+                        // drain the command queue -- ONLY into a VALIDATED PriusCAN device (during
+                        // the up-to-4 s probe of a wrong device the commands would be written there
+                        // and lost), and drop entries older than 30 s (stale by definition).
+                        if (valid) while (true) {
+                            val (t, c) = cmdQueue.poll() ?: break
+                            if (nowMs - t > 30_000L) continue
                             try { port.write(c, 200) } catch (_: Exception) {}
                         }
                         // flash requested -> stream the bundled image via serial OTA (same port)
@@ -575,8 +597,9 @@ class CanService : Service() {
             recovered = true; lenientJson(s) ?: return false
         }
         // firmware history responses (on demand): "H" -> rhist, "HO" -> ohist
-        if (json.has("rhist")) { refuelHist.value = TripSlot.list(json.optJSONArray("rhist")); return false }
-        if (json.has("ohist")) { oilHist.value = TripSlot.list(json.optJSONArray("ohist")); return false }
+        val rIsKwh = (fwRunning.value ?: TripSlot.FW_R_IS_KWH) >= TripSlot.FW_R_IS_KWH
+        if (json.has("rhist")) { refuelHist.value = TripSlot.list(json.optJSONArray("rhist"), rIsKwh); return false }
+        if (json.has("ohist")) { oilHist.value = TripSlot.list(json.optJSONArray("ohist"), rIsKwh); return false }
         if (json.has("rblk")) {
             val a = json.optJSONArray("rblk")
             blockR.value = if (a == null) emptyList()
@@ -608,7 +631,7 @@ class CanService : Service() {
             logger.log(logSrc)
         }
         // trip slots (8) + history counts come on the regular line
-        json.optJSONArray("slots")?.let { tripSlots.value = TripSlot.list(it) }
+        json.optJSONArray("slots")?.let { tripSlots.value = TripSlot.list(it, rIsKwh) }
         if (json.has("rhN") || json.has("ohN"))
             histCount.value = json.optInt("rhN", histCount.value.first) to json.optInt("ohN", histCount.value.second)
         val st = CanState(json)
@@ -665,7 +688,10 @@ class CanService : Service() {
 
         // belterület geofence: OUTSIDE a built-up area with low-beam OFF while moving -> warn.
         // (HU: dipped headlights are mandatory on the open road.) 0x20 = low-beam lamp bit.
-        val lowBeamOff = (s.i("lights") and 0x20) == 0
+        // The lights key must be PRESENT: right after an ESP boot 0x622 hasn't arrived yet and a
+        // missing key would read as 0 = "lights off" -> spurious alarm.
+        val lt = s.d("lights")?.toInt()
+        val lowBeamOff = lt != null && (lt and 0x20) == 0
         if (inCity == false && lowBeamOff && (s.d("spd") ?: 0.0) > 5.0) {
             if (now - lastHlWarn > 60000L) { lastHlWarn = now; alert(1, getString(R.string.alert_headlight)) }
         } else lastHlWarn = 0L   // condition cleared -> re-arm (fire immediately if it returns)

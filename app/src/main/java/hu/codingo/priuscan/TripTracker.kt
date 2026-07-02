@@ -28,14 +28,19 @@ data class TripSlot(
 
     companion object {
         const val EV_KM_PER_KWH = 15.0
+        /** First firmware whose slot "r" is recovered kWh; older firmware sent the regen ratio %. */
+        const val FW_R_IS_KWH = 347
         val EMPTY = TripSlot(0, 0, 0.0, 0.0, 0.0, 0.0, 0.0)
-        fun from(o: JSONObject) = TripSlot(
+        fun from(o: JSONObject, rIsKwh: Boolean = true) = TripSlot(
             o.optLong("e"), o.optLong("o"), o.optDouble("d"), o.optDouble("v"),
-            o.optDouble("f"), o.optDouble("m"), o.optDouble("r"),
+            o.optDouble("f"), o.optDouble("m"),
+            // pre-3.47 firmware sent regen-% in "r" -- displaying that as kWh would show nonsense
+            // ("62.00 kWh"); zero it until the firmware is updated
+            if (rIsKwh) o.optDouble("r") else 0.0,
             o.optDouble("cd", 0.0), o.optDouble("ce", 0.0),   // default 0 (absent on pre-v3.42 firmware -> not NaN)
         )
         /** Parse a JSON array of slot objects (the firmware "slots"/"rhist"/"ohist"). */
-        fun list(a: JSONArray?): List<TripSlot> =
-            if (a == null) emptyList() else (0 until a.length()).map { from(a.getJSONObject(it)) }
+        fun list(a: JSONArray?, rIsKwh: Boolean = true): List<TripSlot> =
+            if (a == null) emptyList() else (0 until a.length()).map { from(a.getJSONObject(it), rIsKwh) }
     }
 }

@@ -119,7 +119,8 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 350;   // 3.50: virtual fuel gauge re-fit (HEAD 6.8 / MEAS 33.8 from 2 tanks, TANK_FULL 47 kept)
+inline constexpr int FW_VERSION = 351;   // 3.51: review fixes (OTA-fail CAN unpause, K gating, merge city km,
+                                         //       anchor cal-versioning, slot start_frac, history r as %.2f kWh)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -210,6 +211,9 @@ inline constexpr float TANK_FULL   = 47.0f;
 inline constexpr float FUEL_HEAD   = 6.8f;     // top plateau: gauge pinned 100% for this much fuel. Re-fit
 inline constexpr float FUEL_MEAS   = 33.8f;    // 2026-06 from 2 full tanks (k(spd) fuel vs fuelIn%, common-
 inline constexpr float FUEL_BOTTOM = TANK_FULL - FUEL_HEAD - FUEL_MEAS;  // slope MEAS fit) -> BOTTOM ~6.4 L reserve below 0%. TANK_FULL=47 validated by the 46.26 L fill.
+inline constexpr uint32_t GAUGE_CAL_VER = 2;   // bump when HEAD/MEAS/BOTTOM change: a persisted fuel_anchor
+                                               // computed with OLD constants must NOT be restored (it would
+                                               // bias fuelL by ~1-2 L until the next refuel re-anchors)
 inline constexpr uint32_t FUEL_LEAVE_MS = 180000;  // fin must stay <99.8% this long (no return to 100%) before
                                                    // it counts as "left 100%" -> calibrate. Filters terrain dips.
 inline uint32_t fuel_below_ms = 0;             // when fin first went <99.8% in the current streak (0 = at 100%)
@@ -758,6 +762,8 @@ struct TripSlot {
   float brake_e;    // J of kinetic energy shed while braking (ratio = regen_e/brake_e)
   float city_dist;  // km driven inside a built-up area (belterület; app geofence -> "G1"/"G0")
   float city_ev;    // pure-EV km inside a built-up area
+  float start_frac; // odo_frac at slot start: the sub-km already driven inside the anchor km. The
+                    // odo-anchored recompute subtracts it, else a mid-km reset inherits up to +1 km.
 };
 inline TripSlot boot_slot = {};        // SINCE BOOT — memory only, NOT persisted
 inline TripSlot slot[7] = {};          // PERSISTED: [0]=lifetime(never reset) [1]=tank
@@ -768,7 +774,10 @@ inline TripSlot rhist[HISTN] = {}; inline uint8_t rhist_n = 0, rhist_head = 0;  
 inline TripSlot ohist[HISTN] = {}; inline uint8_t ohist_n = 0, ohist_head = 0;  // oil-change history
 
 inline uint32_t cur_odo() { float o = V[ODO]; return std::isnan(o) ? 0u : (uint32_t)o; }
-inline void slot_start(TripSlot &s, uint32_t epoch, uint32_t odo) { s = {}; s.epoch = epoch; s.odo = odo; }
+inline void slot_start(TripSlot &s, uint32_t epoch, uint32_t odo) {
+  s = {}; s.epoch = epoch; s.odo = odo;
+  s.start_frac = odo_frac;   // sub-km already inside the anchor km (subtracted by the recompute)
+}
 inline void slot_add(TripSlot &s, float dd, float de, float df, float dm, float dre, float dbe,
                      float dcd, float dce) {
   s.dist += dd; s.ev += de; s.fuel += df; s.move_s += dm; s.regen_e += dre; s.brake_e += dbe;
@@ -806,6 +815,7 @@ inline void merge_last_refuel() {
   if (r.odo   && (!t.odo   || r.odo   < t.odo))   t.odo   = r.odo;
   t.dist += r.dist; t.ev += r.ev; t.fuel += r.fuel; t.move_s += r.move_s;
   t.regen_e += r.regen_e; t.brake_e += r.brake_e;
+  t.city_dist += r.city_dist; t.city_ev += r.city_ev;
   r = {}; rhist_head = last; rhist_n--;                          // pop the merged entry
   last_refuel_epoch = t.epoch;                                   // tank now starts at the merged refuel
   fuel_since_refuel = t.fuel;                                    // consumption since the (earlier) refuel
@@ -975,7 +985,7 @@ inline void compute_derived(uint32_t now_ms) {
   // (epoch back-dated to boot so the "since start" chip shows the real start time/odo).
   if (boot_slot.epoch == 0 && host_time_set)
     boot_slot.epoch = cur_epoch(now_ms) - (uint32_t)((now_ms - derive_boot_ms) / 1000u);
-  if (boot_slot.odo == 0) { uint32_t o = cur_odo(); if (o) boot_slot.odo = o; }
+  if (boot_slot.odo == 0) { uint32_t o = cur_odo(); if (o) { boot_slot.odo = o; boot_slot.start_frac = odo_frac; } }
   // Fuel rate (l/h). Primary: the INJECTOR (injml = injected volume per injection, ~ * rpm =
   // volume/time) -> tracks real fuel incl. power-enrichment AND decel fuel-cut. Calibrated K
   // against the car trip computer (tank trip 2026-06-20: 3.05 L / 63.9 km). Fallback to the
@@ -1142,9 +1152,11 @@ inline void compute_derived(uint32_t now_ms) {
         if (odo_prev != 0 && co != odo_prev) odo_frac = 0.0f;
         odo_prev = co;
         odo_frac = fminf(odo_frac + (d_dist > 0 ? d_dist : 0.0f), 1.0f);
-        if (boot_slot.odo && co >= boot_slot.odo) boot_slot.dist = (float)(co - boot_slot.odo) + odo_frac;
+        if (boot_slot.odo && co >= boot_slot.odo)
+          boot_slot.dist = fmaxf(0.0f, (float)(co - boot_slot.odo) + odo_frac - boot_slot.start_frac);
         for (int i = 0; i < NSLOT; i++)
-          if (slot[i].odo && co >= slot[i].odo) slot[i].dist = (float)(co - slot[i].odo) + odo_frac;
+          if (slot[i].odo && co >= slot[i].odo)
+            slot[i].dist = fmaxf(0.0f, (float)(co - slot[i].odo) + odo_frac - slot[i].start_frac);
       }
     }
 
@@ -1346,11 +1358,13 @@ inline void put_slot(char *&p, const TripSlot &s) {
 }
 
 inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
-  char buf[3072];   // worst-case line is ~2 KB now (many fields) -> headroom against overflow
-  char *p = buf;
+  static char buf[4096];  // realistic line ~2.5 KB; arithmetic worst case ~3.8 KB. Static (not stack)
+  char *p = buf;          // + hard guards below: a corrupt value can truncate the line but not overflow.
+  char *guard = buf + sizeof(buf) - 256;   // put_num/put_slot never write more than ~200 B at once
   *p++ = '{';
   for (int i = 0; i < FIELDS_N; i++) {
     const Field &f = FIELDS[i];
+    if (p > guard) break;
     std::memcpy(p, f.prefix, f.preflen); p += f.preflen;
     put_num(p, V[f.idx], f.dec);
     *p++ = ',';
@@ -1366,7 +1380,7 @@ inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
   // here we only send their COUNTS (rhN/ohN) so the UI knows whether data exists.
   std::memcpy(p, "\"slots\":[", 9); p += 9;
   put_slot(p, boot_slot);
-  for (int i = 0; i < NSLOT; i++) { *p++ = ','; put_slot(p, slot[i]); }
+  for (int i = 0; i < NSLOT; i++) { if (p > guard) break; *p++ = ','; put_slot(p, slot[i]); }
   *p++ = ']'; *p++ = ',';
   std::memcpy(p, "\"rhN\":", 6); p += 6; put_uint(p, rhist_n); *p++ = ',';
   std::memcpy(p, "\"ohN\":", 6); p += 6; put_uint(p, ohist_n); *p++ = ',';
@@ -1384,7 +1398,7 @@ inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
 inline void emit_slot_json(char *&p, char *end, const TripSlot &s) {
   float r = s.regen_e / 3.6e6f;   // recovered electrical energy, kWh (was regen ratio %)
   p += snprintf(p, end - p,
-                "{\"e\":%u,\"o\":%u,\"d\":%.1f,\"v\":%.1f,\"f\":%.2f,\"m\":%.0f,\"r\":%.0f,\"cd\":%.1f,\"ce\":%.1f}",
+                "{\"e\":%u,\"o\":%u,\"d\":%.1f,\"v\":%.1f,\"f\":%.2f,\"m\":%.0f,\"r\":%.2f,\"cd\":%.1f,\"ce\":%.1f}",
                 (unsigned)s.epoch, (unsigned)s.odo, s.dist, s.ev, s.fuel, s.move_s, r, s.city_dist, s.city_ev);
 }
 // On-demand history dump: ONE array (50 records max ~4.3 KB) so a single response never

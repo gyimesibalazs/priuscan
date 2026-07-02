@@ -131,14 +131,21 @@ object AppUpdater {
     private fun download(url: String, dst: File, expected: Long, track: Boolean) {
         val c = open(url)
         val total = if (expected > 0) expected else c.contentLengthLong
+        var done = 0L
         c.inputStream.use { ins ->
             dst.outputStream().use { out ->
-                val buf = ByteArray(64 * 1024); var done = 0L; var n: Int
+                val buf = ByteArray(64 * 1024); var n: Int
                 while (ins.read(buf).also { n = it } > 0) {
                     out.write(buf, 0, n); done += n
                     if (track && total > 0) progress.value = (done * 100 / total).toInt()
                 }
             }
+        }
+        // a stream ending early WITHOUT an exception must not pass a truncated file onward
+        // (a half APK would reach the package installer with an opaque system error)
+        if (total > 0 && done != total) {
+            dst.delete()
+            throw java.io.IOException("truncated download: $done/$total bytes")
         }
     }
 }
