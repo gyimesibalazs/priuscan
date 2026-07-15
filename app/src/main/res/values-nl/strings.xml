@@ -282,6 +282,13 @@
     <string name="f_illum">Licht (besluit)</string>
     <string name="f_ambL">Lichtniveau</string>
     <string name="fuel_corr_label">Verbruikscorrectie (×)</string>
+    <string name="oil_register">Olieverversing registreren</string>
+    <string name="oil_type">Olietype</string>
+    <string name="oil_filter">Filter vervangen</string>
+    <string name="oil_note">Notitie</string>
+    <string name="oil_due">%1$d / %2$d km · %3$.1f / %4$d maanden</string>
+    <string name="oil_interval_km">Olie-interval (km)</string>
+    <string name="oil_interval_mo">Olie-interval (maanden)</string>
     <string name="refuel_btn">Getankt (handmatig)</string>
     <string name="btn_save">Opslaan</string>
     <string name="grp_cruise">Cruise / richting</string>

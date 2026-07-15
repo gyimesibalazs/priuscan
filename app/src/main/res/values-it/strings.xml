@@ -280,6 +280,13 @@
     <string name="f_illum">Luce (decisione)</string>
     <string name="f_ambL">Livello luce</string>
     <string name="fuel_corr_label">Correzione consumo (×)</string>
+    <string name="oil_register">Registra cambio olio</string>
+    <string name="oil_type">Tipo di olio</string>
+    <string name="oil_filter">Filtro sostituito</string>
+    <string name="oil_note">Nota</string>
+    <string name="oil_due">%1$d / %2$d km · %3$.1f / %4$d mesi</string>
+    <string name="oil_interval_km">Intervallo olio (km)</string>
+    <string name="oil_interval_mo">Intervallo olio (mesi)</string>
     <string name="refuel_btn">Rifornito (manuale)</string>
     <string name="btn_save">Salva</string>
     <string name="grp_cruise">Cruise / frecce</string>

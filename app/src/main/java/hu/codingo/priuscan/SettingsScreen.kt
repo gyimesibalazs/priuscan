@@ -63,6 +63,8 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
     var statusSel by remember { mutableStateOf(prefs.statusItems) }
     var fontSize by remember { mutableStateOf(prefs.statusFontSize.toInt().toString()) }
     var refAh by remember { mutableStateOf(prefs.batteryRefAh.toString()) }
+    var oilKm by remember { mutableStateOf(prefs.oilKm.toString()) }
+    var oilMonths by remember { mutableStateOf(prefs.oilMonths.toString()) }
     var fuelCorr by remember { mutableStateOf("") }
     var logEnabled by remember { mutableStateOf(prefs.logEnabled) }
     var autoDark by remember { mutableStateOf(prefs.autoDarkCar) }
@@ -323,6 +325,16 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
             label = { Text(stringResource(R.string.battery_ref_label)) },
             modifier = Modifier.fillMaxWidth(), singleLine = true)
 
+        // ---- Oil-change interval (km + months; drives the due indicator on the Oil trip tab) ----
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(oilKm, { oilKm = it.filter { c -> c.isDigit() } },
+                label = { Text(stringResource(R.string.oil_interval_km)) },
+                modifier = Modifier.weight(1f), singleLine = true)
+            OutlinedTextField(oilMonths, { oilMonths = it.filter { c -> c.isDigit() } },
+                label = { Text(stringResource(R.string.oil_interval_mo)) },
+                modifier = Modifier.weight(1f), singleLine = true)
+        }
+
         // ---- Fuel correction (sent to the ESP, persisted there; affects instant + trip fuel) ----
         val curFCorr = canState.d("fCorr")
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -399,6 +411,8 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
                 prefs.statusItems = statusSel
                 prefs.statusFontSize = fontSize.toFloatOrNull() ?: 14f
                 prefs.batteryRefAh = refAh.toFloatOrNull() ?: 6.5f
+                prefs.oilKm = oilKm.toIntOrNull() ?: 10000
+                prefs.oilMonths = oilMonths.toIntOrNull() ?: 12
                 onClose()
             },
             Modifier.fillMaxWidth(),

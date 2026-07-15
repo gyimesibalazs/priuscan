@@ -280,6 +280,13 @@
     <string name="f_illum">Licht (Entsch.)</string>
     <string name="f_ambL">Lichtniveau</string>
     <string name="fuel_corr_label">Verbrauchskorrektur (×)</string>
+    <string name="oil_register">Ölwechsel erfassen</string>
+    <string name="oil_type">Ölsorte</string>
+    <string name="oil_filter">Filter gewechselt</string>
+    <string name="oil_note">Notiz</string>
+    <string name="oil_due">%1$d / %2$d km · %3$.1f / %4$d Monate</string>
+    <string name="oil_interval_km">Ölwechsel-Intervall (km)</string>
+    <string name="oil_interval_mo">Ölwechsel-Intervall (Monate)</string>
     <string name="refuel_btn">Getankt (manuell)</string>
     <string name="btn_save">Speichern</string>
     <string name="grp_cruise">Tempomat / Blinker</string>

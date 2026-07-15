@@ -282,6 +282,13 @@
     <string name="f_illum">Light (decision)</string>
     <string name="f_ambL">Light level</string>
     <string name="fuel_corr_label">Fuel correction (×)</string>
+    <string name="oil_register">Register oil change</string>
+    <string name="oil_type">Oil type</string>
+    <string name="oil_filter">Filter changed</string>
+    <string name="oil_note">Note</string>
+    <string name="oil_due">%1$d / %2$d km · %3$.1f / %4$d months</string>
+    <string name="oil_interval_km">Oil interval (km)</string>
+    <string name="oil_interval_mo">Oil interval (months)</string>
     <string name="refuel_btn">Refueled (manual)</string>
     <string name="btn_save">Save</string>
     <string name="grp_cruise">Cruise / turn</string>

@@ -66,6 +66,14 @@ class Prefs(ctx: Context) {
         get() = sp.getFloat("battery_ref_ah", 6.5f)
         set(v) = sp.edit().putFloat("battery_ref_ah", v.coerceIn(1f, 20f)).apply()
 
+    /** Oil-change interval for the due indicator (whichever is closer wins): km + months. */
+    var oilKm: Int
+        get() = sp.getInt("oil_km", 10000)
+        set(v) = sp.edit().putInt("oil_km", v.coerceIn(1000, 50000)).apply()
+    var oilMonths: Int
+        get() = sp.getInt("oil_months", 12)
+        set(v) = sp.edit().putInt("oil_months", v.coerceIn(1, 48)).apply()
+
     /** Home location for the auto "from-home" trip reset (NaN = not set). The app resets the
      *  home slot (R6) when the car departs this spot. Set from the current GPS in Settings. */
     var homeLat: Float

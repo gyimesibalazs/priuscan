@@ -4,6 +4,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
@@ -287,7 +291,7 @@ private val TRIPS = listOf(
     TripDef(R.string.sl_trip, "B", 5, 4, 0),
     TripDef(R.string.sl_trip, "C", 6, 5, 0),
     TripDef(R.string.trip_tank, null, 2, 0, 1),
-    TripDef(R.string.trip_oil, null, 3, 2, 2),
+    TripDef(R.string.trip_oil, null, 3, 0, 2),   // reset via the "register oil change" dialog, not hold
     TripDef(R.string.trip_life, null, 1, 0, 0),
 )
 
@@ -342,6 +346,7 @@ private fun TripSection() {
                 Text(stringResource(R.string.trip_hold), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
         }
+        if (def.hist == 2) OilSection(s)   // due indicator + "register oil change" (sends R2)
         if (def.copySrc != null) {   // snapshot this live trip into A/B/C (hold)
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -369,14 +374,95 @@ private fun TripSection() {
             if (h.isEmpty()) {
                 Text(stringResource(R.string.r_none), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
             } else {
+                val oilMeta by OilLog.entries.collectAsState()   // join app-side metadata by period-start odo
                 h.asReversed().forEach { r ->   // newest first
                     SensorRow(
                         fmtDate(r.epoch),
                         "%.1f km · %.1f EV · %.1f l/100km · %.2f kWh (~%.0f km)".format(r.dist, r.ev, r.avgCons, r.regenKwh, r.regenKm),
                     )
+                    if (def.hist == 2) oilMeta.lastOrNull { kotlin.math.abs(it.odo - r.odo) <= 3 }?.let { m ->
+                        Text(
+                            listOfNotNull(m.oilType.ifBlank { null },
+                                          if (m.filter) stringResource(R.string.oil_filter) else null,
+                                          m.note.ifBlank { null }).joinToString(" · "),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp,
+                            modifier = Modifier.padding(start = 12.dp),
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+/** Oil tab extras: due indicator (km + months vs the Settings interval; VISUAL only, no alert)
+ *  + the "register oil change" dialog. Confirming sends R2 (the firmware archives the finished
+ *  period into ohist and restarts slot[2]) and stores the app-side metadata (OilLog). */
+@Composable
+private fun OilSection(s: TripSlot) {
+    val ctx = LocalContext.current
+    val prefs = remember { Prefs(ctx) }
+    LaunchedEffect(Unit) { OilLog.load(ctx) }
+    val oilMeta by OilLog.entries.collectAsState()
+    var showDialog by remember { mutableStateOf(false) }
+
+    // due fraction: km OR elapsed months, whichever is closer (avg month = 30.44 days)
+    val months = if (s.epoch > 0) (System.currentTimeMillis() / 1000 - s.epoch) / 2_629_800.0 else 0.0
+    val pct = maxOf(s.dist / prefs.oilKm, months / prefs.oilMonths).toFloat()
+    val color = when {
+        pct >= 1f -> Color(0xFFE53935)     // overdue
+        pct >= 0.9f -> Color(0xFFFFB300)   // due soon
+        else -> Color(0xFF4CAF50)
+    }
+    Spacer(Modifier.height(6.dp))
+    LinearProgressIndicator(progress = { pct.coerceIn(0f, 1f) },
+        modifier = Modifier.fillMaxWidth().height(6.dp), color = color)
+    val curMeta = oilMeta.lastOrNull { kotlin.math.abs(it.odo - s.odo) <= 3 }   // the oil currently in
+    Text(
+        stringResource(R.string.oil_due, s.dist.toInt(), prefs.oilKm, months, prefs.oilMonths) +
+            (curMeta?.oilType?.ifBlank { null }?.let { "  ·  $it" } ?: ""),
+        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
+    )
+    Spacer(Modifier.height(4.dp))
+    TextButton(onClick = { showDialog = true }) { Text(stringResource(R.string.oil_register)) }
+
+    if (showDialog) {
+        val odo = CanService.state.collectAsState().value.d("odo")?.toLong() ?: 0L
+        var oilType by remember { mutableStateOf("") }
+        var filter by remember { mutableStateOf(true) }
+        var note by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(stringResource(R.string.oil_register)) },
+            text = {
+                Column {
+                    Text(fmtDate(System.currentTimeMillis() / 1000) + "  ·  %,d km".format(odo),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(oilType, { oilType = it },
+                        label = { Text(stringResource(R.string.oil_type)) }, singleLine = true)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(checked = filter, onCheckedChange = { filter = it })
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.oil_filter))
+                    }
+                    OutlinedTextField(note, { note = it },
+                        label = { Text(stringResource(R.string.oil_note)) }, singleLine = true)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDialog = false
+                    CanService.resetSlot(2)                       // firmware: archive period + restart slot[2]
+                    OilLog.add(ctx, OilLog.OilEntry(System.currentTimeMillis() / 1000, odo,
+                                                    oilType.trim(), filter, note.trim()))
+                    CanService.fetchOilHistory()
+                }) { Text(stringResource(R.string.btn_save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
     }
 }
 

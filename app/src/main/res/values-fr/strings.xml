@@ -280,6 +280,13 @@
     <string name="f_illum">Lumière (décision)</string>
     <string name="f_ambL">Niveau lumière</string>
     <string name="fuel_corr_label">Correction conso (×)</string>
+    <string name="oil_register">Enregistrer la vidange</string>
+    <string name="oil_type">Type d\'huile</string>
+    <string name="oil_filter">Filtre remplacé</string>
+    <string name="oil_note">Note</string>
+    <string name="oil_due">%1$d / %2$d km · %3$.1f / %4$d mois</string>
+    <string name="oil_interval_km">Intervalle vidange (km)</string>
+    <string name="oil_interval_mo">Intervalle vidange (mois)</string>
     <string name="refuel_btn">Plein fait (manuel)</string>
     <string name="btn_save">Enregistrer</string>
     <string name="grp_cruise">Régulateur / cligno</string>
