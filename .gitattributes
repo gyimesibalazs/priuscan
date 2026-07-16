@@ -1,0 +1,4 @@
+# shell scripts + init rc run on Linux/Android -- CRLF would break them (bad interpreter / init parse)
+*.sh text eol=lf
+*.rc text eol=lf
+*.py text eol=lf

@@ -1,0 +1,18 @@
+# lat,lng,inside(1/0),label
+47.515,19.105,1,Budapest Zuglo
+48.2082,16.3738,1,Wien
+48.1486,17.1077,1,Bratislava
+44.4268,26.1025,1,Bucuresti
+44.8125,20.4612,1,Beograd
+45.8150,15.9819,1,Zagreb
+46.0569,14.5058,1,Ljubljana
+52.5200,13.4050,1,Berlin
+50.0755,14.4378,1,Praha
+52.3676,4.9041,1,Amsterdam
+50.8503,4.3517,1,Bruxelles
+43.8563,18.4131,1,Sarajevo
+42.4411,19.2636,1,Podgorica
+50.4501,30.5234,1,Kyiv
+46.83,17.73,0,Balaton (viz)
+42.78,19.65,0,ME hegyek
+45.50,24.50,0,Karpatok (RO)
