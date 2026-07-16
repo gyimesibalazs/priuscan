@@ -52,6 +52,13 @@ adb -s "$DEV" install -r "$APK"
 adb -s "$DEV" shell pm grant hu.codingo.priuscan android.permission.WRITE_SECURE_SETTINGS 2>/dev/null \
   && echo ">> WRITE_SECURE_SETTINGS granted (auto dark mode)" \
   || echo "!! could not grant WRITE_SECURE_SETTINGS (auto system dark mode may not work)"
+# the LIVE system-wide flip is done by the nightwatch helper (root watcher applying the
+# app-written ui_night_mode via `cmd uimode`; setNightMode is locked on this ROM and
+# MODIFY_DAY_NIGHT_MODE is not grantable). It lives on an `adb remount` overlay that can
+# get lost (ROM update / factory reset) -> warn if it's not running.
+adb -s "$DEV" shell pgrep -f priuscan-nightwatch >/dev/null 2>&1 \
+  && echo ">> nightwatch helper: running (system-wide dark mode OK)" \
+  || echo "!! nightwatch helper NOT running -> system-wide dark mode won't flip. Fix: tools/nightwatch/install-nightwatch.sh $DEV"
 
 FW="$(grep -oE 'BUNDLED_FW = [0-9]+' "$CANSVC" | grep -oE '[0-9]+' || true)"
 echo ">> Done. Bundled FW: ${FW:-?}  (OTA it on the head unit if the ESP is older)"

@@ -1,0 +1,4 @@
+service priuscan_nw /system/bin/sh /system/bin/priuscan-nightwatch.sh
+    class late_start
+    user root
+    group root
