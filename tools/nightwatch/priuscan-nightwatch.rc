@@ -2,3 +2,9 @@ service priuscan_nw /system/bin/sh /system/bin/priuscan-nightwatch.sh
     class late_start
     user root
     group root
+
+# belt and braces: some ROM boot flows never trigger the late_start class (it is mostly
+# exercised by FDE decrypt paths) -- the service then sits defined but never started,
+# which looks like "worked until the first head-unit restart". boot_completed always fires.
+on property:sys.boot_completed=1
+    start priuscan_nw

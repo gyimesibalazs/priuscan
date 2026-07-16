@@ -56,7 +56,8 @@ adb -s "$DEV" shell pm grant hu.codingo.priuscan android.permission.WRITE_SECURE
 # app-written ui_night_mode via `cmd uimode`; setNightMode is locked on this ROM and
 # MODIFY_DAY_NIGHT_MODE is not grantable). It lives on an `adb remount` overlay that can
 # get lost (ROM update / factory reset) -> warn if it's not running.
-adb -s "$DEV" shell pgrep -f priuscan-nightwatch >/dev/null 2>&1 \
+# anchored match (a bare `pgrep -f priuscan-nightwatch` self-matches and matches zombies)
+adb -s "$DEV" shell "ps -A -o ARGS 2>/dev/null | grep -qE 'sh /system/bin/priuscan-nightwatch.sh\$'" \
   && echo ">> nightwatch helper: running (system-wide dark mode OK)" \
   || echo "!! nightwatch helper NOT running -> system-wide dark mode won't flip. Fix: tools/nightwatch/install-nightwatch.sh $DEV"
 
