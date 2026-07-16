@@ -251,6 +251,7 @@
     <string name="flash_err">Flashen fehlgeschlagen</string>
     <string name="display_title">Anzeige</string>
     <string name="theme_auto_car">Dunkelmodus per Auto-Lichtsensor</string>
+    <string name="night_perm_missing">Systemweiter Dunkelmodus: Berechtigung fehlt (durch Neuinstallation entzogen). Behebung per adb:</string>
     <string name="home_title">Zuhause (Von-Zuhause-Fahrt Auto-Reset)</string>
     <string name="home_unset">Nicht gesetzt</string>
     <string name="home_set_btn">Hier setzen</string>

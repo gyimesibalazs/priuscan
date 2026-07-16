@@ -251,6 +251,7 @@
     <string name="flash_err">Échec du flash</string>
     <string name="display_title">Affichage</string>
     <string name="theme_auto_car">Mode sombre via le capteur de lumière de la voiture</string>
+    <string name="night_perm_missing">Mode sombre système : autorisation manquante (révoquée par une réinstallation). Correction via adb :</string>
     <string name="home_title">Domicile (reset auto trajet)</string>
     <string name="home_unset">Non défini</string>
     <string name="home_set_btn">Définir ici</string>

@@ -251,6 +251,7 @@
     <string name="flash_err">Flash non riuscito</string>
     <string name="display_title">Display</string>
     <string name="theme_auto_car">Modalità scura dal sensore di luce dell\'auto</string>
+    <string name="night_perm_missing">Modalità scura di sistema: permesso mancante (revocato da una reinstallazione). Correzione via adb:</string>
     <string name="home_title">Casa (auto-reset viaggio)</string>
     <string name="home_unset">Non impostato</string>
     <string name="home_set_btn">Imposta qui</string>

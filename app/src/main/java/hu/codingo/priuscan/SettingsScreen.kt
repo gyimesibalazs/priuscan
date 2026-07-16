@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -298,6 +299,18 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
             Switch(checked = autoDark, onCheckedChange = { autoDark = it; prefs.autoDarkCar = it })
             Spacer(Modifier.padding(6.dp))
             Text(stringResource(R.string.theme_auto_car), color = MaterialTheme.colorScheme.onBackground)
+        }
+        // A reinstall / in-app OTA revokes the adb-granted WRITE_SECURE_SETTINGS, and the system-
+        // wide flip then fails SILENTLY. Probe the perm directly (live, every time Settings opens)
+        // + the service's runtime detection, and show the exact fix instead of a mystery.
+        val nightPermRuntime by CanService.nightPermMissing.collectAsState()
+        val nightPermOk = ctx.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (autoDark && (!nightPermOk || nightPermRuntime)) {
+            Text(stringResource(R.string.night_perm_missing), fontSize = 13.sp, color = Color(0xFFFF6B6B))
+            Text("adb shell pm grant hu.codingo.priuscan android.permission.WRITE_SECURE_SETTINGS",
+                fontSize = 11.sp, fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         // ---- Home location: auto-resets the "from-home" trip (slot 6) when the car departs here ----

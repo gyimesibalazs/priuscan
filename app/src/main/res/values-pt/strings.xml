@@ -252,6 +252,7 @@
     <string name="flash_err">Falha ao gravar</string>
     <string name="display_title">Ecrã</string>
     <string name="theme_auto_car">Modo escuro pelo sensor de luz do carro</string>
+    <string name="night_perm_missing">Modo escuro do sistema: permissão em falta (revogada por uma reinstalação). Correção via adb:</string>
     <string name="home_title">Casa (auto-reset viagem)</string>
     <string name="home_unset">Não definido</string>
     <string name="home_set_btn">Definir aqui</string>

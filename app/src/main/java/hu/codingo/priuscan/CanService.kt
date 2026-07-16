@@ -68,6 +68,7 @@ class CanService : Service() {
 
         // ---- Dark mode driven by the car's solar (sun-load) sensor ----
         val carDark = MutableStateFlow(false)   // true = dark (low ambient light)
+        val nightPermMissing = MutableStateFlow(false)   // WRITE_SECURE_SETTINGS revoked (see applyNightMode)
 
         // ---- Trip slots: firmware-owned, the app only displays. The regular line carries the 8
         // live slots [boot, lifetime, tank, oil, A, B, C, home]; histories fetched on demand.
@@ -531,7 +532,9 @@ class CanService : Service() {
 
     /** Best-effort device-wide night mode (needs a system perm; granted via adb on this
      *  head unit:  pm grant hu.codingo.priuscan android.permission.WRITE_SECURE_SETTINGS).
-     *  The in-app theme follows carDark regardless; this also flips the rest of the system. */
+     *  The in-app theme follows carDark regardless; this also flips the rest of the system.
+     *  A reinstall / in-app OTA REVOKES the adb-granted perm and both calls then fail silently
+     *  -> record it (nightPermMissing) so Settings can show the fix instead of a silent break. */
     private fun applyNightMode(dark: Boolean) {
         try {
             val uim = getSystemService(android.app.UiModeManager::class.java)
@@ -539,6 +542,9 @@ class CanService : Service() {
         } catch (_: Exception) {}
         try {
             android.provider.Settings.Secure.putInt(contentResolver, "ui_night_mode", if (dark) 2 else 1)
+            nightPermMissing.value = false
+        } catch (_: SecurityException) {
+            nightPermMissing.value = true    // WRITE_SECURE_SETTINGS was revoked
         } catch (_: Exception) {}
     }
 

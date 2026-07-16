@@ -69,6 +69,7 @@
     <string name="flash_err">Flash failed</string>
     <string name="display_title">Display</string>
     <string name="theme_auto_car">Dark mode from the car light sensor</string>
+    <string name="night_perm_missing">System-wide dark mode: permission missing (a reinstall/update revoked it). Fix over adb:</string>
     <string name="home_title">Home (auto-reset from-home trip)</string>
     <string name="home_unset">Not set</string>
     <string name="home_set_btn">Set here</string>
