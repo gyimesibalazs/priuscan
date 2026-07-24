@@ -252,6 +252,7 @@
     <string name="display_title">Megjelenítés</string>
     <string name="theme_auto_car">Sötét mód az autó fényszenzora szerint</string>
     <string name="night_perm_missing">Rendszerszintű sötét mód: hiányzó jogosultság (egy újratelepítés visszavonta). Javítás adb-vel:</string>
+    <string name="settings_lost_warn">A beállításfájl elveszett az előző leálláskor (írás közben ment el a táp). Alapértékek álltak vissza — ellenőrizd az MQTT / TPMS / otthon beállításokat.</string>
     <string name="home_title">Otthon (hazulról-trip auto-reset)</string>
     <string name="home_unset">Nincs beállítva</string>
     <string name="home_set_btn">Rögzítés</string>

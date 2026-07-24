@@ -70,6 +70,7 @@
     <string name="display_title">Display</string>
     <string name="theme_auto_car">Dark mode from the car light sensor</string>
     <string name="night_perm_missing">System-wide dark mode: permission missing (a reinstall/update revoked it). Fix over adb:</string>
+    <string name="settings_lost_warn">The settings file was lost at the last shutdown (power cut during a write). Defaults were restored — re-check the MQTT / TPMS / home settings.</string>
     <string name="home_title">Home (auto-reset from-home trip)</string>
     <string name="home_unset">Not set</string>
     <string name="home_set_btn">Set here</string>

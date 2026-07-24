@@ -254,6 +254,7 @@
     <string name="display_title">Weergave</string>
     <string name="theme_auto_car">Donkere modus via lichtsensor van de auto</string>
     <string name="night_perm_missing">Systeembrede donkere modus: machtiging ontbreekt (ingetrokken door herinstallatie). Oplossing via adb:</string>
+    <string name="settings_lost_warn">Het instellingenbestand ging verloren bij de laatste uitschakeling (stroomuitval tijdens schrijven). Standaardwaarden hersteld — controleer de MQTT- / TPMS- / thuisinstellingen.</string>
     <string name="home_title">Thuis (auto-reset rit)</string>
     <string name="home_unset">Niet ingesteld</string>
     <string name="home_set_btn">Hier instellen</string>

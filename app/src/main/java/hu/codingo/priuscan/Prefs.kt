@@ -9,6 +9,23 @@ class Prefs(ctx: Context) {
 
     val sp: SharedPreferences = ctx.getSharedPreferences("priuscan", Context.MODE_PRIVATE)
 
+    /** Frequently-written RUNTIME state lives in its own file. SharedPreferences rewrites the
+     *  whole XML on every apply(), and `dark_last` flips right around ignition-off (parking in
+     *  a dark garage) — on this head unit the power is CUT abruptly, and a torn write can lose
+     *  the entire file. In a separate file the blast radius is one cosmetic flag, not every
+     *  setting (the "auto dark switch resets after every restart" bug). */
+    private val state: SharedPreferences = ctx.getSharedPreferences("priuscan_state", Context.MODE_PRIVATE)
+
+    /** true = the MAIN settings file existed before but read back EMPTY now: it was lost to a
+     *  torn write at a power cut. Settings shows a warning so it isn't a silent mystery. */
+    val mainSettingsLost: Boolean
+
+    init {
+        val seenBefore = state.getBoolean("main_seen", false)
+        mainSettingsLost = seenBefore && sp.all.isEmpty()
+        if (sp.all.isNotEmpty() && !seenBefore) state.edit().putBoolean("main_seen", true).apply()
+    }
+
     var haEnabled: Boolean
         get() = sp.getBoolean("ha_enabled", false)
         set(v) = sp.edit().putBoolean("ha_enabled", v).apply()
@@ -51,14 +68,16 @@ class Prefs(ctx: Context) {
     /** Drive dark/light mode from the car's solar (sun-load) sensor instead of the
      *  system setting. When on, also tries to set the system night mode device-wide. */
     var autoDarkCar: Boolean
-        get() = sp.getBoolean("auto_dark_car", false)
-        set(v) = sp.edit().putBoolean("auto_dark_car", v).apply()
+        get() = sp.getBoolean("auto_dark_car", true)   // default ON (and resilient: even a lost
+        set(v) = sp.edit().putBoolean("auto_dark_car", v).apply()   // settings file keeps auto dark)
 
     /** Last applied dark/light state — restored at startup so the right mode shows
      *  immediately (before the first ambient-light reading arrives). */
+    /** Last-known dark/light (startup theme seed). Written on EVERY ambient flip -> lives in
+     *  the state file (see above); reads fall back to the old main-file key (migration). */
     var darkLast: Boolean
-        get() = sp.getBoolean("dark_last", false)
-        set(v) = sp.edit().putBoolean("dark_last", v).apply()
+        get() = state.getBoolean("dark_last", sp.getBoolean("dark_last", false))
+        set(v) = state.edit().putBoolean("dark_last", v).apply()
 
     /** Reference HV pack capacity (Ah) for the SoH/degradation calc. Default ~Prius
      *  6.5 Ah; set to the transplanted Prius-4 cell's rated capacity. */

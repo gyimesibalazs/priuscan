@@ -252,6 +252,7 @@
     <string name="display_title">Display</string>
     <string name="theme_auto_car">Modalità scura dal sensore di luce dell\'auto</string>
     <string name="night_perm_missing">Modalità scura di sistema: permesso mancante (revocato da una reinstallazione). Correzione via adb:</string>
+    <string name="settings_lost_warn">Il file delle impostazioni è andato perso all\'ultimo spegnimento (interruzione durante una scrittura). Ripristinati i valori predefiniti — controlla le impostazioni MQTT / TPMS / casa.</string>
     <string name="home_title">Casa (auto-reset viaggio)</string>
     <string name="home_unset">Non impostato</string>
     <string name="home_set_btn">Imposta qui</string>

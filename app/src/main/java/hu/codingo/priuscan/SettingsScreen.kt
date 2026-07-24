@@ -120,6 +120,12 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
     ) {
         Text(stringResource(R.string.settings_title), fontSize = 28.sp, color = MaterialTheme.colorScheme.onBackground)
 
+        // the main settings file read back EMPTY at startup (torn write at a power cut) ->
+        // tell the user what happened + what to re-check instead of silently showing defaults
+        if (prefs.mainSettingsLost) {
+            Text(stringResource(R.string.settings_lost_warn), fontSize = 13.sp, color = Color(0xFFFF6B6B))
+        }
+
         // ---- Connection status (ESP + TPMS) ----
         Text(stringResource(R.string.connection_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
         StatusRow(espConnected, stringResource(if (espConnected) R.string.connected else R.string.disconnected), espDevice.takeIf { espConnected })

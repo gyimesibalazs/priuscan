@@ -252,6 +252,7 @@
     <string name="display_title">Pantalla</string>
     <string name="theme_auto_car">Modo oscuro según el sensor de luz del coche</string>
     <string name="night_perm_missing">Modo oscuro del sistema: falta el permiso (revocado por una reinstalación). Arreglo por adb:</string>
+    <string name="settings_lost_warn">El archivo de ajustes se perdió en el último apagado (corte de energía durante una escritura). Se restauraron los valores por defecto — revisa los ajustes MQTT / TPMS / casa.</string>
     <string name="home_title">Casa (auto-reinicio viaje)</string>
     <string name="home_unset">Sin definir</string>
     <string name="home_set_btn">Fijar aquí</string>
