@@ -666,10 +666,11 @@ class CanService : Service() {
         // dark/light: prefer the RAW ambient-light sensor (0x620 b2:b3, ~31 bright .. ~600 dark,
         // confirmed by the lamp test) — fast and independent of the light switch. Fall back to the
         // slow solar sun-load sensor. Hysteresis to avoid flicker.
-        // the instrument cluster flips day/night at ambL ~100 -> match it (±10 hysteresis)
+        // user-tuned thresholds (was cluster-matched ~100±10): dark only ABOVE 200, back to light
+        // BELOW 100 -- flips to dark later and the wide 100..200 dead band kills twilight flicker
         val ambL = s.d("ambL")
         val nightNow = when {
-            ambL != null -> if (ambL > 110.0) true else if (ambL < 90.0) false else carDark.value
+            ambL != null -> if (ambL > 200.0) true else if (ambL < 100.0) false else carDark.value
             else -> s.d("solar")?.let { sol -> if (sol < 6.0) true else if (sol > 20.0) false else carDark.value } ?: carDark.value
         }
         if (nightNow != carDark.value) {
