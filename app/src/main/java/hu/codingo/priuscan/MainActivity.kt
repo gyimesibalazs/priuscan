@@ -659,10 +659,7 @@ private fun OdoRow(s: CanState) {
     val spd = s.d("spd")?.let { "${it.toInt()} km/h" } ?: "– km/h"
     val rpm = "${s.d("rpm")?.toInt() ?: "–"} rpm"
     val odo = s.d("odo")?.let { "%,d km".format(it.toLong()) } ?: "– km"
-    val cons = s.d("fuel")?.let { lh ->
-        val sp = s.d("spd") ?: 0.0
-        if (sp > 3.0) "%.1f l/100km".format(lh / sp * 100.0) else "%.1f l/h".format(lh)
-    } ?: "– l/100km"
+    val cons = s.consumptionView().text()   // EV mode -> kWh/h resp. kWh/100km (pack draw)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         val range = s.d("range")?.let { "->| ${it.toInt()} km" }   // distance-to-empty
         listOfNotNull(gear, spd, rpm, odo, range, cons).forEach {

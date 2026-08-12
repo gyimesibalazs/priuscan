@@ -730,22 +730,13 @@ class CanService : Service() {
     private val lastSlotText = HashMap<Int, String>()
     private var extraCount = 0
 
-    /**
-     * Instantaneous consumption: use the SAME firmware-calibrated injector fuel rate (l/h) as the
-     * dashboard, not a MAF approximation (which underestimated -> overlay read lower than the dash).
-     * While driving l/100km, when stopped/idling l/h.
-     */
-    private fun consumption(s: CanState): Double? {
-        val lph = s.d("fuel") ?: return null
-        val spd = s.d("spd") ?: 0.0
-        return if (spd > 3) lph / spd * 100.0 else lph
-    }
-
     private fun itemText(key: String, s: CanState): String? = when (key) {
         "ct" -> s.coolant?.toInt()?.toString()
         "soc" -> s.d("soc")?.toInt()?.toString()
         "rpm" -> s.d("rpm")?.toInt()?.toString()
-        "cons" -> consumption(s)?.let { "%.1f".format(it) }
+        // shared with the dashboard + overlay (consumptionView): fuel l/h resp. l/100km, and in
+        // EV mode the pack draw in kWh/h resp. kWh/100km
+        "cons" -> s.consumptionView().valueText()
         else -> null
     }
 
@@ -756,7 +747,7 @@ class CanService : Service() {
 
     private fun itemUnit(key: String, s: CanState) = when (key) {
         "ct" -> "°C"; "soc" -> "%"; "rpm" -> "rpm"
-        "cons" -> if ((s.d("spd") ?: 0.0) > 3) "l/100km" else "l/h"
+        "cons" -> s.consumptionView().unit
         else -> ""
     }
 
@@ -843,7 +834,7 @@ class CanService : Service() {
             val unit = when (key) {
                 "ct" -> "°C"
                 "rpm" -> "RPM"
-                "cons" -> if (s != null && (s.d("spd") ?: 0.0) > 5) "L/100" else "L/H"
+                "cons" -> s?.consumptionView()?.short ?: "L/100"
                 else -> ""
             }
             drawValueUnit(c, size, v ?: "–", unit)

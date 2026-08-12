@@ -140,3 +140,45 @@ class CanState(json: JSONObject?) {
         val GEARS = arrayOf("P", "R", "N", "D", "B")
     }
 }
+
+/**
+ * Instant consumption for display — ONE source of truth for the dashboard, the notification,
+ * the status strip and the overlay icons, so they can never disagree.
+ *
+ * In EV mode the engine is off, so the fuel figure is a meaningless 0.0 l/100km. Report the
+ * ELECTRICAL draw instead, in the same shape as the fuel one: instantaneous power (kW) while stopped, per-100 km
+ * while moving. Pack power kW = hvA × VL / 1000 (hvA > 0 = discharge; regen makes it negative,
+ * which is correct and informative — energy flowing back in).
+ *
+ * Units are bare unit strings next to numbers (intentionally NOT localized, per CLAUDE.md).
+ */
+data class ConsView(val value: Double?, val unit: String, val short: String, val ev: Boolean) {
+    /** e.g. "6.2 l/100km" / "12.4 kWh/100km" / "– l/100km" */
+    fun text(): String = value?.let { "%.1f %s".format(it, unit) } ?: "– $unit"
+    fun valueText(): String? = value?.let { "%.1f".format(it) }
+}
+
+/** EV = engine off (rpm < 100), the same test the firmware uses for EV distance. */
+fun CanState.isEvMode(): Boolean = (d("rpm") ?: 9999.0) < 100.0
+
+fun CanState.consumptionView(): ConsView {
+    val spd = d("spd") ?: 0.0
+    val moving = spd > 3.0
+    if (isEvMode()) {
+        val amps = d("hvA"); val volts = d("vl")
+        val kw = if (amps != null && volts != null) amps * volts / 1000.0 else null
+        return ConsView(
+            value = if (kw == null) null else if (moving) kw / spd * 100.0 else kw,
+            unit = if (moving) "kWh/100km" else "kW",
+            short = if (moving) "kWh/100" else "kW",
+            ev = true,
+        )
+    }
+    val lph = d("fuel")
+    return ConsView(
+        value = if (lph == null) null else if (moving) lph / spd * 100.0 else lph,
+        unit = if (moving) "l/100km" else "l/h",
+        short = if (moving) "L/100" else "L/H",
+        ev = false,
+    )
+}
