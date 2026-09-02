@@ -263,6 +263,7 @@
     <string name="sl_trip">Trip %1$s</string>
     <string name="btn_reset">Reiniciar</string>
     <string name="r_regen">Energía recuperada</string>
+    <string name="r_evcons">Consumo EV</string>
     <string name="trip_boot">Desde inicio</string>
     <string name="trip_home">Desde casa</string>
     <string name="trip_tank">Depósito</string>

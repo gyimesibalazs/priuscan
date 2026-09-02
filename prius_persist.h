@@ -24,7 +24,7 @@ struct PBlob {
   float    cap_ah; uint32_t cap_n; float vl_avg;   // learned capacity
   float    lz[14]; uint32_t lz_n;                   // learned weak-block layer
 };
-inline constexpr uint32_t PBLOB_MAGIC = 0x50430007;  // "PC" + ver 7 (TripSlot += start_frac)
+inline constexpr uint32_t PBLOB_MAGIC = 0x50430008;  // "PC" + ver 8 (TripSlot += ev_wh)
 
 // ---- previous on-flash layouts -> read once + migrate forward ----
 struct OldTripSlotV5 { uint32_t epoch, odo; float dist, ev, fuel, move_s, regen_e, brake_e; };
@@ -54,6 +54,21 @@ inline void migrate_slot_v6(TripSlot &n, const OldTripSlotV6 &o) {
   n.epoch = o.epoch; n.odo = o.odo; n.dist = o.dist; n.ev = o.ev; n.fuel = o.fuel;
   n.move_s = o.move_s; n.regen_e = o.regen_e; n.brake_e = o.brake_e;
   n.city_dist = o.city_dist; n.city_ev = o.city_ev;
+}
+// v7 (magic ...07): 11-field TripSlot (start_frac last, no ev_wh)
+struct OldTripSlotV7 { uint32_t epoch, odo; float dist, ev, fuel, move_s, regen_e, brake_e, city_dist, city_ev, start_frac; };
+struct OldPBlobV7 {
+  uint32_t magic, off_n, off_ts; float fuel_ref; uint32_t refuel_epoch;
+  OldTripSlotV7 slot[7]; uint8_t rhist_n, rhist_head, ohist_n, ohist_head;
+  OldTripSlotV7 rhist[HISTN], ohist[HISTN];
+  float cap_ah; uint32_t cap_n; float vl_avg; float lz[14]; uint32_t lz_n;
+};
+inline constexpr uint32_t PBLOB_MAGIC_V7 = 0x50430007;
+inline void migrate_slot_v7(TripSlot &n, const OldTripSlotV7 &o) {
+  n = {};
+  n.epoch = o.epoch; n.odo = o.odo; n.dist = o.dist; n.ev = o.ev; n.fuel = o.fuel;
+  n.move_s = o.move_s; n.regen_e = o.regen_e; n.brake_e = o.brake_e;
+  n.city_dist = o.city_dist; n.city_ev = o.city_ev; n.start_frac = o.start_frac;
 }
 
 } // namespace prius
@@ -113,10 +128,26 @@ inline void prius_persist_load() {
       prius::cap_ah = b.cap_ah; prius::cap_n = b.cap_n; prius::vl_avg = b.vl_avg;
       std::memcpy(prius::lz, b.lz, sizeof(prius::lz)); prius::lz_n = b.lz_n;
       loaded = true;
-    } else {                                     // no v7 blob -> try v6, then v5, and migrate forward
+    } else {                                     // no v8 blob -> try v7, v6, v5, and migrate forward
+      static prius::OldPBlobV7 o7; size_t o7z = sizeof(o7);
       static prius::OldPBlobV6 o6; size_t o6z = sizeof(o6);
       static prius::OldPBlobV5 ob; size_t osz = sizeof(ob);
-      if (nvs_get_blob(h, "blob", &o6, &o6z) == ESP_OK && o6z == sizeof(o6)
+      if (nvs_get_blob(h, "blob", &o7, &o7z) == ESP_OK && o7z == sizeof(o7)
+          && o7.magic == prius::PBLOB_MAGIC_V7) {
+        prius::save_count = o7.off_n; prius::boot_off_n = o7.off_n; prius::boot_off_epoch = o7.off_ts;
+        prius::fuel_ref = o7.fuel_ref; prius::last_refuel_epoch = o7.refuel_epoch;
+        for (int i = 0; i < 7; i++) prius::migrate_slot_v7(prius::slot[i], o7.slot[i]);
+        prius::rhist_n = o7.rhist_n; prius::rhist_head = o7.rhist_head;
+        prius::ohist_n = o7.ohist_n; prius::ohist_head = o7.ohist_head;
+        for (int i = 0; i < prius::HISTN; i++) {
+          prius::migrate_slot_v7(prius::rhist[i], o7.rhist[i]);
+          prius::migrate_slot_v7(prius::ohist[i], o7.ohist[i]);
+        }
+        prius::cap_ah = o7.cap_ah; prius::cap_n = o7.cap_n; prius::vl_avg = o7.vl_avg;
+        std::memcpy(prius::lz, o7.lz, sizeof(prius::lz)); prius::lz_n = o7.lz_n;
+        loaded = true;
+        prius::persist_request = true;           // re-save in the v8 format on the next flush
+      } else if (nvs_get_blob(h, "blob", &o6, &o6z) == ESP_OK && o6z == sizeof(o6)
           && o6.magic == prius::PBLOB_MAGIC_V6) {
         prius::save_count = o6.off_n; prius::boot_off_n = o6.off_n; prius::boot_off_epoch = o6.off_ts;
         prius::fuel_ref = o6.fuel_ref; prius::last_refuel_epoch = o6.refuel_epoch;
@@ -130,7 +161,7 @@ inline void prius_persist_load() {
         prius::cap_ah = o6.cap_ah; prius::cap_n = o6.cap_n; prius::vl_avg = o6.vl_avg;
         std::memcpy(prius::lz, o6.lz, sizeof(prius::lz)); prius::lz_n = o6.lz_n;
         loaded = true;
-        prius::persist_request = true;           // re-save in the v7 format on the next flush
+        prius::persist_request = true;           // re-save in the v8 format on the next flush
       } else if (nvs_get_blob(h, "blob", &ob, &osz) == ESP_OK && osz == sizeof(ob)
                  && ob.magic == prius::PBLOB_MAGIC_V5) {
         prius::save_count = ob.off_n; prius::boot_off_n = ob.off_n; prius::boot_off_epoch = ob.off_ts;
@@ -145,7 +176,7 @@ inline void prius_persist_load() {
         prius::cap_ah = ob.cap_ah; prius::cap_n = ob.cap_n; prius::vl_avg = ob.vl_avg;
         std::memcpy(prius::lz, ob.lz, sizeof(prius::lz)); prius::lz_n = ob.lz_n;
         loaded = true;
-        prius::persist_request = true;           // re-save in the v7 format on the next flush
+        prius::persist_request = true;           // re-save in the v8 format on the next flush
       }
     }
     uint32_t cb; if (nvs_get_u32(h, "cema", &cb) == ESP_OK) std::memcpy(&prius::cons_ema, &cb, 4);

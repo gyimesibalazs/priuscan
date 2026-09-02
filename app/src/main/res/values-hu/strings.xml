@@ -263,6 +263,7 @@
     <string name="sl_trip">Trip %1$s</string>
     <string name="btn_reset">Nullázás</string>
     <string name="r_regen">Visszanyert energia</string>
+    <string name="r_evcons">EV fogyasztás</string>
     <string name="trip_boot">Indítás óta</string>
     <string name="trip_home">Otthonról</string>
     <string name="trip_tank">Tankolás</string>

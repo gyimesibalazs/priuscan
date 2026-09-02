@@ -146,9 +146,9 @@ class CanState(json: JSONObject?) {
  * the status strip and the overlay icons, so they can never disagree.
  *
  * In EV mode the engine is off, so the fuel figure is a meaningless 0.0 l/100km. Report the
- * ELECTRICAL draw instead, in the same shape as the fuel one: instantaneous power (kW) while stopped, per-100 km
- * while moving. Pack power kW = hvA × VL / 1000 (hvA > 0 = discharge; regen makes it negative,
- * which is correct and informative — energy flowing back in).
+ * ELECTRICAL draw instead, in the same shape as the fuel one: instantaneous power (kW) while stopped
+ * or regenerating, per-100 km while moving on pack power. Pack power kW = hvA × VL / 1000 (hvA > 0 =
+ * discharge; regen makes it negative — shown as negative kW, energy flowing back in).
  *
  * Units are bare unit strings next to numbers (intentionally NOT localized, per CLAUDE.md).
  */
@@ -158,8 +158,15 @@ data class ConsView(val value: Double?, val unit: String, val short: String, val
     fun valueText(): String? = value?.let { "%.1f".format(it) }
 }
 
-/** EV = engine off (rpm < 100), the same test the firmware uses for EV distance. */
-fun CanState.isEvMode(): Boolean = (d("rpm") ?: 9999.0) < 100.0
+/** EV = engine off (rpm < 100, the firmware's EV-distance test) OR the engine is spinning
+ *  unfuelled (load == 0: fuel-cut / motoring — the car's own gauge reads 0 there, the injector
+ *  PID lags by seconds, so the fuel figure would be a phantom 1-2 l/100km). */
+fun CanState.isEvMode(): Boolean {
+    val rpm = d("rpm") ?: 9999.0
+    if (rpm < 100.0) return true
+    val load = d("load") ?: return false
+    return load < 1.0
+}
 
 fun CanState.consumptionView(): ConsView {
     val spd = d("spd") ?: 0.0
@@ -167,10 +174,13 @@ fun CanState.consumptionView(): ConsView {
     if (isEvMode()) {
         val amps = d("hvA"); val volts = d("vl")
         val kw = if (amps != null && volts != null) amps * volts / 1000.0 else null
+        // regen (power flowing INTO the pack): a negative kWh/100km is meaningless -> show the
+        // recovered power itself, it's the interesting figure while braking / coasting
+        val per100 = moving && (kw == null || kw >= 0.0)
         return ConsView(
-            value = if (kw == null) null else if (moving) kw / spd * 100.0 else kw,
-            unit = if (moving) "kWh/100km" else "kW",
-            short = if (moving) "kWh/100" else "kW",
+            value = if (kw == null) null else if (per100) kw / spd * 100.0 else kw,
+            unit = if (per100) "kWh/100km" else "kW",
+            short = if (per100) "kWh/100" else "kW",
             ev = true,
         )
     }

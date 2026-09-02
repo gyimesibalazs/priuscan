@@ -139,7 +139,8 @@ def fmt_summary(s):
 
 def fmt_slot(sl):
     return (f"{sl['dist']:.1f} km | {sl['fuel']:.2f} L | {sl['l100']:.2f} l/100km | "
-            f"EV {sl['ev']:.1f} km ({sl['ev_pct']:.0f}%) | city {sl['city_dist']:.1f} km "
+            f"EV {sl['ev']:.1f} km ({sl['ev_pct']:.0f}%) @ {sl.get('ev_kwh100', 0):.1f} kWh/100km "
+            f"({sl.get('ev_kwh', 0):.2f} kWh) | city {sl['city_dist']:.1f} km "
             f"({sl['city_pct']:.0f}%) EV {sl['city_ev']:.1f} | {sl['kmh']:.0f} km/h avg")
 
 def main():

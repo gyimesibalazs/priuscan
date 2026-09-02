@@ -119,8 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 351;   // 3.51: review fixes (OTA-fail CAN unpause, K gating, merge city km,
-                                         //       anchor cal-versioning, slot start_frac, history r as %.2f kWh)
+inline constexpr int FW_VERSION = 352;   // 3.52: EV energy per slot (ev_wh, blob v8), load=0 fuel-cut, injector poll 10->3
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -352,7 +351,8 @@ inline const PollItem POLL[] = {
   {0x7C4, 0x21, 0x3C, 3}, {0x7C4, 0x21, 0x53, 3},    // A/C
   {0x7B0, 0x21, 0x07, 3},                            // brake pedal pressure (2107)
   // --- divider=10: every 10th cycle (slow/infrequent diagnostics, body) ---
-  {0x7E0, 0x21, 0x49, 10}, {0x7E0, 0x21, 0x3C, 10},  // engine torque, injector
+  {0x7E0, 0x21, 0x49, 10}, {0x7E0, 0x21, 0x3C, 3},   // engine torque; injector every 3rd (was 10th:
+                                                     // injml lagged rpm by seconds at engine on/off)
   {0x7E2, 0x21, 0x8E, 10}, {0x7E2, 0x21, 0x9B, 10},  // cooling fan
   {0x7E2, 0x21, 0xE1, 10}, {0x7E2, 0x21, 0xC1, 10},  // DTC count, model code
 };
@@ -762,6 +762,7 @@ struct TripSlot {
   float brake_e;    // J of kinetic energy shed while braking (ratio = regen_e/brake_e)
   float city_dist;  // km driven inside a built-up area (belterület; app geofence -> "G1"/"G0")
   float city_ev;    // pure-EV km inside a built-up area
+  float ev_wh;      // Wh drawn from the HV pack while driving in EV mode (gross discharge)
   float start_frac; // odo_frac at slot start: the sub-km already driven inside the anchor km. The
                     // odo-anchored recompute subtracts it, else a mid-km reset inherits up to +1 km.
 };
@@ -779,9 +780,9 @@ inline void slot_start(TripSlot &s, uint32_t epoch, uint32_t odo) {
   s.start_frac = odo_frac;   // sub-km already inside the anchor km (subtracted by the recompute)
 }
 inline void slot_add(TripSlot &s, float dd, float de, float df, float dm, float dre, float dbe,
-                     float dcd, float dce) {
+                     float dcd, float dce, float dew) {
   s.dist += dd; s.ev += de; s.fuel += df; s.move_s += dm; s.regen_e += dre; s.brake_e += dbe;
-  s.city_dist += dcd; s.city_ev += dce;
+  s.city_dist += dcd; s.city_ev += dce; s.ev_wh += dew;
 }
 // reset a slot (2..5): oil-service (2) is pushed into the oil history first; 3..5 are user
 // trips. Slot 0 (lifetime) and 1 (tank, reset only on refuel) are not user-resettable here.
@@ -815,7 +816,7 @@ inline void merge_last_refuel() {
   if (r.odo   && (!t.odo   || r.odo   < t.odo))   t.odo   = r.odo;
   t.dist += r.dist; t.ev += r.ev; t.fuel += r.fuel; t.move_s += r.move_s;
   t.regen_e += r.regen_e; t.brake_e += r.brake_e;
-  t.city_dist += r.city_dist; t.city_ev += r.city_ev;
+  t.city_dist += r.city_dist; t.city_ev += r.city_ev; t.ev_wh += r.ev_wh;
   r = {}; rhist_head = last; rhist_n--;                          // pop the merged entry
   last_refuel_epoch = t.epoch;                                   // tank now starts at the merged refuel
   fuel_since_refuel = t.fuel;                                    // consumption since the (earlier) refuel
@@ -1001,7 +1002,10 @@ inline void compute_derived(uint32_t now_ms) {
   // 2-tank fit -> refine as more tanks accumulate (the device now auto-detects refuels).
   float kspd = fuel_corr * fminf(1.25f, fmaxf(0.90f,
                  1.2422f - 0.002804f * (std::isnan(V[SPD]) ? 0.0f : V[SPD])));
-  if (r < 100) V[FUEL] = 0.0f;                  // engine off
+  float ld = V[LOAD];
+  if (r < 100 || (!std::isnan(ld) && ld < 1.0f)) V[FUEL] = 0.0f;   // engine off, OR spinning with NO
+                                                // load = fuel-cut/motoring (load rides the fast 2101
+                                                // poll; the injector PID lags and holds a stale injml)
   else if (!std::isnan(inj)) V[FUEL] = INJ_K * inj * r * kspd;            // injector-based (incl. enrichment / fuel-cut)
   else if (!std::isnan(maf)) V[FUEL] = maf/14.7f*3600.0f/745.0f * kspd;   // MAF fallback
 
@@ -1128,10 +1132,14 @@ inline void compute_derived(uint32_t now_ms) {
     // city km / city-EV km: only when the app reports we're inside a built-up area (belterület)
     // city km / city-EV km accrue ONLY when explicitly belterület (1); unknown(0)/országút(2) -> none
     float d_cd = (city_state == 1) ? d_dist : 0.0f, d_ce = (city_state == 1) ? d_ev : 0.0f;
+    // EV energy: gross pack DISCHARGE (amps > 0) while driving electrically -- the "cost" of an
+    // EV km. (Net would be ~5x smaller: regen refills the pack during the same samples.) Wh.
+    float d_ew = (d_ev > 0 && !std::isnan(amps) && amps > 0 && !std::isnan(vl) && vl > 0)
+                 ? amps * vl * dt_h : 0.0f;
     V[CITY] = (float)city_state;
     // accumulate into every slot (the only difference between slots is WHEN they reset)
-    slot_add(boot_slot, d_dist, d_ev, d_fuel, d_move, d_re, d_be, d_cd, d_ce);
-    for (int i = 0; i < NSLOT; i++) slot_add(slot[i], d_dist, d_ev, d_fuel, d_move, d_re, d_be, d_cd, d_ce);
+    slot_add(boot_slot, d_dist, d_ev, d_fuel, d_move, d_re, d_be, d_cd, d_ce, d_ew);
+    for (int i = 0; i < NSLOT; i++) slot_add(slot[i], d_dist, d_ev, d_fuel, d_move, d_re, d_be, d_cd, d_ce, d_ew);
     fuel_since_refuel += d_fuel;   // for the head-plateau liter count-down (calibrated tank)
     // distance-to-empty: distance-weighted EMA of consumption (l/100km). Updates ONLY while moving
     // (>5 m/step), so idling doesn't skew it. Seed (first ever boot, before NVS) from the tank avg.
@@ -1354,6 +1362,7 @@ inline void put_slot(char *&p, const TripSlot &s) {
   std::memcpy(p, ",\"r\":", 5); p += 5; put_num(p, s.regen_e / 3.6e6f, 2);   // recovered electrical energy, kWh
   std::memcpy(p, ",\"cd\":", 6); p += 6; put_num(p, s.city_dist, 1);   // city km
   std::memcpy(p, ",\"ce\":", 6); p += 6; put_num(p, s.city_ev, 1);     // city-EV km
+  std::memcpy(p, ",\"ew\":", 6); p += 6; put_num(p, s.ev_wh / 1000.0f, 3);   // EV energy, kWh
   *p++ = '}';
 }
 
@@ -1398,8 +1407,8 @@ inline void emit_json(const char *door_cruise_extra, uint32_t now_ms) {
 inline void emit_slot_json(char *&p, char *end, const TripSlot &s) {
   float r = s.regen_e / 3.6e6f;   // recovered electrical energy, kWh (was regen ratio %)
   p += snprintf(p, end - p,
-                "{\"e\":%u,\"o\":%u,\"d\":%.1f,\"v\":%.1f,\"f\":%.2f,\"m\":%.0f,\"r\":%.2f,\"cd\":%.1f,\"ce\":%.1f}",
-                (unsigned)s.epoch, (unsigned)s.odo, s.dist, s.ev, s.fuel, s.move_s, r, s.city_dist, s.city_ev);
+                "{\"e\":%u,\"o\":%u,\"d\":%.1f,\"v\":%.1f,\"f\":%.2f,\"m\":%.0f,\"r\":%.2f,\"cd\":%.1f,\"ce\":%.1f,\"ew\":%.3f}",
+                (unsigned)s.epoch, (unsigned)s.odo, s.dist, s.ev, s.fuel, s.move_s, r, s.city_dist, s.city_ev, s.ev_wh / 1000.0f);
 }
 // On-demand history dump: ONE array (50 records max ~4.3 KB) so a single response never
 // blows the buffer. The live slots (with their epochs) come from the regular line, so the

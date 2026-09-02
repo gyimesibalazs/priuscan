@@ -25,11 +25,13 @@ static void emit_slot(const char *nm, const TripSlot &s) {
     double kmh  = s.move_s > 5 ? s.dist / (s.move_s / 3600.0) : 0.0;
     double evp  = s.dist > 0.1 ? s.ev / s.dist * 100.0 : 0.0;
     double cityp= s.dist > 0.1 ? s.city_dist / s.dist * 100.0 : 0.0;
+    double evkwh100 = s.ev > 0.5 ? (s.ev_wh / 1000.0) / s.ev * 100.0 : 0.0;
     printf("{\"slot\":\"%s\",\"epoch\":%u,\"odo\":%u,\"dist\":%.2f,\"ev\":%.2f,\"fuel\":%.3f,"
            "\"move_s\":%.0f,\"regen_e\":%.0f,\"brake_e\":%.0f,\"city_dist\":%.2f,\"city_ev\":%.2f,"
+           "\"ev_kwh\":%.3f,\"ev_kwh100\":%.2f,"
            "\"l100\":%.2f,\"kmh\":%.1f,\"ev_pct\":%.1f,\"city_pct\":%.1f}\n",
            nm, s.epoch, s.odo, s.dist, s.ev, s.fuel, s.move_s, s.regen_e, s.brake_e,
-           s.city_dist, s.city_ev, l100, kmh, evp, cityp);
+           s.city_dist, s.city_ev, s.ev_wh / 1000.0, evkwh100, l100, kmh, evp, cityp);
 }
 
 int main() {

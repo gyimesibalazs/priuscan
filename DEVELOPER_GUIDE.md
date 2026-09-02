@@ -202,15 +202,17 @@ Debug:    eFF eOK eLen loops · raw0..raw7 (0x7B8/2147 response — G-sensor cal
 
 **Trip slots** (firmware-owned, persisted in NVS; the app only displays). Every
 counter is one uniform `TripSlot {epoch, odo, dist, ev, fuel, move_s, regen_e,
-brake_e, city_dist, city_ev, start_frac}`. The regular line carries a `"slots"` array of 8 live
+brake_e, city_dist, city_ev, ev_wh, start_frac}`. The regular line carries a `"slots"` array of 8 live
 slots in order: `[0] since-boot (memory only)`, `[1] lifetime`, `[2] tank`, `[3] oil`,
-`[4-6] A/B/C`, `[7] home-departure`. Each slot object is `{e,o,d,v,f,m,r,cd,ce}`
+`[4-6] A/B/C`, `[7] home-departure`. Each slot object is `{e,o,d,v,f,m,r,cd,ce,ew}`
 (**r = recovered electrical energy in kWh** (`regen_e/3.6e6`, fw ≥3.47; older firmware sent
 the regen ratio % — the app zeroes `r` for fw <347); **`cd` = city km, `ce` = city-EV km** —
 accumulated only while the app's geofence reports `in_city`, see the `G1`/`G0` command;
-the top-level `"city"` flag echoes the current state). The app derives avg consumption (`fuel/dist`),
-avg speed (`dist/move_s`) and a recovered-km equivalent (`r × 15 km/kWh`, the measured EV
-efficiency). Refuel history (`rhist`) and oil-change history (`ohist`), 50 entries each,
+the top-level `"city"` flag echoes the current state); **`ew` = electrical energy drawn from the
+pack in EV mode, kWh** (gross discharge `hvA × VL` integrated while `rpm < 100` and moving, fw ≥3.52;
+blob v8). The app derives avg consumption (`fuel/dist`), avg speed (`dist/move_s`), EV consumption
+(`ew/ev × 100` kWh/100km — fwsim replay: 5.8–7.9 per tank) and a recovered-km equivalent
+(`r × ev/ew` once the slot has ≥5 EV km and ≥0.3 kWh, else `r × 15 km/kWh` fallback). Refuel history (`rhist`) and oil-change history (`ohist`), 50 entries each,
 are fetched on demand (`H` / `HO`).
 
 `epoch`, `fuelTs`, `fw` are appended by `emit_json` as **integers** (a unix epoch /

@@ -328,6 +328,7 @@ private fun TripSection() {
         SensorRow(stringResource(R.string.r_avgcons), "%.1f l/100km".format(s.avgCons))
         SensorRow(stringResource(R.string.r_avgspeed), "%.0f km/h".format(s.avgKmh))
         SensorRow(stringResource(R.string.r_movetime), fmtDur(s.moveS.toLong()))
+        SensorRow(stringResource(R.string.r_evcons), "%.2f kWh · %.1f kWh/100km".format(s.evKwh, s.evKwhPer100))
         SensorRow(stringResource(R.string.r_regen), "%.2f kWh (~%.0f km)".format(s.regenKwh, s.regenKm))
         if (s.epoch > 0) {
             Text(
@@ -378,7 +379,8 @@ private fun TripSection() {
                 h.asReversed().forEach { r ->   // newest first
                     SensorRow(
                         fmtDate(r.epoch),
-                        "%.1f km · %.1f EV · %.1f l/100km · %.2f kWh (~%.0f km)".format(r.dist, r.ev, r.avgCons, r.regenKwh, r.regenKm),
+                        "%.1f km · %.1f EV · %.1f l/100km · %.1f kWh/100km · %.2f kWh (~%.0f km)".format(
+                            r.dist, r.ev, r.avgCons, r.evKwhPer100, r.regenKwh, r.regenKm),
                     )
                     if (def.hist == 2) oilMeta.lastOrNull { kotlin.math.abs(it.odo - r.odo) <= 3 }?.let { m ->
                         Text(
