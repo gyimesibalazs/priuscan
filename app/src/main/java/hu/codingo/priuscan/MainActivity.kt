@@ -707,10 +707,15 @@ private fun BatteryGauge(s: CanState) {
         Text(s.d("soc")?.let { "${it.toInt()}%" } ?: "–",
             style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))
         val dir = if (hvA < -2) "▲" else if (hvA > 2) "▼" else ""   // charge direction
-        if (dir.isNotEmpty())
-            Text(dir, color = Color.White, fontSize = 16.sp,
+        if (dir.isNotEmpty()) {
+            // pack power next to the arrow (same line as the fuel gauge's liters): |hvA x VL|,
+            // one decimal under 10 kW so "▼ 23 kW" / "▲ 4.2 kW" both fit the 60 dp gauge
+            val kw = s.d("vl")?.let { kotlin.math.abs(hvA) * it / 1000.0 }
+            val txt = dir + (kw?.let { if (it < 10) " %.1f kW".format(it) else " %.0f kW".format(it) } ?: "")
+            Text(txt, color = if (hvA < 0) CGreen else Color.White, fontSize = 12.sp, maxLines = 1, softWrap = false,
                 style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 8f)),
-                modifier = Modifier.align(BiasAlignment(0f, 0.45f)))
+                modifier = Modifier.align(BiasAlignment(0f, 0.28f)))
+        }
     }
 }
 
