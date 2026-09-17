@@ -159,13 +159,14 @@ data class ConsView(val value: Double?, val unit: String, val short: String, val
 }
 
 /** EV = engine off (rpm < 100, the firmware's EV-distance test) OR the engine is spinning
- *  unfuelled (load == 0: fuel-cut / motoring — the car's own gauge reads 0 there, the injector
- *  PID lags by seconds, so the fuel figure would be a phantom 1-2 l/100km). */
+ *  unfuelled (load == 0 or MAF < 1.5 g/s: fuel-cut / motoring / MG1 spin-up before ignition —
+ *  the car's own gauge reads 0 there; the injector PID lags, so the fuel figure would be a
+ *  phantom 1-3 l/h). Mirrors the firmware's FUEL zeroing. */
 fun CanState.isEvMode(): Boolean {
     val rpm = d("rpm") ?: 9999.0
     if (rpm < 100.0) return true
-    val load = d("load") ?: return false
-    return load < 1.0
+    if ((d("load") ?: 99.0) < 1.0) return true
+    return (d("maf") ?: 99.0) < 1.5        // not breathing = not firing (MG1-spun / fuel-cut), fw MAF_OFF
 }
 
 fun CanState.consumptionView(): ConsView {

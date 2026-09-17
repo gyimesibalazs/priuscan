@@ -995,6 +995,7 @@ inline void compute_derived(uint32_t now_ms) {
   // l/h per (injml * rpm). Calibrated to the PUMP-REAL consumption: the car trip computer reads
   // ~5.6% low (5.2 shown vs 5.5 real on a full 45-47 L tank), so 0.00923 (car-match) * 5.5/5.2.
   constexpr float INJ_K = 0.00976f;            // raw injector constant; k(spd) below applies the pump cal
+  constexpr float MAF_OFF = 1.5f;              // g/s: below this the engine is not firing (see FUEL)
   // SPEED-DEPENDENT pump calibration k(spd) = clamp(A + B*spd, 0.90, 1.25). The injml*rpm model's
   // error is NOT constant: fit to two full tanks (fwsim vs pump, 46.26 L @54 km/h-avg & 43.8 L
   // @71 km/h-avg) it UNDER-reads at low speed and OVER-reads on the highway. Clamped against
@@ -1003,9 +1004,12 @@ inline void compute_derived(uint32_t now_ms) {
   float kspd = fuel_corr * fminf(1.25f, fmaxf(0.90f,
                  1.2422f - 0.002804f * (std::isnan(V[SPD]) ? 0.0f : V[SPD])));
   float ld = V[LOAD];
-  if (r < 100 || (!std::isnan(ld) && ld < 1.0f)) V[FUEL] = 0.0f;   // engine off, OR spinning with NO
-                                                // load = fuel-cut/motoring (load rides the fast 2101
-                                                // poll; the injector PID lags and holds a stale injml)
+  // Engine NOT firing -> 0. Three tells, any one is enough: rpm < 100 (stopped); load < 1 %
+  // (fuel-cut / motoring); MAF < MAF_OFF (a firing engine never breathes below ~2 g/s even at
+  // idle -- 86k-sample log: p1 = 2.04, engine-off / MG1-spun = 0.2..0.9). rpm rides the fast 0x1C4
+  // broadcast while load/MAF/injml are polled, so at an engine START rpm jumps first and the stale
+  // injml x new rpm made a phantom 1-3 l/h for 1-2 s ("counts fuel while the engine is silent").
+  if (r < 100 || (!std::isnan(ld) && ld < 1.0f) || (!std::isnan(maf) && maf < MAF_OFF)) V[FUEL] = 0.0f;
   else if (!std::isnan(inj)) V[FUEL] = INJ_K * inj * r * kspd;            // injector-based (incl. enrichment / fuel-cut)
   else if (!std::isnan(maf)) V[FUEL] = maf/14.7f*3600.0f/745.0f * kspd;   // MAF fallback
 
