@@ -70,6 +70,26 @@
     <string name="ha_wp_warn">Aviso de bomba de agua</string>
     <string name="ha_cell_warn">Aviso de celda HV</string>
     <string name="ha_block_n">Bloque HV %1$02d</string>
+    <string name="ha_gps">Posición</string>
+    <string name="ha_fuelL">Combustible restante (calc.)</string>
+    <string name="ha_fuelGm">Combustible restante (indicador)</string>
+    <string name="ha_gear">Marcha</string>
+    <string name="ha_ev">Modo EV</string>
+    <string name="ha_city">Zona urbana</string>
+    <string name="ha_hsi">HSI</string>
+    <string name="ha_mg1Pow">Potencia MG1</string>
+    <string name="ha_mg2Pow">Potencia MG2</string>
+    <string name="ha_lights">Luces</string>
+    <string name="ha_fw">Versión de firmware</string>
+    <string name="ha_tk_dist">Depósito: distancia</string>
+    <string name="ha_tk_fuel">Depósito: combustible usado</string>
+    <string name="ha_tk_avg">Depósito: media</string>
+    <string name="ha_tk_ev">Depósito: distancia EV</string>
+    <string name="ha_tk_evkwh">Depósito: energía EV</string>
+    <string name="ha_tk_evcons">Depósito: consumo EV</string>
+    <string name="ha_tk_regen">Depósito: energía recuperada</string>
+    <string name="ha_tk_regenkm">Depósito: km recuperados</string>
+    <string name="ha_tk_city">Depósito: km urbanos</string>
 
     <!-- ===== Sensor group titles ===== -->
     <string name="grp_engine">Motor</string>

@@ -71,6 +71,26 @@
     <string name="ha_wp_warn">Waterpompwaarschuwing</string>
     <string name="ha_cell_warn">HV-celwaarschuwing</string>
     <string name="ha_block_n">HV-blok %1$02d</string>
+    <string name="ha_gps">Locatie</string>
+    <string name="ha_fuelL">Resterende brandstof (berekend)</string>
+    <string name="ha_fuelGm">Resterende brandstof (meter)</string>
+    <string name="ha_gear">Versnelling</string>
+    <string name="ha_ev">EV-modus</string>
+    <string name="ha_city">Bebouwde kom</string>
+    <string name="ha_hsi">HSI</string>
+    <string name="ha_mg1Pow">MG1-vermogen</string>
+    <string name="ha_mg2Pow">MG2-vermogen</string>
+    <string name="ha_lights">Verlichting</string>
+    <string name="ha_fw">Firmwareversie</string>
+    <string name="ha_tk_dist">Tank afstand</string>
+    <string name="ha_tk_fuel">Tank brandstofverbruik</string>
+    <string name="ha_tk_avg">Tank gemiddelde</string>
+    <string name="ha_tk_ev">Tank EV-afstand</string>
+    <string name="ha_tk_evkwh">Tank EV-energie</string>
+    <string name="ha_tk_evcons">Tank EV-verbruik</string>
+    <string name="ha_tk_regen">Tank teruggewonnen energie</string>
+    <string name="ha_tk_regenkm">Tank teruggewonnen km</string>
+    <string name="ha_tk_city">Tank km bebouwde kom</string>
 
     <!-- ===== Sensor group titles ===== -->
     <string name="grp_engine">Motor</string>

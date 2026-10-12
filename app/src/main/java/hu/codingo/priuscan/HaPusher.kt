@@ -20,6 +20,8 @@ import java.io.File
  *    to a file together with their ts; on reconnect the backlog goes out to the
  *    <prefix>/backlog topic in chunks. (The HA state machine can't backdate,
  *    so the backlog is a separate topic - process it with automation/InfluxDB.)
+ *  - The head-unit GPS (lat/lon/galt/gspd/gcrs/gacc) and the flattened current-tank trip
+ *    slot (tk*) ride in the same state JSON; a device_tracker discovery reads the GPS.
  *  - LWT: <prefix>/status = offline.
  */
 class HaPusher(private val ctx: Context, private val prefs: Prefs) {
@@ -76,6 +78,18 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
         val o = JSONObject()
         o.put("ts", s.ts / 1000)   // unix seconds
         for ((k, v) in s.values) o.put(k, v)
+        // head-unit GPS (same keys as the JSONL log) -> HA device_tracker + attributes
+        CanService.gps.value?.let { loc ->
+            o.put("lat", loc.latitude).put("lon", loc.longitude).put("galt", loc.altitude)
+             .put("gspd", loc.speed * 3.6).put("gcrs", loc.bearing).put("gacc", loc.accuracy)
+        }
+        // current-tank trip slot (firmware-owned); the "slots" array itself is not numeric, so
+        // CanState drops it -> flatten the tank entry into plain keys for the HA sensors
+        CanService.tripSlots.value.getOrNull(TANK_SLOT)?.let { t ->
+            o.put("tkDist", t.dist).put("tkFuel", t.fuel).put("tkAvg", t.avgCons).put("tkEv", t.ev)
+             .put("tkEvKwh", t.evKwh).put("tkEvCons", t.evKwhPer100).put("tkRegen", t.regenKwh)
+             .put("tkRegenKm", t.regenKm).put("tkCity", t.cityDist)
+        }
         return o
     }
 
@@ -125,7 +139,8 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
             .put("identifiers", JSONArray().put("priuscan"))
             .put("name", "Prius CAN")
             .put("manufacturer", "Codingo")
-            .put("model", "ESP32-C6 OBD bridge")
+            .put("model", "ESP32-C3 OBD bridge")
+            .put("sw_version", (CanService.fwRunning.value ?: 0).let { "fw ${it / 100}.${it % 100}" })
 
         fun sensorConfig(key: String, name: String, unit: String, template: String) {
             val cfg = JSONObject()
@@ -156,6 +171,47 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
             sensorConfig("b%02d".format(i), ctx.getString(R.string.ha_block_n, i), "V",
                 "{{ value_json.b%02d }}".format(i))
         }
+        // firmware keys that are not in Fields.groups (dashboard-only / header / status)
+        for ((key, nameRes, unit) in EXTRA) sensorConfig(key, ctx.getString(nameRes), unit, "{{ value_json.$key }}")
+        // GPS: a device_tracker fed from the state JSON's lat/lon (the state itself is reset to
+        // None so HA derives home/away from the coordinates + zones)
+        val trk = JSONObject()
+            .put("name", ctx.getString(R.string.ha_gps))
+            .put("unique_id", "priuscan_gps")
+            .put("state_topic", "${prefs.topicPrefix}/state")
+            .put("value_template", "None")
+            .put("payload_reset", "None")
+            .put("source_type", "gps")
+            .put("json_attributes_topic", "${prefs.topicPrefix}/state")
+            .put("json_attributes_template",
+                "{% if value_json.lat is defined %}{{ {'latitude': value_json.lat, 'longitude': value_json.lon, " +
+                "'gps_accuracy': value_json.gacc, 'altitude': value_json.galt, 'speed': value_json.gspd, " +
+                "'course': value_json.gcrs} | tojson }}{% else %}{}{% endif %}")
+            .put("availability_topic", "${prefs.topicPrefix}/status")
+            .put("device", device)
+        publish("homeassistant/device_tracker/priuscan_gps/config", trk.toString(), retained = true)
+    }
+
+    private companion object {
+        const val TANK_SLOT = 2   // slots[]: 0 boot, 1 lifetime, 2 tank, 3 oil, 4-6 A/B/C, 7 home
+        /** key -> HA friendly name -> unit; keys the firmware emits but Fields.groups don't list */
+        val EXTRA = listOf(
+            Triple("odo", R.string.f_odo, "km"), Triple("fuelIn", R.string.f_fuelIn, "%"),
+            Triple("fuelL", R.string.ha_fuelL, "L"), Triple("fuelGm", R.string.ha_fuelGm, "L"),
+            Triple("gear", R.string.ha_gear, ""), Triple("ev", R.string.ha_ev, ""),
+            Triple("city", R.string.ha_city, ""), Triple("hsi", R.string.ha_hsi, "%"),
+            Triple("mg1Pow", R.string.ha_mg1Pow, "kW"), Triple("mg2Pow", R.string.ha_mg2Pow, "kW"),
+            Triple("vbat", R.string.f_vbat, "V"), Triple("amb", R.string.f_amb, "°C"),
+            Triple("ambL", R.string.f_ambL, ""), Triple("setSpd", R.string.f_setSpd, "km/h"),
+            Triple("turn", R.string.f_turn, ""), Triple("lights", R.string.ha_lights, ""),
+            Triple("dtcCur", R.string.f_dtcCur, ""), Triple("dtcHist", R.string.f_dtcHist, ""),
+            Triple("fw", R.string.ha_fw, ""),
+            Triple("tkDist", R.string.ha_tk_dist, "km"), Triple("tkFuel", R.string.ha_tk_fuel, "L"),
+            Triple("tkAvg", R.string.ha_tk_avg, "l/100km"), Triple("tkEv", R.string.ha_tk_ev, "km"),
+            Triple("tkEvKwh", R.string.ha_tk_evkwh, "kWh"), Triple("tkEvCons", R.string.ha_tk_evcons, "kWh/100km"),
+            Triple("tkRegen", R.string.ha_tk_regen, "kWh"), Triple("tkRegenKm", R.string.ha_tk_regenkm, "km"),
+            Triple("tkCity", R.string.ha_tk_city, "km"),
+        )
     }
 
     // ---------------- offline buffer ----------------

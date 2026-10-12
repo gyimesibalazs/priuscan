@@ -70,6 +70,26 @@
     <string name="ha_wp_warn">Vízpumpa figyelmeztetés</string>
     <string name="ha_cell_warn">HV cella figyelmeztetés</string>
     <string name="ha_block_n">HV blokk %1$02d</string>
+    <string name="ha_gps">Pozíció</string>
+    <string name="ha_fuelL">Maradék üzemanyag (számított)</string>
+    <string name="ha_fuelGm">Maradék üzemanyag (mérce)</string>
+    <string name="ha_gear">Fokozat</string>
+    <string name="ha_ev">EV üzem</string>
+    <string name="ha_city">Belterület</string>
+    <string name="ha_hsi">HSI</string>
+    <string name="ha_mg1Pow">MG1 teljesítmény</string>
+    <string name="ha_mg2Pow">MG2 teljesítmény</string>
+    <string name="ha_lights">Világítás</string>
+    <string name="ha_fw">Firmware verzió</string>
+    <string name="ha_tk_dist">Tank távolság</string>
+    <string name="ha_tk_fuel">Tank elhasznált üzemanyag</string>
+    <string name="ha_tk_avg">Tank átlagfogyasztás</string>
+    <string name="ha_tk_ev">Tank EV távolság</string>
+    <string name="ha_tk_evkwh">Tank EV energia</string>
+    <string name="ha_tk_evcons">Tank EV fogyasztás</string>
+    <string name="ha_tk_regen">Tank visszanyert energia</string>
+    <string name="ha_tk_regenkm">Tank visszanyert km</string>
+    <string name="ha_tk_city">Tank belterületi km</string>
 
     <!-- ===== Sensor group titles ===== -->
     <string name="grp_engine">Motor</string>

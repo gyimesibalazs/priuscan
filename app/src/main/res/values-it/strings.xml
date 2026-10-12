@@ -70,6 +70,26 @@
     <string name="ha_wp_warn">Avviso pompa acqua</string>
     <string name="ha_cell_warn">Avviso cella HV</string>
     <string name="ha_block_n">Blocco HV %1$02d</string>
+    <string name="ha_gps">Posizione</string>
+    <string name="ha_fuelL">Carburante residuo (calc.)</string>
+    <string name="ha_fuelGm">Carburante residuo (indicatore)</string>
+    <string name="ha_gear">Marcia</string>
+    <string name="ha_ev">Modalità EV</string>
+    <string name="ha_city">Centro abitato</string>
+    <string name="ha_hsi">HSI</string>
+    <string name="ha_mg1Pow">Potenza MG1</string>
+    <string name="ha_mg2Pow">Potenza MG2</string>
+    <string name="ha_lights">Luci</string>
+    <string name="ha_fw">Versione firmware</string>
+    <string name="ha_tk_dist">Serbatoio: distanza</string>
+    <string name="ha_tk_fuel">Serbatoio: carburante usato</string>
+    <string name="ha_tk_avg">Serbatoio: media</string>
+    <string name="ha_tk_ev">Serbatoio: distanza EV</string>
+    <string name="ha_tk_evkwh">Serbatoio: energia EV</string>
+    <string name="ha_tk_evcons">Serbatoio: consumo EV</string>
+    <string name="ha_tk_regen">Serbatoio: energia recuperata</string>
+    <string name="ha_tk_regenkm">Serbatoio: km recuperati</string>
+    <string name="ha_tk_city">Serbatoio: km urbani</string>
 
     <!-- ===== Sensor group titles ===== -->
     <string name="grp_engine">Motore</string>
