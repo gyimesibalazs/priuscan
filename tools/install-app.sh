@@ -52,6 +52,12 @@ adb -s "$DEV" install -r "$APK"
 adb -s "$DEV" shell pm grant hu.codingo.priuscan android.permission.WRITE_SECURE_SETTINGS 2>/dev/null \
   && echo ">> WRITE_SECURE_SETTINGS granted (auto dark mode)" \
   || echo "!! could not grant WRITE_SECURE_SETTINGS (auto system dark mode may not work)"
+# WireGuard remote control (HaPusher.nudgeVpn keeps the HA tunnel up): the official app's
+# CONTROL_TUNNELS permission is "dangerous" -> runtime grant, lost on reinstall like the one
+# above. Harmless if WireGuard isn't installed.
+adb -s "$DEV" shell pm grant hu.codingo.priuscan com.wireguard.android.permission.CONTROL_TUNNELS 2>/dev/null \
+  && echo ">> CONTROL_TUNNELS granted (WireGuard keep-alive)" \
+  || echo "-- WireGuard CONTROL_TUNNELS not granted (WireGuard app missing? keep-alive off)"
 # the LIVE system-wide flip is done by the nightwatch helper (root watcher applying the
 # app-written ui_night_mode via `cmd uimode`; setNightMode is locked on this ROM and
 # MODIFY_DAY_NIGHT_MODE is not grantable). It lives on an `adb remount` overlay that can

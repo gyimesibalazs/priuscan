@@ -44,6 +44,7 @@
     <string name="mqtt_pass">Hasło</string>
     <string name="mqtt_topic_prefix">Prefiks tematu</string>
     <string name="push_interval">Interwał wysyłania (sekundy)</string>
+    <string name="wg_tunnel">Tunel WireGuard do utrzymania (puste = wył.)</string>
     <string name="save">Zapisz</string>
     <string name="cancel">Anuluj</string>
 

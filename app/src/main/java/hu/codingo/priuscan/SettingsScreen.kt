@@ -61,6 +61,7 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
     var pass by remember { mutableStateOf(prefs.mqttPass) }
     var prefix by remember { mutableStateOf(prefs.topicPrefix) }
     var interval by remember { mutableStateOf(prefs.pushIntervalSec.toString()) }
+    var wgTunnel by remember { mutableStateOf(prefs.wgTunnel) }
     var statusSel by remember { mutableStateOf(prefs.statusItems) }
     var fontSize by remember { mutableStateOf(prefs.statusFontSize.toInt().toString()) }
     var refAh by remember { mutableStateOf(prefs.batteryRefAh.toString()) }
@@ -416,6 +417,9 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
         OutlinedTextField(interval, { interval = it.filter(Char::isDigit) },
             label = { Text(stringResource(R.string.push_interval)) },
             modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(wgTunnel, { wgTunnel = it },
+            label = { Text(stringResource(R.string.wg_tunnel)) },
+            modifier = Modifier.fillMaxWidth(), singleLine = true)
 
         Spacer(Modifier.height(8.dp))
         Button(
@@ -427,6 +431,7 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
                 prefs.mqttPass = pass
                 prefs.topicPrefix = prefix.ifBlank { "priuscan" }
                 prefs.pushIntervalSec = interval.toIntOrNull() ?: 30
+                prefs.wgTunnel = wgTunnel
                 prefs.statusItems = statusSel
                 prefs.statusFontSize = fontSize.toFloatOrNull() ?: 14f
                 prefs.batteryRefAh = refAh.toFloatOrNull() ?: 6.5f

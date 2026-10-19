@@ -43,6 +43,7 @@
     <string name="mqtt_pass">Jelszó</string>
     <string name="mqtt_topic_prefix">Topic előtag</string>
     <string name="push_interval">Küldési időköz (másodperc)</string>
+    <string name="wg_tunnel">Fenntartandó WireGuard tunnel (üres = ki)</string>
     <string name="save">Mentés</string>
     <string name="cancel">Mégse</string>
 

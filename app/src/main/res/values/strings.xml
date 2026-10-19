@@ -82,6 +82,7 @@
     <string name="mqtt_pass">Password</string>
     <string name="mqtt_topic_prefix">Topic prefix</string>
     <string name="push_interval">Push interval (seconds)</string>
+    <string name="wg_tunnel">WireGuard tunnel to keep up (empty = off)</string>
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
 

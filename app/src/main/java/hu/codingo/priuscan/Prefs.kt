@@ -54,6 +54,12 @@ class Prefs(ctx: Context) {
     var pushIntervalSec: Int
         get() = sp.getInt("push_interval", 30)
         set(v) = sp.edit().putInt("push_interval", v.coerceIn(2, 3600)).apply()
+    /** WireGuard tunnel name the app keeps up while HA is unreachable (the head-unit ROM
+     *  force-stops background apps on every wake-up; the official WireGuard app accepts a
+     *  SET_TUNNEL_UP intent when "Allow remote control apps" is on). Empty = off. */
+    var wgTunnel: String
+        get() = sp.getString("wg_tunnel", "vpn") ?: ""
+        set(v) = sp.edit().putString("wg_tunnel", v.trim()).apply()
 
     /** Which values to show in the status bar (keys: ct, soc, rpm, cons). */
     var statusItems: Set<String>

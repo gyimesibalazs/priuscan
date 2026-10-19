@@ -1,6 +1,7 @@
 package hu.codingo.priuscan
 
 import android.content.Context
+import android.content.Intent
 import org.eclipse.paho.client.mqttv3.MqttClient
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
@@ -71,7 +72,28 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
             }
         } else {
             buffer(payload)
+            nudgeVpn()
         }
+    }
+
+    private var lastNudge = 0L
+    /** HA unreachable -> ask the WireGuard app to bring the tunnel up (at most once a minute).
+     *  The head-unit ROM force-stops non-whitelisted background apps on every wake-up and the
+     *  always-on VPN restart is cancelled with it; the official app honours this intent when
+     *  "Allow remote control apps" is enabled. FLAG_INCLUDE_STOPPED_PACKAGES: a force-stopped
+     *  app is in the "stopped" state and would not receive the broadcast otherwise. */
+    private fun nudgeVpn() {
+        val tunnel = prefs.wgTunnel
+        if (tunnel.isBlank()) return
+        val now = System.currentTimeMillis()
+        if (now - lastNudge < 60_000) return
+        lastNudge = now
+        try {
+            ctx.sendBroadcast(Intent("com.wireguard.android.action.SET_TUNNEL_UP")
+                .setPackage("com.wireguard.android")
+                .putExtra("tunnel", tunnel)
+                .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES))
+        } catch (_: Exception) {}
     }
 
     private fun buildPayload(s: CanState): JSONObject {

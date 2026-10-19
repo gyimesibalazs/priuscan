@@ -44,6 +44,7 @@
     <string name="mqtt_pass">Wachtwoord</string>
     <string name="mqtt_topic_prefix">Topic-prefix</string>
     <string name="push_interval">Push-interval (seconden)</string>
+    <string name="wg_tunnel">WireGuard-tunnel open houden (leeg = uit)</string>
     <string name="save">Opslaan</string>
     <string name="cancel">Annuleren</string>
 

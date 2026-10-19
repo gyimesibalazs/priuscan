@@ -43,6 +43,7 @@
     <string name="mqtt_pass">Contraseña</string>
     <string name="mqtt_topic_prefix">Prefijo de tema</string>
     <string name="push_interval">Intervalo de envío (segundos)</string>
+    <string name="wg_tunnel">Túnel WireGuard a mantener (vacío = desactivado)</string>
     <string name="save">Guardar</string>
     <string name="cancel">Cancelar</string>
 
