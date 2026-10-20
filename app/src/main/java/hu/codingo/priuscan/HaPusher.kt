@@ -173,6 +173,10 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
                 .put("availability_topic", "${prefs.topicPrefix}/status")
                 .put("device", device)
             if (unit.isNotEmpty()) cfg.put("unit_of_measurement", unit)
+            // long-term statistics (hourly min/max/mean kept past the recorder purge) need a
+            // state_class; only continuous quantities get one, masks/flags/codes stay plain
+            stateClass(key, unit)?.let { cfg.put("state_class", it) }
+            deviceClass(key, unit)?.let { cfg.put("device_class", it) }
             publish("homeassistant/sensor/priuscan_$key/config", cfg.toString(), retained = true)
         }
 
@@ -214,7 +218,36 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
         publish("homeassistant/device_tracker/priuscan_gps/config", trk.toString(), retained = true)
     }
 
+    /** HA state_class: "measurement" for continuous readings, "total_increasing" for the odometer,
+     *  "total" for the per-tank accumulators (they reset at each refuel), null for discrete values. */
+    private fun stateClass(key: String, unit: String): String? = when {
+        key == "odo" -> "total_increasing"
+        key.startsWith("tk") -> "total"
+        key in DISCRETE -> null
+        unit.isNotEmpty() || key == "wz" -> "measurement"
+        else -> null
+    }
+
+    private fun deviceClass(key: String, unit: String): String? = when (unit) {
+        "°C" -> "temperature"
+        "V" -> "voltage"
+        "A" -> "current"
+        "kW", "W" -> "power"
+        "kWh" -> "energy"
+        "km" -> "distance"
+        "km/h" -> "speed"
+        "kPa", "MPa" -> "pressure"
+        "L" -> "volume"
+        "s" -> "duration"
+        "%" -> if (key == "soc") "battery" else null
+        else -> null
+    }
+
     private companion object {
+        /** keys whose value is a code / bitmask / flag -> no statistics (would be meaningless) */
+        val DISCRETE = setOf("gear", "ev", "city", "turn", "lights", "dtcCur", "dtcHist", "fw",
+            "door", "cruise", "wpRun", "wpW", "cellW", "weakB", "tHot", "solar", "blower", "cwL",
+            "wblk", "run")
         const val TANK_SLOT = 2   // slots[]: 0 boot, 1 lifetime, 2 tank, 3 oil, 4-6 A/B/C, 7 home
         /** key -> HA friendly name -> unit; keys the firmware emits but Fields.groups don't list */
         val EXTRA = listOf(
