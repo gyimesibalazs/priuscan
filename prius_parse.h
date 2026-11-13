@@ -119,7 +119,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 352;   // 3.52: EV energy per slot (ev_wh, blob v8), load=0 fuel-cut, injector poll 10->3
+inline constexpr int FW_VERSION = 353;   // 3.53: steering angle decoded as signed 12-bit x1.5 deg (+ = right)
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -571,9 +571,17 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
     case 0x49D:  // HV battery voltage VL = d0:d1 (was poll 0x74; r.968)
       if (x.size() >= 2) V[VL] = (float)((x[0] << 8) | x[1]) * 0.00861f - 2.80f;
       return;
-    case 0x025:  // steering angle: byte[0..1] 12-bit, 2048 = centre, ~0.245 deg/count
-      if (x.size() >= 2) V[STEER] = (float)((int)(((x[0] & 0x0F) << 8) | x[1]) - 2048) * 0.245f;
+    case 0x025: {  // steering-wheel angle: byte[0..1] low 12 bits, SIGNED (two's complement, 0 =
+      // straight), Toyota-standard 1.5 deg/count, raw positive = LEFT. Logs: +-345 counts at full
+      // lock = +-517 deg (2.9 turns lock to lock). Emitted as degrees, positive = RIGHT (clockwise).
+      // (fw < 3.53 decoded it as "raw - 2048": straight read +-502 and wrapped -- unreadable.)
+      if (x.size() >= 2) {
+        int raw = ((x[0] & 0x0F) << 8) | x[1];
+        if (raw >= 2048) raw -= 4096;
+        V[STEER] = -1.5f * (float)raw;
+      }
       return;
+    }
     case 0x0AA:  // ABS wheel speeds (replaces the 7B0 2103 poll): 4x u16 BE, *0.01 - 67.67 km/h (FR,FL,RR,RL)
       if (x.size() >= 8) {
         V[WFR] = (float)(((uint16_t)x[0]<<8)|x[1]) * 0.01f - 67.67f;
