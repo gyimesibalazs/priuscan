@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "PriusCAN"
 include(":app")
+include(":canstub")

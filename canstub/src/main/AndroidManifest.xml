@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="PriusCAN CAN stub" android:allowBackup="false">
+        <!-- same class name + action as the factory app: com.qf.framework / com.qf.backcar /
+             the launchers bind with setPackage("com.qf.vehicle") + this action -->
+        <service android:name="com.qf.vehicle.service.VehicleService" android:exported="true">
+            <intent-filter>
+                <action android:name="com.qf.vehicle.service.ACTION_CAN_SERVICE" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

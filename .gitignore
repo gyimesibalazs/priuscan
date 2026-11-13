@@ -31,3 +31,4 @@ tools/geofence/build/
 
 # fwsim compiled harness
 tools/fwsim/fwsim
+/canstub/build/

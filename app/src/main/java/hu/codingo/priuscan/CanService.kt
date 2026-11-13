@@ -666,9 +666,10 @@ class CanService : Service() {
 
     /** Feed the head unit's own reverse-camera app (com.qf.backcar) with the steering angle so it
      *  draws its dynamic trajectory lines. Reverse-engineered from QF_BackCar.apk: it listens for
-     *  the broadcast "com.qf.vehicle.action.swa" with int "extra_swa" = index into 91 track images
-     *  (0 = full left, 45 = straight, 90 = full right), normally sent by the ROM's CAN-box service
-     *  (com.qf.vehicle) which has no decoder for this car. Needs persist.sys_backcar_track=true
+     *  it takes a track-image index (0 = full left, 45 = straight, 90 = full right) from the ROM's
+     *  CAN service (com.qf.vehicle) over a binder callback. The factory service only talks to a
+     *  CAN-decoder box, so on this head unit it is replaced by our `canstub` module, which receives
+     *  THIS broadcast (the factory service's own "com.qf.vehicle.action.swa") and forwards it. Needs persist.sys_backcar_track=true
      *  (the ROM default). Linear map of our 0x025 steering angle (fw >= 3.53: degrees, +-517 at
      *  full lock, positive = right); sent on change, and re-sent every second so a freshly opened camera
      *  view picks it up. */
@@ -680,7 +681,8 @@ class CanService : Service() {
         if (level == trackLevel && now - trackSentMs < 1000) return
         trackLevel = level; trackSentMs = now
         try {
-            sendBroadcast(Intent("com.qf.vehicle.action.swa").putExtra("extra_swa", level))
+            sendBroadcast(Intent("com.qf.vehicle.action.swa").putExtra("extra_swa", level)
+                .putExtra("extra_angle", Math.round(steer).toInt()).putExtra("extra_rate", STEER_LOCK_DEG.toFloat()))
         } catch (_: Exception) {}
     }
 
