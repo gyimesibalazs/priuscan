@@ -90,6 +90,8 @@ class CanService : Service() {
 
         // ---- Firmware over-the-USB flashing ----
         const val BUNDLED_FW = 352                        // bundled firmware version (3.52)
+        const val TRACK_MID = 45                          // com.qf.backcar: 91 track images, 45 = straight
+        const val STEER_LOCK_DEG = 500.0                  // steering-wheel angle at full lock (logs: +-501.8)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
@@ -659,9 +661,32 @@ class CanService : Service() {
 
     // ---------------- state reactions (on the main thread) ----------------
 
+    private var trackLevel = -1
+    private var trackSentMs = 0L
+
+    /** Feed the head unit's own reverse-camera app (com.qf.backcar) with the steering angle so it
+     *  draws its dynamic trajectory lines. Reverse-engineered from QF_BackCar.apk: it listens for
+     *  the broadcast "com.qf.vehicle.action.swa" with int "extra_swa" = index into 91 track images
+     *  (0 = full left, 45 = straight, 90 = full right), normally sent by the ROM's CAN-box service
+     *  (com.qf.vehicle) which has no decoder for this car. Needs persist.sys_backcar_track=true
+     *  (the ROM default). Linear map of our 0x025 steering angle (+-~500 deg lock to lock,
+     *  positive = right); sent on change, and re-sent every second so a freshly opened camera
+     *  view picks it up. */
+    private fun updateReverseTrack(s: CanState) {
+        val steer = s.d("steer") ?: return
+        val level = (TRACK_MID + Math.round(steer / STEER_LOCK_DEG * TRACK_MID).toInt()).coerceIn(0, 2 * TRACK_MID)
+        val now = System.currentTimeMillis()
+        if (level == trackLevel && now - trackSentMs < 1000) return
+        trackLevel = level; trackSentMs = now
+        try {
+            sendBroadcast(Intent("com.qf.vehicle.action.swa").putExtra("extra_swa", level))
+        } catch (_: Exception) {}
+    }
+
     private fun onState(s: CanState) {
         updateNotifications(s)
         updateStatusStrip(s)
+        updateReverseTrack(s)
 
         // dark/light: prefer the RAW ambient-light sensor (0x620 b2:b3, ~31 bright .. ~600 dark,
         // confirmed by the lamp test) — fast and independent of the light switch. Fall back to the
