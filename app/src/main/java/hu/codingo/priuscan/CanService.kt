@@ -89,7 +89,7 @@ class CanService : Service() {
         fun mergeLastRefuel() = sendCommand("M")   // merge the last refuel-history entry into the tank
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 353                        // bundled firmware version (3.53)
+        const val BUNDLED_FW = 354                        // bundled firmware version (3.54)
         const val TRACK_MID = 45                          // com.qf.backcar: 91 track images, 45 = straight
         const val STEER_LOCK_DEG = 517.0                  // steering-wheel angle at full lock (345 counts x 1.5 deg)
         /** Format an encoded version (>=100 -> major.minor, else plain). */

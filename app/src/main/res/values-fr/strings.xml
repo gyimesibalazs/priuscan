@@ -166,9 +166,10 @@
     <string name="f_wRL">Roue ARG</string>
     <string name="f_wRR">Roue ARD</string>
     <string name="f_wDif">Différence roues avant</string>
-    <string name="f_gLat">G latéral</string>
-    <string name="f_gFwd">G longitudinal</string>
+    <string name="f_gLat">Accélération latérale</string>
+    <string name="f_gFwd">Accélération longitudinale</string>
     <string name="f_gasB">Gaz</string>
+    <string name="f_yaw">Vitesse de lacet</string>
     <string name="f_steer">Angle de braquage</string>
     <string name="f_brkP">Pression de freinage</string>
 

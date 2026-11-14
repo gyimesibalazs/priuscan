@@ -184,7 +184,7 @@ Hybrid:   soc mg1t mg1r mg1q mg2t mg2r mg2q inv1 inv2 btu btl vl vh invct invwp 
 Battery:  hvA hvdis hvchg bmin bmax blkD weakB maxR tHot hvAir tb1 tb2 tb3
           b01..b14 (individual block voltages)
 A/C:      cabin setT comp evap solar acAmb blower acPress
-ABS:      wFL wFR wRL wRR wDif (from 0x0AA) gLat gFwd steer brkP
+ABS:      wFL wFR wRL wRR wDif (from 0x0AA) gLat gFwd (m/s²) yaw (°/s) steer (°) brkP
 Drive:    gear turn setSpd (null on this car) dmode (0=norm/1=eco/2=pwr) ev (0/1)
 Fuel/odo: fuelIn (%) fuelL (calibrated litres) odo (km) gasB (pedal %)
           lights (0x622 bitmask) ambL (0x620 light level)
@@ -437,12 +437,21 @@ pre-rendered PNGs now).
 * **Tank litres** (`fuelL`) calibrated — see the tank-calibration note below.
 
 ### Open
-1. **G-sensor (`gLat`/`gFwd`)** — the saturating 7B0 2147 poll was **abandoned**;
-   the values now come from passive broadcasts: `gLat` from **0x4A1** (signed16 BE),
-   `gFwd` from **0x320** byte4 (stored as `154 − b4`). Both are emitted as **raw counts**,
-   **not yet calibrated** to m/s². A controlled test is still needed: a known
-   level-ground drive (steady accel/braking + a known incline) to fit centre + scale.
-   The old 2147 decoder is kept only for `raw0..raw7`.
+1. **G-sensor (`gLat`/`gFwd`/`yaw`)** — decoded to physical units since fw 3.54, validated
+   against wheel-speed references on four raw dumps (yaw = rear-wheel speed difference,
+   a_lat = v × yaw, a_long = dv/dt):
+   * **0x024** (~80 Hz) carries three 10-bit fields (low 2 bits of the first byte + second byte):
+     `b0-1` yaw rate, 0.244 °/s per count, zero 513 (measured 0.238–0.246, r 0.98–0.99);
+     `b2-3` and `b4-5` are the sensor's **two accelerometers mounted ±45°**, 0.0359 m/s² per
+     count, zero 512 — **not** "steering torque + lateral accel" as the generic Toyota DBC says.
+     `gLat = 0.0254 × (g1 + g2)` (r 0.91–0.95 vs v × yaw, slope 0.82–0.94), 1/16 EMA.
+   * **0x320** `b4` is a **signed int8** (0 = level standstill): the VSC's filtered longitudinal
+     acceleration. `gFwd = 0.040 × s8(b4)` — the scale is **fitted** (0.037–0.042, r 0.86–0.96),
+     treat it as ±10 %. (The pair difference `g2 − g1` gives the same signal but too noisy.)
+   * Signs: `yaw` and `gLat` + = right turn (same as `steer`), `gFwd` + = speeding up. Both G
+     values include gravity (road slope / camber).
+   * 0x4A1 `b0-1` (s16, ~0.00064 m/s² per count, + = left) is a filtered lateral copy; unused.
+   Still open: pin the 0x320 scale with a known incline or a GPS-speed-aligned drive.
 2. **Rear doors L/R** — now split (bit2 0x04 = rear-L, bit3 0x08 = rear-R, a
    best guess). Confirm L/R by opening one rear door; swap the two
    `publish_state` lines in the 0x620 handler if reversed.

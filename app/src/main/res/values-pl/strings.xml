@@ -167,9 +167,10 @@
     <string name="f_wRL">Koło LT</string>
     <string name="f_wRR">Koło PT</string>
     <string name="f_wDif">Różnica kół przednich</string>
-    <string name="f_gLat">Przyspieszenie boczne G</string>
-    <string name="f_gFwd">Przyspieszenie wzdłużne G</string>
+    <string name="f_gLat">Przyspieszenie boczne</string>
+    <string name="f_gFwd">Przyspieszenie wzdłużne</string>
     <string name="f_gasB">Gaz</string>
+    <string name="f_yaw">Prędkość odchylania</string>
     <string name="f_steer">Kąt skrętu kierownicy</string>
     <string name="f_brkP">Ciśnienie hamowania</string>
 

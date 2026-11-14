@@ -166,9 +166,10 @@
     <string name="f_wRL">Rueda TI</string>
     <string name="f_wRR">Rueda TD</string>
     <string name="f_wDif">Dif. rueda delantera</string>
-    <string name="f_gLat">G lateral</string>
-    <string name="f_gFwd">G longitudinal</string>
+    <string name="f_gLat">Aceleración lateral</string>
+    <string name="f_gFwd">Aceleración longitudinal</string>
     <string name="f_gasB">Gas</string>
+    <string name="f_yaw">Velocidad de guiñada</string>
     <string name="f_steer">Ángulo de dirección</string>
     <string name="f_brkP">Presión de frenado</string>
 

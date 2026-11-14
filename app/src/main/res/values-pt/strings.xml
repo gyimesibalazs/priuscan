@@ -166,9 +166,10 @@
     <string name="f_wRL">Roda RL</string>
     <string name="f_wRR">Roda RR</string>
     <string name="f_wDif">Diferencial das rodas dianteiras</string>
-    <string name="f_gLat">G lateral</string>
-    <string name="f_gFwd">G longitudinal</string>
+    <string name="f_gLat">Aceleração lateral</string>
+    <string name="f_gFwd">Aceleração longitudinal</string>
     <string name="f_gasB">Gás</string>
+    <string name="f_yaw">Velocidade de guinada</string>
     <string name="f_steer">Ângulo de direção</string>
     <string name="f_brkP">Pressão dos travões</string>
 

@@ -166,9 +166,10 @@
     <string name="f_wRL">Ruota PS</string>
     <string name="f_wRR">Ruota PD</string>
     <string name="f_wDif">Diff. ruote anteriori</string>
-    <string name="f_gLat">G laterale</string>
-    <string name="f_gFwd">G longitudinale</string>
+    <string name="f_gLat">Accelerazione laterale</string>
+    <string name="f_gFwd">Accelerazione longitudinale</string>
     <string name="f_gasB">Gas</string>
+    <string name="f_yaw">Velocità di imbardata</string>
     <string name="f_steer">Angolo di sterzo</string>
     <string name="f_brkP">Pressione freno</string>
 

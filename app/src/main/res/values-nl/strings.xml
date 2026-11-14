@@ -167,9 +167,10 @@
     <string name="f_wRL">Wiel LA</string>
     <string name="f_wRR">Wiel RA</string>
     <string name="f_wDif">Verschil voorwielen</string>
-    <string name="f_gLat">Laterale G</string>
-    <string name="f_gFwd">Longitudinale G</string>
+    <string name="f_gLat">Dwarsversnelling</string>
+    <string name="f_gFwd">Langsversnelling</string>
     <string name="f_gasB">Gas</string>
+    <string name="f_yaw">Giersnelheid</string>
     <string name="f_steer">Stuurhoek</string>
     <string name="f_brkP">Remdruk</string>
 

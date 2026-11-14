@@ -224,8 +224,9 @@
     <string name="f_wRL">Wheel RL</string>
     <string name="f_wRR">Wheel RR</string>
     <string name="f_wDif">Front wheel diff</string>
-    <string name="f_gLat">Lateral G</string>
-    <string name="f_gFwd">Longitudinal G</string>
+    <string name="f_gLat">Lateral acceleration</string>
+    <string name="f_gFwd">Longitudinal acceleration</string>
+    <string name="f_yaw">Yaw rate</string>
     <string name="f_steer">Steering angle</string>
     <string name="f_gasB">Gas</string>
     <string name="f_brkP">Brake pressure</string>

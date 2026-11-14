@@ -99,8 +99,9 @@ object Fields {
             Field("wRL", R.string.f_wRL, "km/h", 1),
             Field("wRR", R.string.f_wRR, "km/h", 1),
             Field("wDif", R.string.f_wDif, "%", 2),
-            Field("gLat", R.string.f_gLat, "", 0),    // raw until calibrated -> m/s²
-            Field("gFwd", R.string.f_gFwd, "", 0),    // raw until calibrated -> m/s²
+            Field("gLat", R.string.f_gLat, "m/s²", 2),   // fw >= 3.54: + = right turn
+            Field("gFwd", R.string.f_gFwd, "m/s²", 2),   // fw >= 3.54: + = speeding up
+            Field("yaw", R.string.f_yaw, "°/s", 1),      // fw >= 3.54: + = turning right
             Field("steer", R.string.f_steer, "°"),
             Field("brkP", R.string.f_brkP, "V", 2),
             Field("gasB", R.string.f_gasB, "%", 0),

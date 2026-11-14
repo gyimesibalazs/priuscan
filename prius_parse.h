@@ -51,6 +51,7 @@ enum VKey {
   EVMODE,                       // EV mode on/off, 0x49B b4 bit1 (0x02)
   RANGE,                        // distance-to-empty (km) = fuelL / distance-weighted consumption EMA
   CITY,                         // 1 = inside a built-up area (belterület), set by app geofence via "G1"/"G0"
+  YAW,                          // yaw rate (deg/s, + = turning right), 0x024 b0-1 (fw >= 3.54)
   N_JSON,                       // number of fields that go into the JSON (length of FIELDS)
   RAW0 = N_JSON, RAW1, RAW2, RAW3, RAW4, RAW5, RAW6, RAW7,
   V_COUNT
@@ -79,7 +80,7 @@ inline const char *KEYS[V_COUNT] = {
   "tDist","tFuel","tAvg",
   "capAh","capKwh",
   "tMove","tSpd","tEv",
-  "odo","gasB","lights","ambL","dmode","ev","range","city",
+  "odo","gasB","lights","ambL","dmode","ev","range","city","yaw",
   "raw0","raw1","raw2","raw3","raw4","raw5","raw6","raw7",
 };
 
@@ -119,7 +120,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 353;   // 3.53: steering angle decoded as signed 12-bit x1.5 deg (+ = right)
+inline constexpr int FW_VERSION = 354;   // 3.54: gLat/gFwd in m/s2 + yaw rate (deg/s) from the 0x024 kinematics frame
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -138,7 +139,7 @@ inline bool dump_is_known(uint16_t id) {
   switch (id) {
     case 0x1C4: case 0x0B4: case 0x127: case 0x614: case 0x1D3: case 0x5C8:
     case 0x5A4: case 0x610: case 0x611: case 0x612: case 0x620: case 0x626:
-    case 0x4A1: case 0x320: case 0x245: case 0x025: case 0x622: case 0x0AA:  // decoded broadcasts
+    case 0x4A1: case 0x320: case 0x245: case 0x025: case 0x024: case 0x622: case 0x0AA:  // decoded broadcasts
     case 0x49B: case 0x399: case 0x4A2: case 0x247:                          // drive-mode / cruise / brake-pos / HSI
     case 0x7DF: case 0x7E0: case 0x7E2: case 0x7C4: case 0x7B0:              // our requests
     case 0x7E8: case 0x7EA: case 0x7CC: case 0x7B8:                          // diag responses
@@ -202,6 +203,8 @@ inline constexpr uint32_t FUEL_SETTLE_MS = 5000;    // and until 5 s after the l
 inline float    fuel_fin_prev = NAN;                // previous raw fuelIn (flap detector)
 inline uint32_t fuel_flap_ms = 0;                   // last time fuelIn jumped wildly (boot bounce/glitch)
 inline uint8_t  fuel_lowcnt = 0;                    // consecutive samples fuelIn held well below fuel_ref
+inline constexpr float G45_SCALE = 0.0359f * 0.70711f;   // one 45-deg accelerometer count -> m/s2 on the car axis
+inline constexpr float GFWD_SCALE = 0.040f;                 // 0x320 b4 count -> m/s2 (fitted, +-10 %)
 inline constexpr float HSI_REGEN = -12.0f;          // HSI needle (signed, +-127) below this = CHG/regen
 inline constexpr float BRKPOS_REGEN = 3.0f;         // brake pedal position above this = braking (regen)
 // Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
@@ -527,13 +530,38 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
     case 0x1D3:  // PCM_CRUISE_2: SET_SPEED (kph)
       if (x.size() >= 3) V[SETSPD] = (float)x[2];
       return;
-    case 0x4A1:  // VSC: LATERAL acceleration, byte[0..1] signed16 BE (RAW; calibrate -> m/s2)
-      if (x.size() >= 2) V[GLAT] = (float)(int16_t)(((uint16_t)x[0] << 8) | x[1]);
+    case 0x024: {  // KINEMATICS (yaw-rate / G sensor, ~80 Hz). Three 10-bit fields (low 2 bits of the
+      // first byte + the second byte):
+      //   b0-1 yaw rate, Toyota-standard 0.244 deg/s per count, zero = 513, raw + = LEFT
+      //        (dumps: 0.238..0.246 vs the rear-wheel speed difference, r 0.98..0.99)
+      //   b2-3 / b4-5 the sensor's TWO accelerometers, mounted +-45 deg to the car's axis, 0.0359 m/s2
+      //        per count each, zero = 512. Their sum is the lateral, their difference the longitudinal
+      //        acceleration, each x cos45 = 0.0254 m/s2 per count. Dumps: the sum matches v x yaw
+      //        with r 0.91..0.95, slope 0.82..0.94. (Earlier notes called b2-3 "steering torque" and
+      //        b4-5 "lateral accel" after the generic Toyota DBC -- on this car neither is true.)
+      //        The difference is too noisy for the smaller longitudinal signal (r 0.57..0.73 vs
+      //        dv/dt) -> gFwd comes from the VSC's filtered copy in 0x320 instead.
+      // Emitted: yaw deg/s + = turning RIGHT (same sense as steer); gLat m/s2 + = right turn.
+      // A real accelerometer: it also sees road camber (gravity). The raw G counts are noisy
+      // (~10 counts per frame) -> 1/16 EMA (~0.2 s at 80 Hz).
+      if (x.size() >= 6) {
+        int y  = ((x[0] & 0x03) << 8) | x[1];
+        float g1 = (float)((((x[2] & 0x03) << 8) | x[3]) - 512);
+        float g2 = (float)((((x[4] & 0x03) << 8) | x[5]) - 512);
+        float lat = G45_SCALE * (g1 + g2);
+        V[YAW]  = -0.244f * (float)(y - 513);
+        V[GLAT] = std::isnan(V[GLAT]) ? lat : V[GLAT] + (lat - V[GLAT]) * (1.0f / 16.0f);
+      }
       return;
-    case 0x320:  // VSC: LONGITUDINAL acceleration, byte[4] (RAW; ~154 = 0g, drops on accel ->
-      // store as (center - b4) so positive = forward accel. Calibrate center+scale -> m/s2.
-      if (x.size() >= 5) V[GFWD] = 154.0f - (float)x[4];
+    }
+    case 0x320:  // VSC: LONGITUDINAL acceleration, byte[4] SIGNED int8, 0 = level standstill, + =
+      // speeding up (it is the difference of the two 0x024 accelerometers, filtered: also sees road
+      // slope). Scale FITTED vs wheel-speed dv/dt on 3 dumps: 0.037..0.042 m/s2 per count (r 0.86..
+      // 0.96) -> 0.040, +-10 % uncertain. (fw < 3.54 read it as "154 - b4": wrong, like the steering.)
+      if (x.size() >= 5) V[GFWD] = GFWD_SCALE * (float)(int8_t)x[4];
       return;
+    // 0x4A1 b0-1 (s16, ~0.00064 m/s2 per count, + = left) is the VSC's filtered copy of the lateral
+    // acceleration (r 0.92..0.98 vs the 0x024 pair). Not decoded any more (fw < 3.54: raw gLat).
     case 0x245:  // gas pedal byte[2] (0..200 -> %); ALSO MG2 rpm = byte0:byte1 (broadcast, was poll
       // 0x62; corr 1.000, slope 1.0). Signed so reverse works.
       if (x.size() >= 2) V[MG2R] = (float)(int16_t)((x[0] << 8) | x[1]);
@@ -1319,7 +1347,7 @@ inline const Field FIELDS[] = {
   {DTCCUR,"\"dtcCur\":",9,0}, {DTCHIST,"\"dtcHist\":",10,0},
   {ACAMB,"\"acAmb\":",8,2}, {BLOWER,"\"blower\":",9,0}, {ACPRESS,"\"acPress\":",10,2},
   {FUELIN,"\"fuelIn\":",9,2}, {FUELL,"\"fuelL\":",8,1}, {FUELGM,"\"fuelGm\":",9,1}, {RANGE,"\"range\":",8,0},
-  {CITY,"\"city\":",7,0},
+  {CITY,"\"city\":",7,0}, {YAW,"\"yaw\":",6,1},
   {CTR,"\"ctR\":",6,2}, {WPRUN,"\"wpRun\":",8,0}, {WPW,"\"wpW\":",6,0}, {CELLW,"\"cellW\":",8,0},
   {ELEN,"\"eLen\":",7,2}, {EFF,"\"eFF\":",6,2}, {EOK,"\"eOK\":",6,2}, {LOOPS,"\"loops\":",8,2},
   {GEAR,"\"gear\":",7,0}, {TURN,"\"turn\":",7,0}, {SETSPD,"\"setSpd\":",9,0},

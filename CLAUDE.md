@@ -85,8 +85,8 @@ health/trip ring (`DailyRec`, one record/day accumulated across drives, written 
 shutdown/quiet detection). NVS partition is ~446 KB.
 
 ## Top open tasks (see DEVELOPER_GUIDE §6 for detail)
-1. G-sensor calibration: passive cal fails (gFwd/gLat don't track dv/dt or v²·steer); needs
-   a controlled test. The `raw0..raw7` debug poll (2147) is currently removed.
+1. G-sensor: decoded since fw 3.54 (`gLat`/`yaw` from 0x024, `gFwd` from 0x320 b4 signed). Only
+   the `gFwd` scale (0.040 m/s² per count, fitted, ±10 %) still wants a known-incline check.
 2. Separate rear-door L/R bits (targeted dump).
 3. Cruise: the SET bit (`0x399 b1.bit1`) is empirically inferred — confirm with a controlled
    on/off test; the set-SPEED value is not on the broadcast (0x1D2/0x1D3 absent).
