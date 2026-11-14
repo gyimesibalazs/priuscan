@@ -170,6 +170,8 @@
     <string name="f_gFwd">Aceleración longitudinal</string>
     <string name="f_gasB">Gas</string>
     <string name="f_yaw">Velocidad de guiñada</string>
+    <string name="f_pitch">Cabeceo (morro arriba +)</string>
+    <string name="f_roll">Balanceo (derecha +)</string>
     <string name="f_steer">Ángulo de dirección</string>
     <string name="f_brkP">Presión de frenado</string>
 

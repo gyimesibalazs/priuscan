@@ -30,6 +30,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -140,11 +141,11 @@ fun MainScreen(prefs: Prefs) {
             }
         }
         when (tab) {
-            0 -> DashboardTab(state)
+            0 -> DashboardTab(state, prefs)
             in 1..groups.size -> {
                 val (titleRes, fields) = groups[tab - 1]
                 if (titleRes == R.string.grp_hybrid_batt) HybridBatteryTab(state, fields, prefs.batteryRefAh)
-                else if (titleRes == R.string.grp_drive_brake) DriveTab(state, fields)
+                else if (titleRes == R.string.grp_drive_brake) DriveTab(state, fields, prefs)
                 else GroupTab(state, fields)
             }
             groups.size + 1 -> TpmsTab(tpmsReadings)
@@ -172,9 +173,82 @@ private fun tabColumn(content: androidx.compose.foundation.lazy.LazyListScope.()
 
 /** Tab 1: glance dashboard - header + odometer + fuel level + the trip switcher. */
 @Composable
-private fun DashboardTab(state: CanState) = tabColumn {
-    item { Header(state) }   // odo + fuel level now live in the header (tank gauge + ODO row)
-    item { TripSection() }
+private fun DashboardTab(state: CanState, prefs: Prefs) {
+    val tilt by CanService.tilt.collectAsState()
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        tabColumn {
+            item { Header(state) }   // odo + fuel level now live in the header (tank gauge + ODO row)
+            item { TripSection() }
+        }
+        // the content column is capped at 820 dp -> on a wide head unit the side margins are empty;
+        // the bullseye level lives in the LEFT one (nearest the driver). Narrow screens: not shown
+        // (the angles are still listed on the drive tab).
+        val side = (maxWidth - 820.dp) / 2
+        val t = tilt
+        if (t != null && side >= LEVEL_SIZE + 16.dp)
+            LevelPanel(t, prefs, Modifier.align(Alignment.TopStart).padding(start = (side - LEVEL_SIZE) / 2, top = 20.dp))
+    }
+}
+
+private val LEVEL_SIZE = 170.dp
+private const val LEVEL_RANGE = 8.0   // deg at the end of a tube
+
+/** Bullseye level, the car seen from above: the bubble drifts towards the HIGHER end like in a
+ *  real circular level -- up = nose up, left = right side lower. Rings at 4 and 8 deg; the bubble
+ *  stops on the rim and turns amber beyond 8 deg. Hold the panel ~1.3 s at standstill to store
+ *  the current attitude as level. */
+@Composable
+private fun LevelPanel(t: Tilt, prefs: Prefs, modifier: Modifier = Modifier) {
+    var zeroP by remember { mutableStateOf(prefs.tiltZeroPitch) }
+    var zeroR by remember { mutableStateOf(prefs.tiltZeroRoll) }
+    val cur by androidx.compose.runtime.rememberUpdatedState(t)
+    var holding by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0f) }
+    LaunchedEffect(holding) {
+        if (!holding) { progress = 0f; return@LaunchedEffect }
+        val start = withFrameNanos { it }
+        while (holding) {
+            val now = withFrameNanos { it }
+            progress = ((now - start) / 1_300_000_000f).coerceAtMost(1f)
+            if (progress >= 1f) {
+                if (cur.speedKmh < 1.0) {              // zero only at standstill
+                    zeroP = cur.pitch.toFloat(); zeroR = cur.roll.toFloat()
+                    prefs.tiltZeroPitch = zeroP; prefs.tiltZeroRoll = zeroR
+                }
+                holding = false; break
+            }
+        }
+    }
+    val pitch = t.pitch - zeroP; val roll = t.roll - zeroR
+    val text = MaterialTheme.colorScheme.onBackground
+    Column(modifier.width(LEVEL_SIZE).pointerInput(Unit) {
+        detectTapGestures(onPress = { holding = true; tryAwaitRelease(); holding = false })
+    }, horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(LEVEL_SIZE), contentAlignment = Alignment.Center) {
+            Canvas(Modifier.fillMaxSize()) {
+                val stroke = 4.dp.toPx(); val rad = 11.dp.toPx()
+                val c = Offset(size.width / 2, size.height / 2)
+                val rOut = size.width / 2 - stroke / 2
+                val travel = rOut - stroke / 2 - rad                       // bubble centre at 8 deg
+                drawCircle(CGaugeFrame, rOut, c, style = Stroke(stroke))
+                drawCircle(CGaugeFrame, travel / 2, c, style = Stroke(2f))  // 4 deg ring
+                drawLine(CGaugeFrame, Offset(c.x - rOut, c.y), Offset(c.x + rOut, c.y), strokeWidth = 2f)
+                drawLine(CGaugeFrame, Offset(c.x, c.y - rOut), Offset(c.x, c.y + rOut), strokeWidth = 2f)
+                var fx = (-roll / LEVEL_RANGE).toFloat(); var fy = (-pitch / LEVEL_RANGE).toFloat()
+                val mag = kotlin.math.hypot(fx, fy)
+                if (mag > 1f) { fx /= mag; fy /= mag }
+                drawCircle(if (mag > 1f) CAmber else CGreen, rad, Offset(c.x + fx * travel, c.y + fy * travel))
+            }
+            if (progress > 0f)
+                CircularProgressIndicator(progress = { progress }, strokeWidth = 3.dp, modifier = Modifier.size(52.dp))
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            for ((arrow, a) in listOf("↕" to pitch, "↔" to roll))
+                Text("$arrow%+.1f°".format(Math.round(a * 10) / 10.0 + 0.0), color = text, fontSize = 18.sp,   // +0.0: no "-0.0"
+                    fontFamily = FontFamily.Monospace, maxLines = 1, softWrap = false)
+        }
+    }
 }
 
 /** Tyre pressure on its own big tab. */
@@ -193,9 +267,18 @@ private fun GroupTab(state: CanState, fields: List<Field>) = tabColumn {
 
 /** Driving tab = the drive/brake fields + the exterior-light states (0x622 bitmask). */
 @Composable
-private fun DriveTab(state: CanState, fields: List<Field>) = tabColumn {
+private fun DriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = tabColumn {
     itemsIndexed(fields) { _, f ->
         SensorRow(stringResource(f.labelRes), format(state.d(f.key), f.decimals, f.unit))
+    }
+    // slope from the G sensor (same values as the dashboard spirit levels, zero offset applied)
+    item {
+        val t by CanService.tilt.collectAsState()
+        SensorRow(stringResource(R.string.f_pitch), format(t?.let { it.pitch - prefs.tiltZeroPitch }, 1, "°"))
+    }
+    item {
+        val t by CanService.tilt.collectAsState()
+        SensorRow(stringResource(R.string.f_roll), format(t?.let { it.roll - prefs.tiltZeroRoll }, 1, "°"))
     }
     // drive mode (0x49B b4): NORMAL/ECO/PWR selector + independent EV toggle
     item { GroupTitle(stringResource(R.string.grp_drivemode)) }

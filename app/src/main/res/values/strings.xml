@@ -227,6 +227,8 @@
     <string name="f_gLat">Lateral acceleration</string>
     <string name="f_gFwd">Longitudinal acceleration</string>
     <string name="f_yaw">Yaw rate</string>
+    <string name="f_pitch">Pitch (nose up +)</string>
+    <string name="f_roll">Roll (right side down +)</string>
     <string name="f_steer">Steering angle</string>
     <string name="f_gasB">Gas</string>
     <string name="f_brkP">Brake pressure</string>

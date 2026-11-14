@@ -170,6 +170,8 @@
     <string name="f_gFwd">Accelerazione longitudinale</string>
     <string name="f_gasB">Gas</string>
     <string name="f_yaw">Velocità di imbardata</string>
+    <string name="f_pitch">Beccheggio (muso su +)</string>
+    <string name="f_roll">Rollio (destra +)</string>
     <string name="f_steer">Angolo di sterzo</string>
     <string name="f_brkP">Pressione freno</string>
 

@@ -170,6 +170,8 @@
     <string name="f_gFwd">Hosszgyorsulás</string>
     <string name="f_gasB">Gáz</string>
     <string name="f_yaw">Perdülési sebesség</string>
+    <string name="f_pitch">Hosszdőlés (orr fel +)</string>
+    <string name="f_roll">Oldaldőlés (jobbra +)</string>
     <string name="f_steer">Kormányszög</string>
     <string name="f_brkP">Féknyomás</string>
 

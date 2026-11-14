@@ -171,6 +171,8 @@
     <string name="f_gFwd">Langsversnelling</string>
     <string name="f_gasB">Gas</string>
     <string name="f_yaw">Giersnelheid</string>
+    <string name="f_pitch">Langshelling (neus omhoog +)</string>
+    <string name="f_roll">Dwarshelling (rechts +)</string>
     <string name="f_steer">Stuurhoek</string>
     <string name="f_brkP">Remdruk</string>
 

@@ -171,6 +171,8 @@
     <string name="f_gFwd">Längsbeschleunigung</string>
     <string name="f_gasB">Gas</string>
     <string name="f_yaw">Gierrate</string>
+    <string name="f_pitch">Längsneigung (Bug hoch +)</string>
+    <string name="f_roll">Querneigung (rechts +)</string>
     <string name="f_steer">Lenkwinkel</string>
     <string name="f_brkP">Bremsdruck</string>
 

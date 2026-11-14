@@ -170,6 +170,8 @@
     <string name="f_gFwd">Accélération longitudinale</string>
     <string name="f_gasB">Gaz</string>
     <string name="f_yaw">Vitesse de lacet</string>
+    <string name="f_pitch">Tangage (nez haut +)</string>
+    <string name="f_roll">Roulis (droite +)</string>
     <string name="f_steer">Angle de braquage</string>
     <string name="f_brkP">Pression de freinage</string>
 

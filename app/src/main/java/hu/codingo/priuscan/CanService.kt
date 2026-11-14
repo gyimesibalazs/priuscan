@@ -94,6 +94,7 @@ class CanService : Service() {
         const val STEER_LOCK_DEG = 517.0                  // steering-wheel angle at full lock (345 counts x 1.5 deg)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
+        val tilt = MutableStateFlow<Tilt?>(null)          // pitch / roll from the G sensor (fw >= 3.54)
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
         val flashState = MutableStateFlow(FlashState.IDLE)
         val flashProgress = MutableStateFlow(0)           // 0..100
@@ -664,6 +665,8 @@ class CanService : Service() {
     private var trackLevel = -1
     private var trackSentMs = 0L
 
+    private val tiltEst = TiltEstimator()
+
     /** Feed the head unit's own reverse-camera app (com.qf.backcar) with the steering angle so it
      *  draws its dynamic trajectory lines. Reverse-engineered from QF_BackCar.apk: it listens for
      *  it takes a track-image index (0 = full left, 45 = straight, 90 = full right) from the ROM's
@@ -690,6 +693,7 @@ class CanService : Service() {
         updateNotifications(s)
         updateStatusStrip(s)
         updateReverseTrack(s)
+        tilt.value = if ((fwRunning.value ?: 0) >= 354) tiltEst.update(s, android.os.SystemClock.elapsedRealtime()) else null
 
         // dark/light: prefer the RAW ambient-light sensor (0x620 b2:b3, ~31 bright .. ~600 dark,
         // confirmed by the lamp test) — fast and independent of the light switch. Fall back to the

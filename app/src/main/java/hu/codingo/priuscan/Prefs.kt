@@ -87,6 +87,14 @@ class Prefs(ctx: Context) {
 
     /** Reference HV pack capacity (Ah) for the SoH/degradation calc. Default ~Prius
      *  6.5 Ah; set to the transplanted Prius-4 cell's rated capacity. */
+    /** Spirit-level zero: the raw pitch / roll (deg) stored when the user zeroes on level ground. */
+    var tiltZeroPitch: Float
+        get() = sp.getFloat("tilt_zero_pitch", 0f)
+        set(v) = sp.edit().putFloat("tilt_zero_pitch", v).apply()
+    var tiltZeroRoll: Float
+        get() = sp.getFloat("tilt_zero_roll", 0f)
+        set(v) = sp.edit().putFloat("tilt_zero_roll", v).apply()
+
     var batteryRefAh: Float
         get() = sp.getFloat("battery_ref_ah", 6.5f)
         set(v) = sp.edit().putFloat("battery_ref_ah", v.coerceIn(1f, 20f)).apply()

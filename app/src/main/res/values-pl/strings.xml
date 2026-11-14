@@ -171,6 +171,8 @@
     <string name="f_gFwd">Przyspieszenie wzdłużne</string>
     <string name="f_gasB">Gaz</string>
     <string name="f_yaw">Prędkość odchylania</string>
+    <string name="f_pitch">Pochylenie wzdłużne (przód w górę +)</string>
+    <string name="f_roll">Przechył boczny (w prawo +)</string>
     <string name="f_steer">Kąt skrętu kierownicy</string>
     <string name="f_brkP">Ciśnienie hamowania</string>
 
