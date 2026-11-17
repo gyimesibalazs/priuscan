@@ -34,6 +34,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Settings
 import hu.codingo.priuscan.icons.*
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -198,18 +203,8 @@ internal fun HybridBatteryTab(state: CanState, fields: List<Field>, refAh: Float
         }
     }
 
-    // per-block internal resistance (on-demand "B"; refreshed every 5 s while this tab is open)
-    SectionTitle(stringResource(R.string.hv_block_res), Modifier.padding(top = 6.dp))
+    // per-block internal resistance for the chart (on-demand "B"; refreshed every 5 s while this tab is open)
     LaunchedEffect(Unit) { while (true) { CanService.fetchBlockR(); kotlinx.coroutines.delay(5000) } }
-    val r by CanService.blockR.collectAsState()
-    TileGrid(
-        (1..14).map { i ->
-            val v = r.getOrNull(i - 1)
-            val ok = v != null && !v.isNaN()
-            TileSpec(stringResource(R.string.block_n, i), if (ok) "%.1f".format(v) else "–", if (ok) "mΩ" else "")
-        },
-        cols = if (cols >= 4) 7 else cols + 1, compact = true,
-    )
 }
 
 /** SOC (0..100 %) on a 270° arc. */
@@ -241,62 +236,104 @@ private fun SocCard(state: CanState, modifier: Modifier) {
     }
 }
 
-/** b01..b14 block voltages as bars (auto-scaled around the current min..max so ~10 mV
- *  differences are visible); the weakest block (weakB) in amber. */
+/** One chart for the 14 HV blocks: internal resistance as BARS (left axis, mOhm), block voltage
+ *  as a LINE (right axis, V); the weakest block (weakB) in amber.
+ *  Scales do not jump with the data:
+ *   - resistance: 0..30 mOhm (blocks sit around 15), widened in whole 10 mOhm steps only if a block exceeds it;
+ *   - voltage: a FIXED +-0.3 V window around the mean of the 14 blocks. The pack voltage swings by
+ *     volts with load, but the blocks move together, so the line keeps its shape and only the
+ *     axis numbers change. (Logs: block spread median 0.10 V, 99 % under 0.32 V.) A block outside
+ *     the window is clamped to its edge. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BlockChartCard(state: CanState, wide: Boolean, modifier: Modifier) {
     val c = pc
-    val vals = (1..14).map { state.d("b%02d".format(it)) }
+    val volts = (1..14).map { state.d("b%02d".format(it)) }
+    val res by CanService.blockR.collectAsState()
     val weak = state.i("weakB")
-    val present = vals.filterNotNull()
-    val mn = present.minOrNull() ?: 0.0
-    val mx = present.maxOrNull() ?: 1.0
-    val span = maxOf(mx - mn, 0.05)
-    val lo = mn - span * 0.6; val hi = mx + span * 0.1        // bar floor below the minimum
+    val tm = rememberTextMeasurer()
+    val presentV = volts.filterNotNull()
+    val mean = if (presentV.isEmpty()) null else presentV.average()
+    val rVals = (0 until 14).map { i -> res.getOrNull(i)?.takeIf { !it.isNaN() } }
+    val rTop = maxOf(R_AXIS_MIN, kotlin.math.ceil(((rVals.filterNotNull().maxOrNull() ?: 0f) / 10f).toDouble()).toFloat() * 10f)
     PCard(modifier) {
+        val legend: @Composable () -> Unit = {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                for ((col, line, res2) in listOf(Triple(c.green, false, R.string.hv_block_res), Triple(c.accent, true, R.string.hv_block_voltages)))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.width(if (line) 18.dp else 10.dp).height(if (line) 3.dp else 12.dp).background(col, RoundedCornerShape(2.dp)))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(res2) + if (line) " (V)" else " (mΩ)", color = c.dim, fontSize = 13.sp, maxLines = 1)
+                    }
+            }
+        }
         val chips: @Composable () -> Unit = {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                for ((res, key) in listOf(R.string.f_bmin to "bmin", R.string.f_bmax to "bmax", R.string.f_blkD to "blkD"))
-                    InfoChip(stringResource(res), state.d(key)?.let { "%.2f V".format(it) } ?: "–")
+                for ((r, key) in listOf(R.string.f_bmin to "bmin", R.string.f_bmax to "bmax", R.string.f_blkD to "blkD"))
+                    InfoChip(stringResource(r), state.d(key)?.let { "%.2f V".format(it) } ?: "–")
             }
         }
         if (wide) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CardTitle(stringResource(R.string.hv_block_voltages), Modifier.weight(1f).padding(end = 12.dp))
+                Box(Modifier.weight(1f).padding(end = 12.dp)) { legend() }
                 Box(Modifier.weight(1.4f, fill = false)) { chips() }
             }
-        } else {
-            CardTitle(stringResource(R.string.hv_block_voltages))
-            Spacer(Modifier.height(6.dp))
-            chips()
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            vals.forEachIndexed { i, v ->
+        } else { legend(); Spacer(Modifier.height(6.dp)); chips() }
+        Spacer(Modifier.height(8.dp))
+        val small = TextStyle(fontSize = 12.sp, fontFeatureSettings = "tnum")
+        Canvas(Modifier.fillMaxWidth().weight(1f)) {
+            val left = 30.dp.toPx(); val right = 46.dp.toPx(); val top = 18.dp.toPx(); val bottom = 20.dp.toPx()
+            val pw = size.width - left - right; val ph = size.height - top - bottom
+            if (pw <= 0f || ph <= 0f) return@Canvas
+            fun label(t: String, x: Float, y: Float, col: Color, ax: Float = 0.5f, ay: Float = 0.5f, bold: Boolean = false) {
+                val l = tm.measure(t, if (bold) small.copy(fontWeight = FontWeight.Bold) else small)
+                drawText(l, col, Offset(x - l.size.width * ax, y - l.size.height * ay))
+            }
+            // left axis: resistance grid (0 .. rTop in 10 mOhm steps)
+            var g = 0f
+            while (g <= rTop + 0.01f) {
+                val y = top + ph * (1f - g / rTop)
+                drawLine(c.divider, Offset(left, y), Offset(left + pw, y), strokeWidth = 1f)
+                label("%.0f".format(g), left - 6.dp.toPx(), y, c.dim, ax = 1f)
+                g += 10f
+            }
+            // right axis: voltage window around the mean
+            if (mean != null) for (d in listOf(-V_WINDOW, 0.0, V_WINDOW)) {
+                val y = top + ph * (0.5f - (d / (2 * V_WINDOW)).toFloat() * V_BAND)
+                label("%.2f".format(mean + d), left + pw + 6.dp.toPx(), y, c.accent, ax = 0f)
+            }
+            val cw = pw / 14f
+            val pts = ArrayList<Offset?>(14)
+            for (i in 0 until 14) {
                 val isWeak = weak == i + 1
-                Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    // bar area (value above the bar); bars scale to the space left under the value text
-                    Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Bottom) {
-                        Text(v?.let { "%.2f".format(it) } ?: "–", color = if (isWeak) c.amberText else c.text,
-                            fontSize = 12.sp, style = NumStyle, maxLines = 1, softWrap = false)
-                        Spacer(Modifier.height(2.dp))
-                        val f = v?.let { ((it - lo) / (hi - lo)).toFloat().coerceIn(0.03f, 1f) } ?: 0f
-                        if (f > 0f) Box(
-                            Modifier.fillMaxWidth(0.72f).fillMaxHeight(f)
-                                .background(if (isWeak) c.amber else c.green, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                        )
-                    }
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.divider))
-                    Text("b%02d".format(i + 1), Modifier.padding(top = 3.dp),
-                        color = if (isWeak) c.amberText else c.dim, fontSize = 12.sp,
-                        fontWeight = if (isWeak) FontWeight.Bold else FontWeight.Normal, maxLines = 1, softWrap = false)
+                val cx = left + cw * (i + 0.5f)
+                rVals[i]?.let { r ->
+                    val h = ph * (r / rTop).coerceIn(0f, 1f)
+                    drawRoundRect(if (isWeak) c.amber else c.green, Offset(cx - cw * 0.32f, top + ph - h), Size(cw * 0.64f, h),
+                        CornerRadius(4.dp.toPx()))
+                    if (h > 20.dp.toPx()) label("%.1f".format(r), cx, top + ph - 9.dp.toPx(), Color(0xFF06121C), bold = true)
+                    else label("%.1f".format(r), cx, top + ph - h - 8.dp.toPx(), c.dim)
+                }
+                label("b%02d".format(i + 1), cx, top + ph + 11.dp.toPx(), if (isWeak) c.amberText else c.dim, bold = isWeak)
+                val v = volts[i]
+                pts += if (v == null || mean == null) null else {
+                    val f = ((v - mean) / (2 * V_WINDOW)).toFloat().coerceIn(-0.5f, 0.5f) * V_BAND
+                    Offset(cx, top + ph * (0.5f - f))
                 }
             }
+            for (i in 0 until 13) { val a = pts[i]; val b = pts[i + 1]
+                if (a != null && b != null) drawLine(c.accent, a, b, strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round) }
+            pts.forEachIndexed { i, p -> if (p != null) {
+                drawCircle(c.card, 6.dp.toPx(), p); drawCircle(if (weak == i + 1) c.amber else c.accent, 4.dp.toPx(), p)
+                label("%.2f".format(volts[i]), p.x, p.y - 13.dp.toPx(), c.text)
+            } }
         }
     }
 }
+
+private const val R_AXIS_MIN = 30f     // mOhm: top of the resistance axis unless a block exceeds it
+private const val V_WINDOW = 0.3       // V either side of the block mean on the voltage axis
+private const val V_BAND = 0.8f        // share of the plot height the voltage window spans (room for labels)
 
 /** Tyre pressure: top-view car with a card per wheel + the spare. */
 @Composable
