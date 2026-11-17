@@ -86,10 +86,18 @@ class CanService : Service() {
         val blockR = MutableStateFlow<List<Float>>(emptyList())
         fun fetchBlockR() = sendCommand("B")
 
+        /** Read-only diagnostic probe (fw >= 3.55): "X<reqid> <hex bytes>", e.g. probe("780 13"). The
+         *  firmware lets only READ services through. Answers ({"xr":...}) collect in [probeLog] and
+         *  logcat tag PriusProbe. For bench use: `adb shell am broadcast -a hu.codingo.priuscan.PROBE
+         *  --es cmd "780 13"`. */
+        const val ACTION_PROBE = "hu.codingo.priuscan.PROBE"
+        val probeLog = MutableStateFlow<List<String>>(emptyList())
+        fun probe(args: String) = sendCommand("X" + args.trim())
+
         fun mergeLastRefuel() = sendCommand("M")   // merge the last refuel-history entry into the tank
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 354                        // bundled firmware version (3.54)
+        const val BUNDLED_FW = 355                        // bundled firmware version (3.55)
         const val TRACK_MID = 45                          // com.qf.backcar: 91 track images, 45 = straight
         const val STEER_LOCK_DEG = 517.0                  // steering-wheel angle at full lock (345 counts x 1.5 deg)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
@@ -171,6 +179,9 @@ class CanService : Service() {
     // ACTION_SHUTDOWN first -> tell the ESP to flush trip/fuel state to NVS before the power dies.
     private val shutdownReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) { sendCommand("S") }
+    }
+    private val probeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) { i.getStringExtra("cmd")?.let { probe(it) } }
     }
     private var ioThread: Thread? = null
     private var tpmsThread: Thread? = null
@@ -288,6 +299,9 @@ class CanService : Service() {
         haPusher = HaPusher(this, prefs)
         haPusher.start()
         prefs.sp.registerOnSharedPreferenceChangeListener(prefsListener)
+        // bench-only entry for the read-only diagnostic probe (adb shell am broadcast ...)
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(probeReceiver, IntentFilter(ACTION_PROBE), Context.RECEIVER_EXPORTED)
+        else @Suppress("UnspecifiedRegisterReceiverFlag") registerReceiver(probeReceiver, IntentFilter(ACTION_PROBE))
         if (Build.VERSION.SDK_INT >= 33)
             registerReceiver(shutdownReceiver, IntentFilter(Intent.ACTION_SHUTDOWN), Context.RECEIVER_NOT_EXPORTED)
         else
@@ -330,6 +344,7 @@ class CanService : Service() {
         try { Thread.sleep(600) } catch (_: Exception) {}   // give the IO loop one read+drain cycle (<=500 ms)
         running = false
         try { unregisterReceiver(shutdownReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(probeReceiver) } catch (_: Exception) {}
         ioThread?.interrupt()
         tpmsThread?.interrupt()
         try { getSystemService(LocationManager::class.java)?.removeUpdates(locListener) } catch (_: Exception) {}
@@ -609,6 +624,12 @@ class CanService : Service() {
         val rIsKwh = (fwRunning.value ?: TripSlot.FW_R_IS_KWH) >= TripSlot.FW_R_IS_KWH
         if (json.has("rhist")) { refuelHist.value = TripSlot.list(json.optJSONArray("rhist"), rIsKwh); return false }
         if (json.has("ohist")) { oilHist.value = TripSlot.list(json.optJSONArray("ohist"), rIsKwh); return false }
+        if (json.has("xr")) {
+            val line = json.optJSONObject("xr")?.toString() ?: ""
+            android.util.Log.i("PriusProbe", line)
+            probeLog.value = (probeLog.value + line).takeLast(200)
+            return false
+        }
         if (json.has("rblk")) {
             val a = json.optJSONArray("rblk")
             blockR.value = if (a == null) emptyList()

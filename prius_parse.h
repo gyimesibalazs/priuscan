@@ -120,7 +120,8 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 354;   // 3.54: gLat/gFwd in m/s2 + yaw rate (deg/s) from the 0x024 kinematics frame
+inline constexpr int FW_VERSION = 355;   // 3.55: read-only diagnostic probe ("X<id> <bytes>")
+// 3.54: gLat/gFwd in m/s2 + yaw rate (deg/s) from the 0x024 kinematics frame
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
 
@@ -177,6 +178,89 @@ inline uint32_t last_pwr_ms = 0;        // millis() of the last 0x1C4 (fast powe
 inline bool     persist_done = false;   // one save per power-down (re-armed when bus is alive)
 inline uint32_t boot_off_epoch = 0;     // restored last-shutdown epoch  -> JSON "offTs"
 inline uint32_t boot_off_n = 0;         // restored save counter         -> JSON "offN"
+// ---- read-only diagnostic PROBE ("X<reqid> <hex bytes>" from the host) -------------------
+// One single-frame request to any diagnostic address 0x700..0x7FF, squeezed in between the
+// regular polls (which pause until the answer is complete or PROBE_TIMEOUT_MS passes), the
+// answer (any 0x7xx frame that is not one of our polled ECUs, ISO-TP reassembled) goes out as
+//   {"xr":{"req":"780","rsp":"788","d":"53 01 ..."}}   or   {"xr":{"req":"780","to":1}}  (no answer)
+// HARD RULE: only READ services are let through, enforced HERE in the firmware and not in the
+// app -- some of the ECUs on this bus (airbag!) must never get a write / clear / active-test /
+// session-change request from us. Rejected: {"xr":{"req":"780","err":"svc"}}.
+inline constexpr uint32_t PROBE_TIMEOUT_MS = 400;
+inline uint8_t  probe_state = 0;          // 0 idle, 1 queued, 2 waiting for the answer, 3 result ready
+inline uint16_t probe_req = 0, probe_rsp = 0;
+inline uint8_t  probe_tx[8]; inline uint8_t probe_txn = 0;
+inline uint8_t  probe_buf[300]; inline int probe_len = 0, probe_got = 0;
+inline uint32_t probe_t = 0;
+inline const char *probe_err = nullptr;
+inline bool probe_service_ok(uint8_t sid) {
+  switch (sid) {
+    case 0x01: case 0x02: case 0x03: case 0x07: case 0x09: case 0x0A:   // OBD-II read modes
+    case 0x12: case 0x13: case 0x17: case 0x18: case 0x19:             // read DTC / freeze frame (KWP + UDS)
+    case 0x1A: case 0x21: case 0x22:                                   // ECU identification / read data
+    case 0x3E:                                                         // tester present
+      return true;
+    default: return false;
+  }
+}
+inline bool probe_is_polled(uint16_t rsp) {   // our regular ECUs: their answers belong to the poll path
+  return rsp == 0x7E8 || rsp == 0x7EA || rsp == 0x7CC || rsp == 0x7B8;
+}
+inline void probe_parse(const char *a) {      // "780 13" / "780 21 01"
+  unsigned id = 0; int n = 0;
+  if (probe_state == 1 || probe_state == 2) return;                    // one at a time
+  if (sscanf(a, " %x%n", &id, &n) != 1) return;
+  probe_req = (uint16_t)id; probe_rsp = 0; probe_len = probe_got = 0; probe_err = nullptr; probe_txn = 0;
+  a += n;
+  unsigned b; uint8_t pl[7]; int k = 0;
+  while (k < 7 && sscanf(a, " %x%n", &b, &n) == 1) { pl[k++] = (uint8_t)b; a += n; }
+  if (id < 0x700 || id > 0x7FF || id == 0x7DF || probe_is_polled((uint16_t)(id + 8))) probe_err = "id";
+  else if (k == 0) probe_err = "len";
+  else if (!probe_service_ok(pl[0])) probe_err = "svc";
+  if (probe_err) { probe_state = 3; return; }
+  std::memset(probe_tx, 0, 8); probe_tx[0] = (uint8_t)k; std::memcpy(probe_tx + 1, pl, k); probe_txn = 8;
+  probe_state = 1;
+}
+// Every received frame passes here (YAML catch-all). Returns the ID to send an ISO-TP flow
+// control to (the probe request ID) when a first frame arrived, else 0.
+inline uint16_t on_probe_frame(uint16_t id, const uint8_t *x, int n, uint32_t now_ms) {
+  if (probe_state != 2 || id < 0x700 || id > 0x7FF || probe_is_polled(id) || n < 2) return 0;
+  if (probe_rsp && id != probe_rsp) return 0;
+  uint8_t pci = x[0] >> 4;
+  if (pci == 0x0) {
+    int len = x[0] & 0x0F; if (len == 0 || n < 1 + len) return 0;
+    if (len >= 3 && x[1] == 0x7F && x[3] == 0x78) { probe_t = now_ms; return 0; }   // "response pending": keep waiting
+    probe_rsp = id; probe_len = probe_got = len; std::memcpy(probe_buf, x + 1, len); probe_state = 3;
+  } else if (pci == 0x1) {
+    probe_rsp = id; probe_len = ((x[0] & 0x0F) << 8) | x[1];
+    if (probe_len > (int)sizeof(probe_buf)) probe_len = (int)sizeof(probe_buf);
+    probe_got = 0;
+    for (int i = 2; i < n && probe_got < probe_len; i++) probe_buf[probe_got++] = x[i];
+    probe_t = now_ms;
+    return probe_req;
+  } else if (pci == 0x2 && probe_rsp == id) {
+    for (int i = 1; i < n && probe_got < probe_len; i++) probe_buf[probe_got++] = x[i];
+    probe_t = now_ms;
+    if (probe_got >= probe_len) probe_state = 3;
+  }
+  return 0;
+}
+inline void emit_probe() {                    // YAML calls it when probe_state == 3
+  static char buf[1100]; char *p = buf; char *end = buf + sizeof(buf);
+  p += snprintf(p, end - p, "{\"xr\":{\"req\":\"%03X\"", probe_req);
+  if (probe_err) p += snprintf(p, end - p, ",\"err\":\"%s\"", probe_err);
+  else if (!probe_rsp) p += snprintf(p, end - p, ",\"to\":1");
+  else {
+    p += snprintf(p, end - p, ",\"rsp\":\"%03X\",\"n\":%d,\"d\":\"", probe_rsp, probe_len);
+    for (int i = 0; i < probe_got && end - p > 8; i++) p += snprintf(p, end - p, i ? " %02X" : "%02X", probe_buf[i]);
+    *p++ = '"';
+  }
+  p += snprintf(p, end - p, "}}\n");
+  int total = (int)(p - buf), off = 0;
+  for (int t = 0; t < 200000 && off < total; t++) { int w = write(1, buf + off, total - off); if (w > 0) off += w; }
+  probe_state = 0;
+}
+
 inline bool     rblk_request = false;   // app sent "B"  -> emit per-block resistance (YAML consumes)
 inline bool     hist_request = false;   // app sent "H"  -> emit refuel history (YAML consumes)
 inline bool     ohist_request = false;  // app sent "HO" -> emit oil-change history
@@ -255,6 +339,7 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
     }
     return;
   }
+  if (line[0] == 'X') { probe_parse(line + 1); return; }  // read-only diagnostic probe: "X780 13"
   if (line[0] == 'B') { rblk_request = true; return; }   // emit per-block internal resistance
   if (line[0] == 'G') { uint8_t g = line[1] - '0'; if (g <= 2) city_state = g; return; }  // geofence 0/1/2
   if (line[0] == 'M') { merge_request = true; return; }  // merge last refuel-history entry into the tank
@@ -692,6 +777,17 @@ inline uint16_t on_can_frame(uint16_t resp_id, const std::vector<uint8_t> &x, ui
 inline bool next_request(uint16_t &req_id, std::vector<uint8_t> &out, uint32_t now_ms) {
   // on the fallback path (lost response) an active ISO-TP state may have remained -> clear it
   tp_active = false;
+  // diagnostic probe: goes out instead of the next poll; polling stays paused while we wait
+  if (probe_state == 2) {
+    if (now_ms - probe_t < PROBE_TIMEOUT_MS) return false;
+    probe_state = 3;                                  // timed out (probe_rsp == 0 -> "to", else partial data)
+  }
+  if (probe_state == 1) {
+    req_id = probe_req; out.assign(probe_tx, probe_tx + probe_txn);
+    await_resp = 0xFFFF; ready_for_next = false; last_req_ms = now_ms;
+    probe_t = now_ms; probe_state = 2;
+    return true;
+  }
   for (int tries = 0; tries < POLL_N; tries++) {
     const PollItem &it = POLL[poll_i];
     uint32_t cyc = poll_cycle;

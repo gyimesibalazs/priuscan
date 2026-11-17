@@ -1003,7 +1003,11 @@ canbus:
       - can_id: 0
         can_id_mask: 0
         then:
-          - lambda: 'if (id(dump_mode).state) prius::dump_frame((uint16_t)can_id, x.data(), (int)x.size());'
+          - lambda: |-
+              if (id(dump_mode).state) prius::dump_frame((uint16_t)can_id, x.data(), (int)x.size());
+              // read-only diagnostic probe ("X" host command): collect the answer, ISO-TP flow control on a first frame
+              uint16_t pfc = prius::on_probe_frame((uint16_t)can_id, x.data(), (int)x.size(), millis());
+              if (pfc) id(can0).send_data(pfc, false, {0x30,0x00,0x05,0,0,0,0,0});
 
 # ====================== POLLING SCHEDULE ======================
 interval:
@@ -1068,6 +1072,7 @@ interval:
           // the settled 100% look like a SECOND refuel. -1 -> the next GATED sample re-seeds it.
           if (prius::force_refuel) { prius::force_refuel = false; prius::commit_refuel(millis(), -1.0f); }
           if (prius::rblk_request) { prius::rblk_request = false; prius::emit_rblocks(); }
+          if (prius::probe_state == 3 && !ota_active) prius::emit_probe();
           if (prius::hist_request) { prius::hist_request = false; prius::emit_history(); }
           if (prius::ohist_request) { prius::ohist_request = false; prius::emit_ohist(); }
           if (prius::persist_request) { prius::persist_request = false; prius_persist_save(prius::cur_epoch(millis())); }
