@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -188,12 +189,21 @@ data class TileSpec(
     val color: Color? = null,       // explicit value colour (e.g. coolant ramp)
     val highlight: Boolean = false, // amber value (active state / weakest block)
     val bar: Float? = null,         // hero tiles: 0..1 progress (only for intrinsic 0..100 % values)
+    val icon: androidx.compose.ui.graphics.vector.ImageVector? = null,   // leading icon (not on compact tiles)
 )
 
 @Composable
 fun ValueTile(s: TileSpec, modifier: Modifier = Modifier, hero: Boolean = false, compact: Boolean = false) {
     val c = pc
     PCard(modifier, padding = if (compact) 10.dp else 14.dp) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+       if (s.icon != null && !compact) {
+           androidx.compose.foundation.Image(
+               s.icon, null, Modifier.size(if (hero) 44.dp else 34.dp),
+               colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(if (s.highlight) c.amberText else c.accent))
+           Spacer(Modifier.width(12.dp))
+       }
+       Column {
         Text(s.label, color = c.dim, fontSize = if (hero) 16.sp else if (compact) 13.sp else 15.sp,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(if (compact) 2.dp else 4.dp))
@@ -211,6 +221,8 @@ fun ValueTile(s: TileSpec, modifier: Modifier = Modifier, hero: Boolean = false,
                     fontSize = if (hero) 18.sp else if (compact) 12.sp else 15.sp, maxLines = 1, softWrap = false)
             }
         }
+       }
+      }
         if (hero) {
             Spacer(Modifier.height(10.dp))
             if (s.bar != null) ThinBar(s.bar, s.color ?: c.accent) else Spacer(Modifier.height(6.dp))

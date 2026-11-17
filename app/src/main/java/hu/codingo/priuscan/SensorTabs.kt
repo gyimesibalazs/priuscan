@@ -29,6 +29,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
+import hu.codingo.priuscan.icons.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,7 +52,43 @@ internal fun fieldSpec(state: CanState, f: Field): TileSpec {
         unit = if (v == null) "" else f.unit,
         color = if (f.key == "ct") coolantColor(v) else null,
         bar = if (f.unit == "%" && v != null) (v / 100.0).toFloat() else null,
+        icon = tileIcon(f.key, f.unit),
     )
+}
+
+/** Leading icon of a tile: a few keys have their own, the rest go by unit. */
+internal fun tileIcon(key: String, unit: String): ImageVector = when (key) {
+    "maf", "hvAir" -> IcAir
+    "thr", "pedal", "gasB" -> IcTune
+    "load" -> IcMemory
+    "injml" -> IcWaterDrop
+    "soc" -> IcBatteryFull
+    "weakB", "wblk", "rwblk" -> IcLayers
+    "wz", "cwL", "rasym" -> IcInsights
+    "battFan", "blower" -> IcWindPower
+    "evap" -> IcAcUnit
+    "comp" -> IcCyclone
+    "acAmb", "solar" -> IcWbSunny
+    "wFL", "wFR", "wRL", "wRR" -> IcTireRepair
+    "wDif" -> IcCompareArrows
+    "gLat" -> IcSwapHoriz
+    "gFwd" -> IcSwapVert
+    "yaw" -> IcRotateRight
+    "steer" -> IcExplore
+    "brkP", "brkPos" -> IcAdjust
+    else -> when (unit) {
+        "°C" -> IcThermostat
+        "rpm", "km/h" -> IcSpeed
+        "V", "kW", "W" -> IcBolt
+        "A" -> IcElectricBolt
+        "Nm" -> Icons.Outlined.Settings
+        "kPa", "MPa" -> IcCompress
+        "l/h" -> IcLocalGasStation
+        "s" -> IcTimer
+        "mΩ" -> IcElectricMeter
+        "Ah", "kWh" -> IcBatteryChargingFull
+        else -> IcSensors
+    }
 }
 
 /** Generic group tab (engine, hybrid drive, climate). Engine: first row = hero tiles. */
@@ -66,8 +106,8 @@ internal fun DriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = TabP
     val roll = t?.let { it.roll - prefs.tiltZeroRoll }
     TileGrid(
         fields.map { fieldSpec(state, it) } + listOf(
-            TileSpec(stringResource(R.string.f_pitch), fmtNum(pitch, 1), if (pitch == null) "" else "°"),
-            TileSpec(stringResource(R.string.f_roll), fmtNum(roll, 1), if (roll == null) "" else "°"),
+            TileSpec(stringResource(R.string.f_pitch), fmtNum(pitch, 1), if (pitch == null) "" else "°", icon = IcHeight),
+            TileSpec(stringResource(R.string.f_roll), fmtNum(roll, 1), if (roll == null) "" else "°", icon = IcSwapHoriz),
         ),
         cols,
     )
@@ -78,8 +118,8 @@ internal fun DriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = TabP
     val ev = state.i("ev") != 0
     TileGrid(listOf(
         TileSpec(stringResource(R.string.f_drivemode),
-            when (dm) { 1 -> "ECO"; 2 -> "PWR"; else -> stringResource(R.string.dm_normal) }, highlight = dm != 0),
-        TileSpec(stringResource(R.string.f_evmode), if (ev) "● EV" else "○", highlight = ev),
+            when (dm) { 1 -> "ECO"; 2 -> "PWR"; else -> stringResource(R.string.dm_normal) }, highlight = dm != 0, icon = IcTune),
+        TileSpec(stringResource(R.string.f_evmode), if (ev) "● EV" else "○", highlight = ev, icon = IcElectricCar),
     ), cols)
 
     // cruise control + turn signal (firmware decodes them; not elsewhere in the UI)
@@ -88,16 +128,16 @@ internal fun DriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = TabP
     val ss = state.d("setSpd")
     val turn = state.i("turn")
     TileGrid(listOf(
-        TileSpec(stringResource(R.string.f_cruise), if (cr) "●" else "○", highlight = cr),
+        TileSpec(stringResource(R.string.f_cruise), if (cr) "●" else "○", highlight = cr, icon = IcSpeed),
         TileSpec(stringResource(R.string.f_setSpd), if (ss != null && ss > 0) "%.0f".format(ss) else "–",
-            if (ss != null && ss > 0) "km/h" else ""),
+            if (ss != null && ss > 0) "km/h" else "", icon = IcSpeed),
         TileSpec(stringResource(R.string.f_turn), when (turn) { 1 -> "◄"; 2 -> "►"; else -> "–" },
-            highlight = turn == 1 || turn == 2),
+            highlight = turn == 1 || turn == 2, icon = IcTurnRight),
     ), cols)
 
     SectionTitle(stringResource(R.string.grp_lights), Modifier.padding(top = 6.dp))
     val lt = state.i("lights")
-    @Composable fun light(res: Int, on: Boolean) = TileSpec(stringResource(res), if (on) "●" else "○", highlight = on)
+    @Composable fun light(res: Int, on: Boolean) = TileSpec(stringResource(res), if (on) "●" else "○", highlight = on, icon = IcLightbulb)
     TileGrid(listOf(
         light(R.string.l_position, lt and 0x10 != 0),
         light(R.string.l_lowbeam, lt and 0x20 != 0),
@@ -105,7 +145,7 @@ internal fun DriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = TabP
         light(R.string.l_fogfront, lt and 0x08 != 0),
         light(R.string.l_fogrear, lt and 0x04 != 0),
         // raw ambient-light level (0x620): ~31 bright .. ~600 dark; cluster flips at ~100
-        TileSpec(stringResource(R.string.f_ambL), fmtNum(state.d("ambL"), 0)),
+        TileSpec(stringResource(R.string.f_ambL), fmtNum(state.d("ambL"), 0), icon = IcLightMode),
     ), cols)
 }
 
@@ -138,6 +178,7 @@ internal fun HybridBatteryTab(state: CanState, fields: List<Field>, refAh: Float
         stringResource(R.string.f_capSoh),
         if (cap != null && refAh > 0) "%.0f".format(cap / refAh * 100) else "–",
         if (cap != null && refAh > 0) "%" else "",
+        icon = IcBatteryChargingFull,
     )
     TileGrid(tiles, cols)
 
@@ -267,11 +308,11 @@ internal fun TpmsTab(tpms: Map<Wheel, TireReading>) = TabPage {
 @Composable
 internal fun GpsTab(loc: Location?) = TabPage { cols ->
     TileGrid(listOf(
-        TileSpec(stringResource(R.string.f_lat), loc?.let { "%.6f".format(it.latitude) } ?: stringResource(R.string.gps_no_fix)),
-        TileSpec(stringResource(R.string.f_lon), loc?.let { "%.6f".format(it.longitude) } ?: "–"),
-        TileSpec(stringResource(R.string.f_gspd), loc?.let { "%.0f".format(it.speed * 3.6f) } ?: "–", if (loc != null) "km/h" else ""),
-        TileSpec(stringResource(R.string.f_galt), loc?.let { "%.0f".format(it.altitude) } ?: "–", if (loc != null) "m" else ""),
-        TileSpec(stringResource(R.string.f_gbrg), loc?.let { "%.0f".format(it.bearing) } ?: "–", if (loc != null) "°" else ""),
-        TileSpec(stringResource(R.string.f_gacc), loc?.let { "%.0f".format(it.accuracy) } ?: "–", if (loc != null) "m" else ""),
+        TileSpec(stringResource(R.string.f_lat), loc?.let { "%.6f".format(it.latitude) } ?: stringResource(R.string.gps_no_fix), icon = IcMyLocation),
+        TileSpec(stringResource(R.string.f_lon), loc?.let { "%.6f".format(it.longitude) } ?: "–", icon = IcMyLocation),
+        TileSpec(stringResource(R.string.f_gspd), loc?.let { "%.0f".format(it.speed * 3.6f) } ?: "–", if (loc != null) "km/h" else "", icon = IcSpeed),
+        TileSpec(stringResource(R.string.f_galt), loc?.let { "%.0f".format(it.altitude) } ?: "–", if (loc != null) "m" else "", icon = IcHeight),
+        TileSpec(stringResource(R.string.f_gbrg), loc?.let { "%.0f".format(it.bearing) } ?: "–", if (loc != null) "°" else "", icon = IcNavigation),
+        TileSpec(stringResource(R.string.f_gacc), loc?.let { "%.0f".format(it.accuracy) } ?: "–", if (loc != null) "m" else "", icon = IcGpsFixed),
     ), cols)
 }
