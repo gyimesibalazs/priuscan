@@ -5,7 +5,9 @@ import androidx.compose.runtime.collectAsState
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.widthIn
@@ -37,10 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Top-view car (the pre-rendered car_00.png "all doors closed" silhouette) with a
- * tyre chip at each corner + the spare in the middle. Per chip: pressure on top
- * (big), temperature below (small). Grey when missing/stale, white otherwise.
- * (Target-range colouring belongs to Phase 4 alerts.)
+ * Top-view car (the pre-rendered car_00.png "all doors closed" silhouette) centred, with a card
+ * per wheel beside its corner + the spare card under the trunk. Per card: sensor ID, pressure
+ * (big), temperature, low-battery glyph and the raw D2 flags. Dimmed when missing/stale.
+ * (No OK/LOW verdict: there is no pressure threshold in the app yet - Phase 4 alerts.)
  */
 @Composable
 fun TpmsCarView(readings: Map<Wheel, TireReading>, modifier: Modifier = Modifier) {
@@ -51,48 +53,71 @@ fun TpmsCarView(readings: Map<Wheel, TireReading>, modifier: Modifier = Modifier
     }
     val now = System.currentTimeMillis()
     val ids by CanService.tpmsIds.collectAsState()
-    // cap width so the corner tyre values sit close to the car (not flung to the
-    // far edges on a wide landscape screen), centered. Spare goes UNDER the car (the trunk).
-    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-        Column(Modifier.widthIn(max = 440.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            BoxWithConstraints(
-                Modifier.fillMaxWidth().height(280.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (bmp != null) {
-                    Image(bmp, contentDescription = null, modifier = Modifier.fillMaxHeight(), contentScale = ContentScale.Fit)
+    @Composable fun card(w: Wheel, m: Modifier) = WheelCard(readings[w], ids[w], now, m)
+    BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+        if (maxWidth >= 760.dp) {
+            // wide: [FL / RL] car [FR / RR], spare centred underneath
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(Modifier.height(340.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                    Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.SpaceAround) {
+                        card(Wheel.FL, Modifier.width(CARD_W)); card(Wheel.RL, Modifier.width(CARD_W))
+                    }
+                    if (bmp != null)
+                        Image(bmp, contentDescription = null, modifier = Modifier.fillMaxHeight(), contentScale = ContentScale.Fit)
+                    Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.SpaceAround) {
+                        card(Wheel.FR, Modifier.width(CARD_W)); card(Wheel.RR, Modifier.width(CARD_W))
+                    }
                 }
-                WheelChip(readings[Wheel.FL], ids[Wheel.FL], now, Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 8.dp))
-                WheelChip(readings[Wheel.FR], ids[Wheel.FR], now, Modifier.align(Alignment.TopEnd).padding(end = 8.dp, top = 8.dp))
-                WheelChip(readings[Wheel.RL], ids[Wheel.RL], now, Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 8.dp))
-                WheelChip(readings[Wheel.RR], ids[Wheel.RR], now, Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 8.dp))
+                Spacer(Modifier.height(12.dp))
+                card(Wheel.SPARE, Modifier.width(CARD_W))
             }
-            // spare: under the trunk (below the rear of the car)
-            WheelChip(readings[Wheel.SPARE], ids[Wheel.SPARE], now, Modifier.padding(top = 4.dp, bottom = 8.dp))
+        } else {
+            // narrow: car on top, then a 2-column grid of wheel cards + the spare
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (bmp != null)
+                    Image(bmp, contentDescription = null, modifier = Modifier.height(200.dp), contentScale = ContentScale.Fit)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    card(Wheel.FL, Modifier.weight(1f)); card(Wheel.FR, Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    card(Wheel.RL, Modifier.weight(1f)); card(Wheel.RR, Modifier.weight(1f))
+                }
+                card(Wheel.SPARE, Modifier.fillMaxWidth(0.5f))
+            }
         }
     }
 }
 
+private val CARD_W = 260.dp
+
 @Composable
-private fun WheelChip(r: TireReading?, id: String?, now: Long, modifier: Modifier) {
+private fun WheelCard(r: TireReading?, id: String?, now: Long, modifier: Modifier) {
+    val c = pc
     val stale = r == null || r.stale(now)
-    val color = if (stale) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onBackground
-    // sensor ID instead of a position label - the position is obvious from the layout
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(id ?: "–", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-        Text(
-            if (r == null) "– bar" else "%.2f bar".format(r.bar),
-            color = color, fontWeight = FontWeight.Bold, fontSize = 20.sp, fontFamily = FontFamily.Monospace,
-        )
+    PCard(modifier) {
+        // sensor ID instead of a position label - the position is obvious from the layout
+        Text(id ?: "–", color = c.dim, fontSize = 13.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
+        Row {
+            Text(
+                if (r == null) "–" else "%.2f".format(r.bar), Modifier.alignByBaseline(),
+                color = if (stale) c.dim else c.accent, fontWeight = FontWeight.Bold, fontSize = 38.sp,
+                style = NumStyle, maxLines = 1, softWrap = false,
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("bar", Modifier.alignByBaseline(), color = if (stale) c.dim else c.text,
+                fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (r == null) "–°C" else "${r.tempC}°C",
-                color = color, fontSize = 13.sp, fontFamily = FontFamily.Monospace,
+                color = if (stale) c.dim else c.text, fontSize = 17.sp, style = NumStyle,
             )
             // empty-battery icon when the sensor reports a weak battery (D2 bit4)
             if (r != null && r.lowBatt) {
-                Spacer(Modifier.size(5.dp))
-                EmptyBatteryIcon(Color(0xFFFFB74D))
+                Spacer(Modifier.size(8.dp))
+                EmptyBatteryIcon(c.amberText)
             }
         }
         // raw D2 flag byte (hex) shown when non-zero - the D2 bits are not fully
@@ -101,7 +126,7 @@ private fun WheelChip(r: TireReading?, id: String?, now: Long, modifier: Modifie
         if (r != null && r.flags != 0) {
             Text(
                 "D2 0x%02X".format(r.flags),
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, fontFamily = FontFamily.Monospace,
+                color = c.dim, fontSize = 12.sp, fontFamily = FontFamily.Monospace,
             )
         }
     }

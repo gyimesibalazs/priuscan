@@ -1,93 +1,76 @@
 package hu.codingo.priuscan
 
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.runtime.withFrameNanos
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.Location
-import android.net.Uri
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
 
@@ -111,8 +94,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(prefs: Prefs) {
     val state by CanService.state.collectAsState()
-    val connected by CanService.connected.collectAsState()
-    val device by CanService.deviceInfo.collectAsState()
     val tpmsReadings by CanService.tpms.collectAsState()
     val gpsLoc by CanService.gps.collectAsState()
 
@@ -129,64 +110,57 @@ fun MainScreen(prefs: Prefs) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        ScrollableTabRow(
-            selectedTabIndex = tab.coerceIn(0, titles.size - 1),
-            edgePadding = 8.dp,
-            containerColor = MaterialTheme.colorScheme.background,
-            contentColor = MaterialTheme.colorScheme.onBackground,
-        ) {
-            titles.forEachIndexed { i, t ->
-                Tab(selected = tab == i, onClick = { tab = i },
-                    text = { Text(t, fontSize = 12.sp, maxLines = 1) })
+        CapsuleTabBar(
+            titles, tab.coerceIn(0, titles.size - 1), { tab = it },
+            Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 2.dp),
+        )
+        Box(Modifier.weight(1f)) {
+            when (tab) {
+                0 -> DashboardTab(state, prefs)
+                in 1..groups.size -> {
+                    val (titleRes, fields) = groups[tab - 1]
+                    when (titleRes) {
+                        R.string.grp_hybrid_batt -> HybridBatteryTab(state, fields, prefs.batteryRefAh)
+                        R.string.grp_drive_brake -> DriveTab(state, fields, prefs)
+                        else -> GroupTab(state, fields, hero = titleRes == R.string.grp_engine)
+                    }
+                }
+                groups.size + 1 -> TpmsTab(tpmsReadings)
+                groups.size + 2 -> GpsTab(gpsLoc)
+                else -> SettingsScreen(prefs) { tab = 0 }
             }
-        }
-        when (tab) {
-            0 -> DashboardTab(state, prefs)
-            in 1..groups.size -> {
-                val (titleRes, fields) = groups[tab - 1]
-                if (titleRes == R.string.grp_hybrid_batt) HybridBatteryTab(state, fields, prefs.batteryRefAh)
-                else if (titleRes == R.string.grp_drive_brake) DriveTab(state, fields, prefs)
-                else GroupTab(state, fields)
-            }
-            groups.size + 1 -> TpmsTab(tpmsReadings)
-            groups.size + 2 -> GpsTab(gpsLoc)
-            else -> SettingsScreen(prefs) { tab = 0 }
         }
     }
 }
 
-@Composable
-private fun tabColumn(content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
-    // cap content width and center it, so on a wide landscape head-unit screen the
-    // rows (and the tyre values next to the car drawing) stay readable, not stretched.
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(
-            Modifier.widthIn(max = 820.dp).fillMaxHeight().padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            item { Spacer(Modifier.height(8.dp)) }
-            content()
-            item { Spacer(Modifier.height(24.dp)) }
-        }
-    }
-}
+// ================================ Dashboard ================================
 
-/** Tab 1: glance dashboard - header + odometer + fuel level + the trip switcher. */
+private val HEADER_H = 164.dp      // common min height of the header card and the gauges card
+
+/** Tab 1: glance dashboard. Wide screen: [level card] | [header card | gauges card] above the
+ *  trip chips + the selected trip's statistics card. The level card exists only with tilt data. */
 @Composable
 private fun DashboardTab(state: CanState, prefs: Prefs) {
     val tilt by CanService.tilt.collectAsState()
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        tabColumn {
-            item { Header(state) }   // odo + fuel level now live in the header (tank gauge + ODO row)
-            item { TripSection() }
-        }
-        // the content column is capped at 820 dp -> on a wide head unit the side margins are empty;
-        // the bullseye level lives in the LEFT one (nearest the driver). Narrow screens: not shown
-        // (the angles are still listed on the drive tab).
-        val side = (maxWidth - 820.dp) / 2
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        // narrow screens: no level card (the angles are still listed on the drive tab)
         val t = tilt
-        if (t != null && side >= LEVEL_SIZE + 16.dp)
-            LevelPanel(t, prefs, Modifier.align(Alignment.TopStart).padding(start = (side - LEVEL_SIZE) / 2, top = 20.dp))
+        val showLevel = t != null && maxWidth >= 900.dp
+        Row(
+            Modifier.widthIn(max = 1400.dp).fillMaxSize().verticalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (showLevel && t != null)
+                PCard(horizontalAlignment = Alignment.CenterHorizontally) { LevelPanel(t, prefs) }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    HeaderCard(state, Modifier.weight(1f))
+                    GaugesCard(state)
+                }
+                TripSection()
+            }
+        }
     }
 }
 
@@ -220,146 +194,298 @@ private fun LevelPanel(t: Tilt, prefs: Prefs, modifier: Modifier = Modifier) {
         }
     }
     val pitch = t.pitch - zeroP; val roll = t.roll - zeroR
-    val text = MaterialTheme.colorScheme.onBackground
+    val c = pc
     Column(modifier.width(LEVEL_SIZE).pointerInput(Unit) {
         detectTapGestures(onPress = { holding = true; tryAwaitRelease(); holding = false })
     }, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(LEVEL_SIZE), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
                 val stroke = 4.dp.toPx(); val rad = 11.dp.toPx()
-                val c = Offset(size.width / 2, size.height / 2)
+                val ctr = Offset(size.width / 2, size.height / 2)
                 val rOut = size.width / 2 - stroke / 2
                 val travel = rOut - stroke / 2 - rad                       // bubble centre at 8 deg
-                drawCircle(CGaugeFrame, rOut, c, style = Stroke(stroke))
-                drawCircle(CGaugeFrame, travel / 2, c, style = Stroke(2f))  // 4 deg ring
-                drawLine(CGaugeFrame, Offset(c.x - rOut, c.y), Offset(c.x + rOut, c.y), strokeWidth = 2f)
-                drawLine(CGaugeFrame, Offset(c.x, c.y - rOut), Offset(c.x, c.y + rOut), strokeWidth = 2f)
+                drawCircle(c.gaugeFrame, rOut, ctr, style = Stroke(stroke))
+                drawCircle(c.gaugeFrame, travel / 2, ctr, style = Stroke(2f))  // 4 deg ring
+                drawLine(c.gaugeFrame, Offset(ctr.x - rOut, ctr.y), Offset(ctr.x + rOut, ctr.y), strokeWidth = 2f)
+                drawLine(c.gaugeFrame, Offset(ctr.x, ctr.y - rOut), Offset(ctr.x, ctr.y + rOut), strokeWidth = 2f)
                 var fx = (-roll / LEVEL_RANGE).toFloat(); var fy = (-pitch / LEVEL_RANGE).toFloat()
                 val mag = kotlin.math.hypot(fx, fy)
                 if (mag > 1f) { fx /= mag; fy /= mag }
-                drawCircle(if (mag > 1f) CAmber else CGreen, rad, Offset(c.x + fx * travel, c.y + fy * travel))
+                drawCircle(if (mag > 1f) c.amber else c.green, rad, Offset(ctr.x + fx * travel, ctr.y + fy * travel))
             }
             if (progress > 0f)
                 CircularProgressIndicator(progress = { progress }, strokeWidth = 3.dp, modifier = Modifier.size(52.dp))
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             for ((arrow, a) in listOf("↕" to pitch, "↔" to roll))
-                Text("$arrow%+.1f°".format(Math.round(a * 10) / 10.0 + 0.0), color = text, fontSize = 18.sp,   // +0.0: no "-0.0"
+                Text("$arrow%+.1f°".format(Math.round(a * 10) / 10.0 + 0.0), color = c.text, fontSize = 18.sp,   // +0.0: no "-0.0"
                     fontFamily = FontFamily.Monospace, maxLines = 1, softWrap = false)
         }
     }
 }
 
-/** Tyre pressure on its own big tab. */
+/** Header card: coolant temperature | status icons + status line, warnings, HSI bar. */
 @Composable
-private fun TpmsTab(tpms: Map<Wheel, TireReading>) = tabColumn {
-    item { GroupTitle(stringResource(R.string.tpms_title)) }
-    item { TpmsCarView(tpms) }
-}
-
-@Composable
-private fun GroupTab(state: CanState, fields: List<Field>) = tabColumn {
-    itemsIndexed(fields) { _, f ->
-        SensorRow(stringResource(f.labelRes), format(state.d(f.key), f.decimals, f.unit))
-    }
-}
-
-/** Driving tab = the drive/brake fields + the exterior-light states (0x622 bitmask). */
-@Composable
-private fun DriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = tabColumn {
-    itemsIndexed(fields) { _, f ->
-        SensorRow(stringResource(f.labelRes), format(state.d(f.key), f.decimals, f.unit))
-    }
-    // slope from the G sensor (same values as the dashboard spirit levels, zero offset applied)
-    item {
-        val t by CanService.tilt.collectAsState()
-        SensorRow(stringResource(R.string.f_pitch), format(t?.let { it.pitch - prefs.tiltZeroPitch }, 1, "°"))
-    }
-    item {
-        val t by CanService.tilt.collectAsState()
-        SensorRow(stringResource(R.string.f_roll), format(t?.let { it.roll - prefs.tiltZeroRoll }, 1, "°"))
-    }
-    // drive mode (0x49B b4): NORMAL/ECO/PWR selector + independent EV toggle
-    item { GroupTitle(stringResource(R.string.grp_drivemode)) }
-    item {
-        val dm = state.i("dmode") ?: 0
-        SensorRow(stringResource(R.string.f_drivemode),
-            when (dm) { 1 -> "ECO"; 2 -> "PWR"; else -> stringResource(R.string.dm_normal) },
-            highlight = dm != 0)
-    }
-    item {
-        val ev = (state.i("ev") ?: 0) != 0
-        SensorRow(stringResource(R.string.f_evmode), if (ev) "● EV" else "○", highlight = ev)
-    }
-
-    // cruise control + turn signal (firmware decodes them; not elsewhere in the UI)
-    item { GroupTitle(stringResource(R.string.grp_cruise)) }
-    item {
-        val cr = (state.i("cruise") ?: 0) != 0
-        SensorRow(stringResource(R.string.f_cruise), if (cr) "●" else "○", highlight = cr)
-    }
-    item {
-        val ss = state.d("setSpd")
-        SensorRow(stringResource(R.string.f_setSpd), if (ss != null && ss > 0) "%.0f km/h".format(ss) else "–")
-    }
-    item {
-        val t = state.i("turn") ?: 0
-        SensorRow(stringResource(R.string.f_turn), when (t) { 1 -> "◄"; 2 -> "►"; else -> "–" }, highlight = t == 1 || t == 2)
-    }
-
-    item { GroupTitle(stringResource(R.string.grp_lights)) }
-    val lt = state.i("lights") ?: 0
-    item { LightRow(R.string.l_position, lt and 0x10 != 0) }
-    item { LightRow(R.string.l_lowbeam,  lt and 0x20 != 0) }
-    item { LightRow(R.string.l_highbeam, lt and 0x40 != 0) }
-    item { LightRow(R.string.l_fogfront, lt and 0x08 != 0) }
-    item { LightRow(R.string.l_fogrear,  lt and 0x04 != 0) }
-    // raw ambient-light level (0x620): ~31 bright .. ~600 dark; cluster flips at ~100
-    item { SensorRow(stringResource(R.string.f_ambL), format(state.d("ambL"), 0, "")) }
-}
-
-@Composable
-private fun LightRow(labelRes: Int, on: Boolean) {
-    SensorRow(stringResource(labelRes), if (on) "●" else "○", highlight = on)
-}
-
-/** Hybrid-battery tab: the battery fields + SoH + the b01..b14 block voltages merged in. */
-@Composable
-private fun HybridBatteryTab(state: CanState, fields: List<Field>, refAh: Float) = tabColumn {
-    itemsIndexed(fields) { _, f ->
-        SensorRow(stringResource(f.labelRes), format(state.d(f.key), f.decimals, f.unit))
-    }
-    // State of Health = learned capacity / reference capacity (degradation)
-    val cap = state.d("capAh")
-    item {
-        SensorRow(
-            stringResource(R.string.f_capSoh),
-            if (cap != null && refAh > 0) "%.0f %%".format(cap / refAh * 100) else "–",
-        )
-    }
-    item { GroupTitle(stringResource(R.string.hv_block_voltages)) }
-    itemsIndexed((1..14).toList()) { _, i ->
-        val v = state.d("b%02d".format(i))
-        SensorRow(
-            stringResource(R.string.block_n, i),
-            if (v == null) "–" else "%.2f V".format(v),
-            highlight = state.i("weakB") == i,
-        )
-    }
-    // per-block internal resistance (on-demand "B"; refreshed every 5 s while this tab is open)
-    item { GroupTitle(stringResource(R.string.hv_block_res)) }
-    item {
-        LaunchedEffect(Unit) { while (true) { CanService.fetchBlockR(); kotlinx.coroutines.delay(5000) } }
-        val r by CanService.blockR.collectAsState()
-        Column {
-            (1..14).forEach { i ->
-                val v = r.getOrNull(i - 1)
-                SensorRow(stringResource(R.string.block_n, i),
-                    if (v == null || v.isNaN()) "–" else "%.1f mΩ".format(v))
+private fun HeaderCard(s: CanState, modifier: Modifier = Modifier) {
+    val c = pc
+    PCard(modifier.heightIn(min = HEADER_H), padding = 14.dp) {
+        Row(Modifier.fillMaxWidth().height(92.dp), verticalAlignment = Alignment.CenterVertically) {
+            // coolant temperature; no font padding so it hugs the card's top line
+            val cc = coolantColor(s.coolant)
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    s.coolant?.let { "${it.toInt()}" } ?: "–",
+                    fontSize = 80.sp, fontWeight = FontWeight.Bold, color = cc, style = NumStyle.merge(
+                        TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))),
+                    maxLines = 1, softWrap = false,
+                )
+                Text("°", fontSize = 36.sp, fontWeight = FontWeight.Bold, color = cc,
+                    modifier = Modifier.padding(top = 2.dp))
+            }
+            Spacer(Modifier.width(16.dp))
+            Box(Modifier.width(1.dp).fillMaxHeight(0.8f).background(c.divider))
+            Spacer(Modifier.width(18.dp))
+            // status icons (up to 2 rows) at the top, justified status line at the bottom
+            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
+                StatusIcons(s)
+                OdoRow(s)
             }
         }
+        val cwl = s.i("cwL")          // learned weak-block (z-score)
+        val rasym = s.i("rasym")      // per-block resistance asymmetry (degradation)
+        if (s.wpWarn > 0 || s.cellWarn > 0 || cwl > 0 || rasym > 0) {
+            val parts = mutableListOf<String>()
+            if (s.wpWarn > 0)   parts += stringResource(if (s.wpWarn >= 2) R.string.warn_overheat else R.string.warn_cooling)
+            if (s.cellWarn > 0) parts += stringResource(if (s.cellWarn >= 2) R.string.warn_hv_fault else R.string.warn_hv_cell)
+            if (cwl > 0)        parts += stringResource(R.string.warn_weak_block, s.i("wblk"))
+            if (rasym > 0)      parts += stringResource(R.string.warn_high_res, s.i("rwblk"))
+            Text(
+                parts.joinToString("  •  "), Modifier.padding(top = 6.dp),
+                color = c.redText, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+            )
+        }
+        Spacer(Modifier.height(10.dp))   // margin so the HSI bar doesn't touch the row above
+        HsiStrip(s)
     }
+}
+
+/** Hybrid System Indicator bar (0x247). Zoned + stepped, filled FROM the HSI=0 point (15% width):
+ *  hsi<0 fills left into CHG, hsi>0 fills right through ECO into PWR. Validated thresholds:
+ *  HSI 50 = the engine joins MG2 (centre tick), HSI 100 = the EV/power limit = the ECO/PWR boundary.
+ *  Widths CHG 15% (-100..0) / ECO 70% (0..100, linear: 50 at the centre) / PWR 15% (100..150).
+ *  Heights: CHG 1u bottom, ECO 2u full, PWR 1u top. Rounded ends; zone labels underneath. */
+@Composable
+private fun HsiStrip(s: CanState) {
+    val hsi = s.d("hsi")?.toFloat() ?: return
+    val c = pc
+    fun frac(h: Float): Float = (when {
+        h <= 0f   -> (h + 100f) / 100f * 0.15f              // -100..0  -> 0..15%   (CHG/regen)
+        h <= 100f -> 0.15f + h / 100f * 0.70f               // 0..100   -> 15..85%  (ECO; 50 at centre)
+        else      -> 0.85f + (h - 100f) / 50f * 0.15f       // 100..150 -> 85..100% (PWR)
+    }).coerceIn(0f, 1f)
+    val xc = frac(hsi); val xa = 0.15f                      // anchor = HSI 0
+    val lo = minOf(xa, xc); val hi = maxOf(xa, xc)
+    val chg = c.accent; val eco = c.green; val pwr = c.amber
+    Canvas(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(5.dp))) {
+        val w = size.width; val u = size.height / 2f        // 1 unit = half the height
+        fun zone(za: Float, zb: Float, yt: Float, yb: Float, col: Color) {
+            drawRect(c.track, Offset(za * w, yt * u), Size((zb - za) * w, (yb - yt) * u))   // empty
+            val ca = maxOf(za, lo); val cb = minOf(zb, hi)
+            if (cb > ca) drawRect(col, Offset(ca * w, yt * u), Size((cb - ca) * w, (yb - yt) * u))  // fill
+        }
+        zone(0f, 0.15f, 1f, 2f, chg)       // CHG  (bottom 1u)
+        zone(0.15f, 0.85f, 0f, 2f, eco)    // ECO  (full 2u)
+        zone(0.85f, 1f, 0f, 1f, pwr)       // PWR  (top 1u)
+        val m50 = frac(50f) * w            // engine-start tick (HSI 50 = ECO centre)
+        drawLine(c.text, Offset(m50, 0f), Offset(m50, size.height), strokeWidth = 3f)
+    }
+    // labels centred under each zone (CHG 0..15 %, ECO 15..85 %, PWR 85..100 %); not localized
+    Box(Modifier.fillMaxWidth().padding(top = 3.dp)) {
+        val st = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text("CHG", Modifier.align(BiasAlignment(-0.85f, 0f)), color = if (c.dark) chg else c.accent, style = st)
+        Text("ECO", Modifier.align(BiasAlignment(0f, 0f)), color = c.greenText, style = st)
+        Text("PWR", Modifier.align(BiasAlignment(0.85f, 0f)), color = if (c.dark) pwr else c.amberText, style = st)
+    }
+}
+
+@Composable private fun Ic(res: Int, tint: Color, w: Int = 32) =
+    Image(painterResource(res), null, Modifier.size(w.dp), colorFilter = ColorFilter.tint(tint))
+
+@Composable private fun ModeBadge(text: String, color: Color) {
+    Box(Modifier.border(2.dp, color, RoundedCornerShape(5.dp)).padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center) {
+        Text(text, color = color, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable private fun EvIcon(tint: Color, onTint: Color) {
+    Box(Modifier.size(34.dp), contentAlignment = Alignment.Center) {
+        Image(painterResource(R.drawable.ic_car_ev), null, Modifier.size(34.dp), colorFilter = ColorFilter.tint(tint))
+        Text("EV", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = onTint)
+    }
+}
+
+/** Status-icon strip: only active states show; wraps to a 2nd row when too many. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StatusIcons(s: CanState) {
+    val c = pc
+    // icon tints: the night tones are the original ones; day uses darker tones for sunlight contrast
+    val green = c.green
+    val yellow = if (c.dark) Color(0xFFFFCA28) else Color(0xFFD08C00)
+    val orange = if (c.dark) Color(0xFFFF8C1E) else Color(0xFFD86A00)
+    val lt = s.i("lights")
+    val dmode = s.i("dmode")
+    val evOn = s.i("ev") != 0
+    val spd = s.d("spd") ?: 0.0
+    val rpm = s.d("rpm") ?: 0.0
+    val brk = s.d("brkP") ?: 0.0
+    val mg2 = s.d("mg2Pow") ?: 0.0
+    val brkPos = s.d("brkPos") ?: 0.0
+    val cruise = s.i("cruise") != 0
+    val belt = s.i("belt") != 0
+    val city by CanService.city.collectAsState()   // belterület geofence: true=city, false=open road
+    val phys = brk > 0.55                          // physical (friction) brake = pressure rising
+    // regen (green) = brake PEDAL pressed AND MG2 charging (generating), friction not yet engaged
+    val regen = !phys && brkPos > 3.0 && mg2 < 0.0 && spd > 2
+    val evGhost = !evOn && spd > 2 && rpm < 100     // electric-only drive without EV mode
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        // belterület / országút (red road = open road with low-beam off -> headlight warning)
+        when (city) {
+            true -> Ic(R.drawable.ic_city, green)
+            false -> Ic(R.drawable.ic_road, if (lt and 0x20 == 0) c.red else c.blue)
+            else -> {}
+        }
+        if (lt and 0x10 != 0) Ic(R.drawable.ic_light_position, green)
+        if (lt and 0x20 != 0) Ic(R.drawable.ic_light_low, green)
+        if (lt and 0x40 != 0) Ic(R.drawable.ic_light_high, c.blue)
+        if (lt and 0x08 != 0) Ic(R.drawable.ic_light_fog, green)
+        if (lt and 0x04 != 0) Ic(R.drawable.ic_light_fog, c.amber)
+        if (cruise) Ic(R.drawable.ic_cruise, green)
+        if (phys) Ic(R.drawable.ic_brake_pedal, yellow, 34) else if (regen) Ic(R.drawable.ic_brake_pedal, green, 34)
+        if (evOn) EvIcon(green, Color.White) else if (evGhost) EvIcon(yellow, Color.Black)
+        if (dmode == 1) ModeBadge("ECO", c.greenText)
+        if (dmode == 2) ModeBadge("PWR", orange)
+        if (belt) Ic(R.drawable.ic_seatbelt, c.red)
+    }
+}
+
+/** Justified status line: gear · speed · rpm · odometer · range · consumption. */
+@Composable
+private fun OdoRow(s: CanState) {
+    val c = pc
+    val gear = if (s.gear in 0..4) CanState.GEARS[s.gear] else "–"
+    val spd = s.d("spd")?.let { "${it.toInt()} km/h" } ?: "– km/h"
+    val rpm = "${s.d("rpm")?.toInt() ?: "–"} rpm"
+    val odo = s.d("odo")?.let { "%,d km".format(it.toLong()) } ?: "– km"
+    val cons = s.consumptionView().text()   // EV mode -> kWh/h resp. kWh/100km (pack draw)
+    val range = s.d("range")?.let { "->| ${it.toInt()} km" }   // distance-to-empty
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically) {
+        listOfNotNull(gear, spd, rpm, odo, range, cons).forEachIndexed { i, txt ->
+            if (i > 0) Text("·", color = c.dim, fontSize = 17.sp)
+            Text(txt, color = c.text, fontSize = 17.sp, style = NumStyle, maxLines = 1, softWrap = false)
+        }
+    }
+}
+
+/** Fuel + HV battery gauges in their own card. */
+@Composable
+private fun GaugesCard(s: CanState) {
+    PCard(Modifier.heightIn(min = HEADER_H), verticalArrangement = Arrangement.Center) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FuelGauge(s)
+            BatteryGauge(s)
+        }
+    }
+}
+
+private val GAUGE_W = 70.dp
+private val GAUGE_H = 120.dp
+
+@Composable
+private fun pctStyle(): TextStyle {
+    val c = pc
+    // soft halo in the BACKGROUND tone keeps the % readable over the fill in both themes
+    return TextStyle(color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+        shadow = Shadow(if (c.dark) Color.Black else Color.White, blurRadius = 8f), fontFeatureSettings = "tnum")
+}
+
+@Composable
+private fun FuelGauge(s: CanState) {
+    val c = pc
+    // % shows the CALCULATED real fullness (calibrated liters / tank), and the gauge fill matches.
+    // Falls back to the raw gauge reading when fuelL is not available (warm-up / old firmware).
+    val full = 47f                              // TANK_FULL in prius_parse.h
+    val liters = s.d("fuelL")?.toFloat()
+    val frac = (liters?.let { it / full } ?: ((s.d("fuelIn") ?: 0.0).toFloat() / 100f)).coerceIn(0f, 1f)
+    val pct = liters?.let { (it / full * 100f).toInt() } ?: s.d("fuelIn")?.toInt()
+    val halo = Shadow(if (c.dark) Color.Black else Color.White, blurRadius = 8f)
+    Box(Modifier.width(GAUGE_W).height(GAUGE_H)) {
+        Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, c.amber, c.gaugeFrame, battery = false) }
+        Text(pct?.let { "$it%" } ?: "–",
+            style = pctStyle(), modifier = Modifier.align(BiasAlignment(0f, -0.15f)))
+        // calibrated remaining liters, on a new line UNDER the % (smaller, doesn't move the %)
+        s.d("fuelL")?.let { l ->
+            // calculated remaining liters; turns amber if it disagrees with the measured gauge (drift)
+            val drift = s.d("fuelGm")?.let { kotlin.math.abs(l - it) > 2.5 } ?: false
+            Text("%.1f L".format(l), color = if (drift) c.amberText else c.text, fontSize = 13.sp,
+                style = TextStyle(shadow = halo, fontFeatureSettings = "tnum"),
+                modifier = Modifier.align(BiasAlignment(0f, 0.28f)))
+        }
+        Row(Modifier.align(Alignment.TopCenter).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("←", color = c.dim, fontSize = 16.sp)
+            Image(painterResource(R.drawable.ic_fuel), null, Modifier.size(18.dp), colorFilter = ColorFilter.tint(c.dim))
+        }
+    }
+}
+
+@Composable
+private fun BatteryGauge(s: CanState) {
+    val c = pc
+    val soc = (s.d("soc") ?: 0.0).toFloat()
+    val frac = ((soc - 35f) / (70f - 35f)).coerceIn(0f, 1f)   // operating band ~35..70%
+    val hvA = s.d("hvA") ?: 0.0
+    Box(Modifier.width(GAUGE_W).height(GAUGE_H)) {
+        Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, c.green, c.gaugeFrame, battery = true) }
+        Text(s.d("soc")?.let { "${it.toInt()}%" } ?: "–",
+            style = pctStyle(), modifier = Modifier.align(BiasAlignment(0f, -0.15f)))
+        val dir = if (hvA < -2) "▲" else if (hvA > 2) "▼" else ""   // charge direction
+        if (dir.isNotEmpty()) {
+            // pack power next to the arrow (same line as the fuel gauge's liters): |hvA x VL|,
+            // one decimal under 10 kW so "▼ 23 kW" / "▲ 4.2 kW" both fit the gauge
+            val kw = s.d("vl")?.let { kotlin.math.abs(hvA) * it / 1000.0 }
+            val txt = dir + (kw?.let { if (it < 10) " %.1f kW".format(it) else " %.0f kW".format(it) } ?: "")
+            Text(txt, color = c.text, fontSize = 12.sp,   // green-on-green fill was unreadable; the arrow shows the direction
+                maxLines = 1, softWrap = false,
+                style = TextStyle(shadow = Shadow(if (c.dark) Color.Black else Color.White, blurRadius = 8f)),
+                modifier = Modifier.align(BiasAlignment(0f, 0.28f)))
+        }
+    }
+}
+
+/** Rounded gauge container + bottom-up fill; battery adds two terminal bumps on top. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.gaugeShape(frac: Float, fill: Color, frame: Color, battery: Boolean) {
+    val w = size.width; val h = size.height; val r = 14.dp.toPx()
+    val bump = if (battery) 7.dp.toPx() else 0f
+    if (battery) {
+        val bw = w * 0.22f
+        drawRoundRect(frame, topLeft = Offset(w * 0.15f, 0f), size = Size(bw, bump + 2f), cornerRadius = CornerRadius(3f))
+        drawRoundRect(frame, topLeft = Offset(w * 0.63f, 0f), size = Size(bw, bump + 2f), cornerRadius = CornerRadius(3f))
+    }
+    drawRoundRect(frame, topLeft = Offset(0f, bump), size = Size(w, h - bump),
+        cornerRadius = CornerRadius(r), style = Stroke(3.dp.toPx()))
+    val pad = 7.dp.toPx()
+    val innerTop = bump + pad; val innerBot = h - pad
+    val fillH = (innerBot - innerTop) * frac.coerceIn(0f, 1f)
+    if (fillH > 0f)
+        drawRoundRect(fill, topLeft = Offset(pad, innerBot - fillH), size = Size(w - 2 * pad, fillH),
+            cornerRadius = CornerRadius(10f))
 }
 
 // Trip switcher definitions. idx = position in the firmware "slots" array
@@ -378,101 +504,113 @@ private val TRIPS = listOf(
     TripDef(R.string.trip_life, null, 1, 0, 0),
 )
 
-/** The dashboard trip switcher: scrollable chips + the selected trip's stats, a long-press
- *  reset (with circular progress) for resettable trips, and history for Tank/Oil. */
+/** The dashboard trip switcher: chips + the selected trip's stats card, a long-press reset (with
+ *  circular progress) for resettable trips, snapshot-into-A/B/C, and history for Tank/Oil. */
 @Composable
 private fun TripSection() {
+    val c = pc
     val slots by CanService.tripSlots.collectAsState()
     val refuelHist by CanService.refuelHist.collectAsState()
     val oilHist by CanService.oilHist.collectAsState()
     var sel by remember { mutableStateOf(0) }
     val def = TRIPS[sel]
 
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            TRIPS.forEachIndexed { i, t ->
-                val label = if (t.arg != null) stringResource(t.labelRes, t.arg) else stringResource(t.labelRes)
-                FilterChip(selected = i == sel, onClick = { sel = i }, label = { Text(label, fontSize = 12.sp) })
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).widthIn(min = maxWidth),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                TRIPS.forEachIndexed { i, t ->
+                    val label = if (t.arg != null) stringResource(t.labelRes, t.arg) else stringResource(t.labelRes)
+                    PillChip(label, selected = i == sel, onClick = { sel = i })
+                    if (i < TRIPS.lastIndex) Spacer(Modifier.width(8.dp))
+                }
             }
         }
-        Spacer(Modifier.height(6.dp))
         if (slots.isEmpty()) {
-            Text(stringResource(R.string.trip_need_fw), color = Color(0xFFFFB74D), fontSize = 14.sp)
+            PCard(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.trip_need_fw), color = c.amberText, fontSize = 15.sp)
+            }
             return@Column
         }
         val s = slots.getOrNull(def.idx) ?: TripSlot.EMPTY
         val evPct = if (s.dist > 0.1) (s.ev / s.dist * 100).toInt() else 0
-        SensorRow(stringResource(R.string.r_dist), "%.1f km / %.1f EV km (%d%%)".format(s.dist, s.ev, evPct))
-        SensorRow(stringResource(R.string.r_citydist), "%.1f km / %.1f EV km (%d%%)".format(s.cityDist, s.cityEv, s.cityEvPct))
-        SensorRow(stringResource(R.string.r_fuelused), "%.2f L".format(s.fuel))
-        SensorRow(stringResource(R.string.r_avgcons), "%.1f l/100km".format(s.avgCons))
-        SensorRow(stringResource(R.string.r_avgspeed), "%.0f km/h".format(s.avgKmh))
-        SensorRow(stringResource(R.string.r_movetime), fmtDur(s.moveS.toLong()))
-        SensorRow(stringResource(R.string.r_evcons), "%.2f kWh · %.1f kWh/100km".format(s.evKwh, s.evKwhPer100))
-        SensorRow(stringResource(R.string.r_regen), "%.2f kWh (~%.0f km)".format(s.regenKwh, s.regenKm))
-        if (s.epoch > 0) {
-            Text(
-                fmtDate(s.epoch) + (if (s.odo > 0) "  ·  " + stringResource(R.string.trip_at, "%,d".format(s.odo)) else ""),
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
-            )
-        }
-        if (def.resetCmd > 0) {
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ResetHoldButton {
-                    CanService.resetSlot(def.resetCmd)
-                    if (def.hist == 2) CanService.fetchOilHistory()
-                }
-                Spacer(Modifier.width(10.dp))
-                Text(stringResource(R.string.trip_hold), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            }
-        }
-        if (def.hist == 2) OilSection(s)   // due indicator + "register oil change" (sends R2)
-        if (def.copySrc != null) {   // snapshot this live trip into A/B/C (hold)
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.trip_copy), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                Spacer(Modifier.width(8.dp))
-                ResetHoldButton(label = "A") { CanService.copySlot(3, def.copySrc) }
-                Spacer(Modifier.width(6.dp))
-                ResetHoldButton(label = "B") { CanService.copySlot(4, def.copySrc) }
-                Spacer(Modifier.width(6.dp))
-                ResetHoldButton(label = "C") { CanService.copySlot(5, def.copySrc) }
-            }
-        }
-        if (def.hist != 0) {
-            LaunchedEffect(sel) { if (def.hist == 1) CanService.fetchRefuelHistory() else CanService.fetchOilHistory() }
-            val h = if (def.hist == 1) refuelHist else oilHist
-            Spacer(Modifier.height(8.dp))
-            GroupTitle(stringResource(R.string.r_history))
-            if (def.hist == 1) {   // undo a false refuel: merge the last entry back into the tank (hold)
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                    Text(stringResource(R.string.undo_refuel), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                    Spacer(Modifier.width(8.dp))
-                    ResetHoldButton(label = "⤺") { CanService.mergeLastRefuel(); CanService.fetchRefuelHistory() }
-                }
-            }
-            if (h.isEmpty()) {
-                Text(stringResource(R.string.r_none), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-            } else {
-                val oilMeta by OilLog.entries.collectAsState()   // join app-side metadata by period-start odo
-                h.asReversed().forEach { r ->   // newest first
-                    SensorRow(
-                        fmtDate(r.epoch),
-                        "%.1f km · %.1f EV · %.1f l/100km · %.1f kWh/100km · %.2f kWh (~%.0f km)".format(
-                            r.dist, r.ev, r.avgCons, r.evKwhPer100, r.regenKwh, r.regenKm),
+        PCard(Modifier.fillMaxWidth(), padding = 16.dp) {
+            StatRow(stringResource(R.string.r_dist), "%.1f km / %.1f EV km (%d%%)".format(s.dist, s.ev, evPct))
+            StatRow(stringResource(R.string.r_citydist), "%.1f km / %.1f EV km (%d%%)".format(s.cityDist, s.cityEv, s.cityEvPct))
+            StatRow(stringResource(R.string.r_fuelused), "%.2f L".format(s.fuel))
+            StatRow(stringResource(R.string.r_avgcons), "%.1f l/100km".format(s.avgCons))
+            StatRow(stringResource(R.string.r_avgspeed), "%.0f km/h".format(s.avgKmh))
+            StatRow(stringResource(R.string.r_movetime), fmtDur(s.moveS.toLong()))
+            StatRow(stringResource(R.string.r_evcons), "%.2f kWh · %.1f kWh/100km".format(s.evKwh, s.evKwhPer100))
+            StatRow(stringResource(R.string.r_regen), "%.2f kWh (~%.0f km)".format(s.regenKwh, s.regenKm))
+
+            // footer: period start · snapshot into A/B/C · hold-to-reset
+            Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                var first = true
+                if (s.epoch > 0) {
+                    Text(
+                        fmtDate(s.epoch) + (if (s.odo > 0) "  ·  " + stringResource(R.string.trip_at, "%,d".format(s.odo)) else ""),
+                        color = c.dim, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (def.hist == 2) oilMeta.lastOrNull { kotlin.math.abs(it.odo - r.odo) <= 3 }?.let { m ->
-                        Text(
-                            listOfNotNull(m.oilType.ifBlank { null },
-                                          if (m.filter) stringResource(R.string.oil_filter) else null,
-                                          m.note.ifBlank { null }).joinToString(" · "),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp,
-                            modifier = Modifier.padding(start = 12.dp),
+                    first = false
+                }
+                if (def.copySrc != null) {   // snapshot this live trip into A/B/C (hold)
+                    if (!first) VDivider()
+                    Text(stringResource(R.string.trip_copy), color = c.dim, fontSize = 14.sp, maxLines = 1)
+                    Spacer(Modifier.width(12.dp))
+                    ResetHoldButton(label = "A") { CanService.copySlot(3, def.copySrc) }
+                    Spacer(Modifier.width(10.dp))
+                    ResetHoldButton(label = "B") { CanService.copySlot(4, def.copySrc) }
+                    Spacer(Modifier.width(10.dp))
+                    ResetHoldButton(label = "C") { CanService.copySlot(5, def.copySrc) }
+                    first = false
+                }
+                if (def.resetCmd > 0) {
+                    if (!first) VDivider()
+                    ResetHoldButton {
+                        CanService.resetSlot(def.resetCmd)
+                        if (def.hist == 2) CanService.fetchOilHistory()
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text(stringResource(R.string.trip_hold), color = c.dim, fontSize = 14.sp, maxLines = 1)
+                }
+            }
+            if (def.hist == 2) OilSection(s)   // due indicator + "register oil change" (sends R2)
+            if (def.hist != 0) {
+                LaunchedEffect(sel) { if (def.hist == 1) CanService.fetchRefuelHistory() else CanService.fetchOilHistory() }
+                val h = if (def.hist == 1) refuelHist else oilHist
+                SectionTitle(stringResource(R.string.r_history), Modifier.padding(top = 18.dp, bottom = 4.dp))
+                if (def.hist == 1) {   // undo a false refuel: merge the last entry back into the tank (hold)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+                        Text(stringResource(R.string.undo_refuel), color = c.dim, fontSize = 14.sp)
+                        Spacer(Modifier.width(12.dp))
+                        ResetHoldButton(label = "⤺") { CanService.mergeLastRefuel(); CanService.fetchRefuelHistory() }
+                    }
+                }
+                if (h.isEmpty()) {
+                    Text(stringResource(R.string.r_none), color = c.dim, fontSize = 15.sp)
+                } else {
+                    val oilMeta by OilLog.entries.collectAsState()   // join app-side metadata by period-start odo
+                    h.asReversed().forEachIndexed { i, r ->   // newest first
+                        val meta = if (def.hist == 2) oilMeta.lastOrNull { kotlin.math.abs(it.odo - r.odo) <= 3 } else null
+                        StatRow(
+                            fmtDate(r.epoch),
+                            "%.1f km · %.1f EV · %.1f l/100km · %.1f kWh/100km · %.2f kWh (~%.0f km)".format(
+                                r.dist, r.ev, r.avgCons, r.evKwhPer100, r.regenKwh, r.regenKm),
+                            divider = meta == null && i < h.lastIndex,
                         )
+                        meta?.let { m ->
+                            Text(
+                                listOfNotNull(m.oilType.ifBlank { null },
+                                              if (m.filter) stringResource(R.string.oil_filter) else null,
+                                              m.note.ifBlank { null }).joinToString(" · "),
+                                color = c.dim, fontSize = 13.sp,
+                                modifier = Modifier.padding(start = 12.dp, bottom = 4.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -480,11 +618,19 @@ private fun TripSection() {
     }
 }
 
+@Composable
+private fun VDivider() {
+    Spacer(Modifier.width(16.dp))
+    Box(Modifier.width(1.dp).height(32.dp).background(pc.divider))
+    Spacer(Modifier.width(16.dp))
+}
+
 /** Oil tab extras: due indicator (km + months vs the Settings interval; VISUAL only, no alert)
  *  + the "register oil change" dialog. Confirming sends R2 (the firmware archives the finished
  *  period into ohist and restarts slot[2]) and stores the app-side metadata (OilLog). */
 @Composable
 private fun OilSection(s: TripSlot) {
+    val c = pc
     val ctx = LocalContext.current
     val prefs = remember { Prefs(ctx) }
     LaunchedEffect(Unit) { OilLog.load(ctx) }
@@ -495,21 +641,19 @@ private fun OilSection(s: TripSlot) {
     val months = if (s.epoch > 0) (System.currentTimeMillis() / 1000 - s.epoch) / 2_629_800.0 else 0.0
     val pct = maxOf(s.dist / prefs.oilKm, months / prefs.oilMonths).toFloat()
     val color = when {
-        pct >= 1f -> Color(0xFFE53935)     // overdue
-        pct >= 0.9f -> Color(0xFFFFB300)   // due soon
-        else -> Color(0xFF4CAF50)
+        pct >= 1f -> c.red        // overdue
+        pct >= 0.9f -> c.amber    // due soon
+        else -> c.green
     }
-    Spacer(Modifier.height(6.dp))
-    LinearProgressIndicator(progress = { pct.coerceIn(0f, 1f) },
-        modifier = Modifier.fillMaxWidth().height(6.dp), color = color)
+    Spacer(Modifier.height(12.dp))
+    ThinBar(pct, color, height = 8.dp)
     val curMeta = oilMeta.lastOrNull { kotlin.math.abs(it.odo - s.odo) <= 3 }   // the oil currently in
     Text(
         stringResource(R.string.oil_due, s.dist.toInt(), prefs.oilKm, months, prefs.oilMonths) +
             (curMeta?.oilType?.ifBlank { null }?.let { "  ·  $it" } ?: ""),
-        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
+        color = c.dim, fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp),
     )
-    Spacer(Modifier.height(4.dp))
-    TextButton(onClick = { showDialog = true }) { Text(stringResource(R.string.oil_register)) }
+    TextButton(onClick = { showDialog = true }) { Text(stringResource(R.string.oil_register), fontSize = 15.sp) }
 
     if (showDialog) {
         val odo = CanService.state.collectAsState().value.d("odo")?.toLong() ?: 0L
@@ -522,7 +666,7 @@ private fun OilSection(s: TripSlot) {
             text = {
                 Column {
                     Text(fmtDate(System.currentTimeMillis() / 1000) + "  ·  %,d km".format(odo),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                        color = c.dim, fontSize = 13.sp)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(oilType, { oilType = it },
                         label = { Text(stringResource(R.string.oil_type)) }, singleLine = true)
@@ -551,9 +695,10 @@ private fun OilSection(s: TripSlot) {
     }
 }
 
-/** Press-and-hold (~1.3 s) to reset, with a circular progress around the button. */
+/** Press-and-hold (~1.3 s) bordered button, with a circular progress while held. */
 @Composable
 private fun ResetHoldButton(label: String = "⟲", onReset: () -> Unit) {
+    val c = pc
     var holding by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
     LaunchedEffect(holding) {
@@ -565,310 +710,55 @@ private fun ResetHoldButton(label: String = "⟲", onReset: () -> Unit) {
             if (progress >= 1f) { onReset(); holding = false; break }
         }
     }
+    val shape = RoundedCornerShape(10.dp)
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier.size(52.dp).pointerInput(Unit) {
-            detectTapGestures(onPress = { holding = true; tryAwaitRelease(); holding = false })
-        },
+        modifier = Modifier.width(56.dp).height(46.dp).clip(shape)
+            .border(1.5.dp, if (holding) c.accent else c.borderStrong, shape)
+            .pointerInput(Unit) {
+                detectTapGestures(onPress = { holding = true; tryAwaitRelease(); holding = false })
+            },
     ) {
         if (progress > 0f)
-            CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(52.dp), strokeWidth = 3.dp)
-        Text(label, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+            CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(40.dp), strokeWidth = 3.dp)
+        Text(label, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = c.text)
     }
 }
 
-@Composable
-private fun GpsTab(loc: Location?) = tabColumn {
-    item { SensorRow(stringResource(R.string.f_lat), loc?.let { "%.6f".format(it.latitude) } ?: stringResource(R.string.gps_no_fix)) }
-    item { SensorRow(stringResource(R.string.f_lon), loc?.let { "%.6f".format(it.longitude) } ?: "–") }
-    item { SensorRow(stringResource(R.string.f_gspd), loc?.let { "%.0f km/h".format(it.speed * 3.6f) } ?: "–") }
-    item { SensorRow(stringResource(R.string.f_galt), loc?.let { "%.0f m".format(it.altitude) } ?: "–") }
-    item { SensorRow(stringResource(R.string.f_gbrg), loc?.let { "%.0f°".format(it.bearing) } ?: "–") }
-    item { SensorRow(stringResource(R.string.f_gacc), loc?.let { "%.0f m".format(it.accuracy) } ?: "–") }
-}
-
-// ---- dashboard top palette ----
-private val CGreen = Color(0xFF66BB6A); private val CYellow = Color(0xFFFFCA28)
-private val CBlue = Color(0xFF50AAFF); private val CAmber = Color(0xFFFFA028)
-private val COrange = Color(0xFFFF8C1E); private val CRed = Color(0xFFE53935)
-private val CGaugeFrame = Color(0xFF5F5F5F); private val CIconDim = Color(0xFFAFAFAF)
-
-private val PctStyle = TextStyle(
-    color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-    shadow = Shadow(Color.Black, blurRadius = 10f),
-)
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun Header(s: CanState) {
-    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-        // TOP-aligned so the temp, icons and gauges share a common top line; the block is tall
-        // enough for TWO icon rows (icons at the top, ODO pinned to the bottom).
-        Row(Modifier.fillMaxWidth().height(92.dp), verticalAlignment = Alignment.Top) {
-            // coolant temperature, narrowed horizontally; no font padding so it hugs the top line
-            Text(
-                s.coolant?.let { "${it.toInt()}" } ?: "–",
-                fontSize = 88.sp, fontWeight = FontWeight.Bold, color = coolantColor(s.coolant),
-                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false)),
-                modifier = Modifier.graphicsLayer(scaleX = 0.78f),
-            )
-            Text("°", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = coolantColor(s.coolant),
-                modifier = Modifier.padding(top = 4.dp))
-            Spacer(Modifier.width(20.dp))
-            // middle: status icons (up to 2 rows) at the top, justified ODO row at the bottom
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
-                StatusIcons(s)
-                OdoRow(s)
-            }
-            Spacer(Modifier.width(24.dp))
-            FuelGauge(s)
-            Spacer(Modifier.width(8.dp))
-            BatteryGauge(s)
-        }
-        val cwl = s.i("cwL") ?: 0          // learned weak-block (z-score)
-        val rasym = s.i("rasym") ?: 0      // per-block resistance asymmetry (degradation)
-        if (s.wpWarn > 0 || s.cellWarn > 0 || cwl > 0 || rasym > 0) {
-            val parts = mutableListOf<String>()
-            if (s.wpWarn > 0)   parts += stringResource(if (s.wpWarn >= 2) R.string.warn_overheat else R.string.warn_cooling)
-            if (s.cellWarn > 0) parts += stringResource(if (s.cellWarn >= 2) R.string.warn_hv_fault else R.string.warn_hv_cell)
-            if (cwl > 0)        parts += stringResource(R.string.warn_weak_block, s.i("wblk") ?: 0)
-            if (rasym > 0)      parts += stringResource(R.string.warn_high_res, s.i("rwblk") ?: 0)
-            Text(
-                parts.joinToString("  •  "),
-                color = Color(0xFFFF5252), fontWeight = FontWeight.Bold, fontSize = 15.sp,
-            )
-        }
-        Spacer(Modifier.height(8.dp))   // margin so the HSI strip doesn't touch the row above
-        HsiStrip(s)   // power/charge flow bar at the bottom of the dash-top
-    }
-}
-
-/** Hybrid System Indicator dial (0x247, signed -128..+127). Zoned + stepped, filled FROM the
- *  HSI=0 point (15% width): hsi<0 fills left into CHG (green), hsi>0 fills right through ECO (light
- *  green) into PWR (amber). Validated thresholds: HSI 50 = the engine joins MG2 (centre tick),
- *  HSI 100 = the EV/power limit = the ECO/PWR boundary. Widths CHG 15% (-128..0) / ECO 70%
- *  (0..100, linear: 50 at the centre, 100 at the end) / PWR 15% (100..127). Heights: CHG 1u
- *  bottom, ECO 2u full, PWR 1u top. */
-@Composable
-private fun HsiStrip(s: CanState) {
-    val hsi = s.d("hsi")?.toFloat() ?: return
-    val grey = Color(0xFFCDD2D8)
-    fun frac(h: Float): Float = (when {
-        h <= 0f   -> (h + 100f) / 100f * 0.15f              // -100..0  -> 0..15%   (CHG/regen)
-        h <= 100f -> 0.15f + h / 100f * 0.70f               // 0..100   -> 15..85%  (ECO; 50 at centre)
-        else      -> 0.85f + (h - 100f) / 50f * 0.15f       // 100..150 -> 85..100% (PWR)
-    }).coerceIn(0f, 1f)
-    val xc = frac(hsi); val xa = 0.15f                      // anchor = HSI 0
-    val lo = minOf(xa, xc); val hi = maxOf(xa, xc)
-    Canvas(Modifier.fillMaxWidth().height(14.dp)) {
-        val w = size.width; val u = size.height / 2f        // 1 unit = half the height
-        fun zone(za: Float, zb: Float, yt: Float, yb: Float, col: Color) {
-            drawRect(grey, Offset(za * w, yt * u), Size((zb - za) * w, (yb - yt) * u))   // empty (grey)
-            val ca = maxOf(za, lo); val cb = minOf(zb, hi)
-            if (cb > ca) drawRect(col, Offset(ca * w, yt * u), Size((cb - ca) * w, (yb - yt) * u))  // fill
-        }
-        zone(0f, 0.15f, 1f, 2f, Color(0xFF2EA047))      // CHG  (bottom 1u)
-        zone(0.15f, 0.85f, 0f, 2f, Color(0xFF96C878))   // ECO  (full 2u)
-        zone(0.85f, 1f, 0f, 1f, Color(0xFFF5A028))      // PWR  (top 1u)
-        val m50 = frac(50f) * w                          // engine-start tick (HSI 50 = ECO centre)
-        drawLine(Color(0xFF60686F), Offset(m50, 0f), Offset(m50, size.height), strokeWidth = 2f)
-    }
-}
-
-@Composable private fun Ic(res: Int, tint: Color, w: Int = 30) =
-    Image(painterResource(res), null, Modifier.size(w.dp), colorFilter = ColorFilter.tint(tint))
-
-@Composable private fun ModeBadge(text: String, color: Color) {
-    Box(Modifier.border(2.dp, color, RoundedCornerShape(5.dp)).padding(horizontal = 4.dp),
-        contentAlignment = Alignment.Center) {
-        Text(text, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable private fun EvIcon(tint: Color) {
-    Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-        Image(painterResource(R.drawable.ic_car_ev), null, Modifier.size(32.dp), colorFilter = ColorFilter.tint(tint))
-        Text("EV", fontSize = 8.sp, fontWeight = FontWeight.Bold,
-            color = if (tint == CGreen) Color.White else Color.Black)
-    }
-}
-
-/** Status-icon strip: only active states show; wraps to a 2nd row when too many. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun StatusIcons(s: CanState) {
-    val lt = s.i("lights") ?: 0
-    val dmode = s.i("dmode") ?: 0
-    val evOn = (s.i("ev") ?: 0) != 0
-    val spd = s.d("spd") ?: 0.0
-    val rpm = s.d("rpm") ?: 0.0
-    val brk = s.d("brkP") ?: 0.0
-    val mg2 = s.d("mg2Pow") ?: 0.0
-    val brkPos = s.d("brkPos") ?: 0.0
-    val cruise = (s.i("cruise") ?: 0) != 0
-    val belt = (s.i("belt") ?: 0) != 0
-    val city by CanService.city.collectAsState()   // belterület geofence: true=city, false=open road
-    val phys = brk > 0.55                          // physical (friction) brake = pressure rising
-    // regen (green) = brake PEDAL pressed AND MG2 charging (generating), friction not yet engaged
-    val regen = !phys && brkPos > 3.0 && mg2 < 0.0 && spd > 2
-    val evGhost = !evOn && spd > 2 && rpm < 100     // electric-only drive without EV mode
-    FlowRow(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        // belterület / országút (red road = open road with low-beam off -> headlight warning)
-        when (city) {
-            true -> Ic(R.drawable.ic_city, CGreen)
-            false -> Ic(R.drawable.ic_road, if (lt and 0x20 == 0) CRed else CBlue)
-            else -> {}
-        }
-        if (lt and 0x10 != 0) Ic(R.drawable.ic_light_position, CGreen)
-        if (lt and 0x20 != 0) Ic(R.drawable.ic_light_low, CGreen)
-        if (lt and 0x40 != 0) Ic(R.drawable.ic_light_high, CBlue)
-        if (lt and 0x08 != 0) Ic(R.drawable.ic_light_fog, CGreen)
-        if (lt and 0x04 != 0) Ic(R.drawable.ic_light_fog, CAmber)
-        if (cruise) Ic(R.drawable.ic_cruise, CGreen)
-        if (phys) Ic(R.drawable.ic_brake_pedal, CYellow, 32) else if (regen) Ic(R.drawable.ic_brake_pedal, CGreen, 32)
-        if (evOn) EvIcon(CGreen) else if (evGhost) EvIcon(CYellow)
-        if (dmode == 1) ModeBadge("ECO", CGreen)
-        if (dmode == 2) ModeBadge("PWR", COrange)
-        if (belt) Ic(R.drawable.ic_seatbelt, CRed)
-    }
-}
-
-/** Justified (space-between) status line: gear · speed · rpm · odometer · consumption. */
-@Composable
-private fun OdoRow(s: CanState) {
-    val gear = if (s.gear in 0..4) CanState.GEARS[s.gear] else "–"
-    val spd = s.d("spd")?.let { "${it.toInt()} km/h" } ?: "– km/h"
-    val rpm = "${s.d("rpm")?.toInt() ?: "–"} rpm"
-    val odo = s.d("odo")?.let { "%,d km".format(it.toLong()) } ?: "– km"
-    val cons = s.consumptionView().text()   // EV mode -> kWh/h resp. kWh/100km (pack draw)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        val range = s.d("range")?.let { "->| ${it.toInt()} km" }   // distance-to-empty
-        listOfNotNull(gear, spd, rpm, odo, range, cons).forEach {
-            Text(it, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
-        }
-    }
-}
-
-@Composable
-private fun FuelGauge(s: CanState) {
-    // % shows the CALCULATED real fullness (calibrated liters / tank), and the gauge fill matches.
-    // Falls back to the raw gauge reading when fuelL is not available (warm-up / old firmware).
-    val full = 47f                              // TANK_FULL in prius_parse.h
-    val liters = s.d("fuelL")?.toFloat()
-    val frac = (liters?.let { it / full } ?: ((s.d("fuelIn") ?: 0.0).toFloat() / 100f)).coerceIn(0f, 1f)
-    val pct = liters?.let { (it / full * 100f).toInt() } ?: s.d("fuelIn")?.toInt()
-    Box(Modifier.width(60.dp).height(88.dp)) {
-        Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CYellow, battery = false) }
-        Text(pct?.let { "$it%" } ?: "–",
-            style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))   // % position unchanged
-        // calibrated remaining liters, on a new line UNDER the % (smaller, doesn't move the %)
-        s.d("fuelL")?.let { l ->
-            // calculated remaining liters; turns amber if it disagrees with the measured gauge (drift)
-            val drift = s.d("fuelGm")?.let { kotlin.math.abs(l - it) > 2.5 } ?: false
-            Text("%.1f L".format(l), color = if (drift) Color(0xFFFFA000) else Color.White, fontSize = 12.sp,
-                style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 8f)),
-                modifier = Modifier.align(BiasAlignment(0f, 0.28f)))
-        }
-        Row(Modifier.align(Alignment.TopCenter).padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("←", color = CIconDim, fontSize = 16.sp)
-            Image(painterResource(R.drawable.ic_fuel), null, Modifier.size(18.dp), colorFilter = ColorFilter.tint(CIconDim))
-        }
-    }
-}
-
-@Composable
-private fun BatteryGauge(s: CanState) {
-    val soc = (s.d("soc") ?: 0.0).toFloat()
-    val frac = ((soc - 35f) / (70f - 35f)).coerceIn(0f, 1f)   // operating band ~35..70%
-    val hvA = s.d("hvA") ?: 0.0
-    Box(Modifier.width(60.dp).height(88.dp)) {
-        Canvas(Modifier.fillMaxSize()) { gaugeShape(frac, CGreen, battery = true) }
-        Text(s.d("soc")?.let { "${it.toInt()}%" } ?: "–",
-            style = PctStyle, modifier = Modifier.align(BiasAlignment(0f, -0.15f)))
-        val dir = if (hvA < -2) "▲" else if (hvA > 2) "▼" else ""   // charge direction
-        if (dir.isNotEmpty()) {
-            // pack power next to the arrow (same line as the fuel gauge's liters): |hvA x VL|,
-            // one decimal under 10 kW so "▼ 23 kW" / "▲ 4.2 kW" both fit the 60 dp gauge
-            val kw = s.d("vl")?.let { kotlin.math.abs(hvA) * it / 1000.0 }
-            val txt = dir + (kw?.let { if (it < 10) " %.1f kW".format(it) else " %.0f kW".format(it) } ?: "")
-            Text(txt, color = if (hvA < 0) CGreen else Color.White, fontSize = 12.sp, maxLines = 1, softWrap = false,
-                style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 8f)),
-                modifier = Modifier.align(BiasAlignment(0f, 0.28f)))
-        }
-    }
-}
-
-/** Rounded gauge container + bottom-up fill; battery adds two terminal bumps on top. */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.gaugeShape(frac: Float, fill: Color, battery: Boolean) {
-    val w = size.width; val h = size.height; val r = 14.dp.toPx()
-    val bump = if (battery) 7.dp.toPx() else 0f
-    if (battery) {
-        val bw = w * 0.22f
-        drawRoundRect(CGaugeFrame, topLeft = Offset(w * 0.15f, 0f), size = Size(bw, bump + 2f), cornerRadius = CornerRadius(3f))
-        drawRoundRect(CGaugeFrame, topLeft = Offset(w * 0.63f, 0f), size = Size(bw, bump + 2f), cornerRadius = CornerRadius(3f))
-    }
-    drawRoundRect(CGaugeFrame, topLeft = Offset(0f, bump), size = Size(w, h - bump),
-        cornerRadius = CornerRadius(r), style = Stroke(4.dp.toPx()))
-    val pad = 7.dp.toPx()
-    val innerTop = bump + pad; val innerBot = h - pad
-    val fillH = (innerBot - innerTop) * frac.coerceIn(0f, 1f)
-    if (fillH > 0f)
-        drawRoundRect(fill, topLeft = Offset(pad, innerBot - fillH), size = Size(w - 2 * pad, fillH),
-            cornerRadius = CornerRadius(10f))
-}
-
-@Composable
-private fun GroupTitle(t: String) {
-    Text(
-        t.uppercase(),
-        Modifier.padding(top = 18.dp, bottom = 6.dp),
-        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
-        fontWeight = FontWeight.Bold, letterSpacing = 2.sp,
-    )
-}
-
-@Composable
-private fun SensorRow(label: String, value: String, highlight: Boolean = false) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(label, color = if (highlight) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
-        Text(
-            value,
-            color = if (highlight) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onBackground,
-            fontSize = 16.sp, fontFamily = FontFamily.Monospace,
-        )
-    }
-}
+// ================================ shared helpers ================================
 
 fun hasLocationPermission(ctx: Context): Boolean =
     ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
     ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-private fun fmtDate(epoch: Long): String =
+internal fun fmtDate(epoch: Long): String =
     if (epoch <= 0) "–"
     else java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(epoch * 1000))
 
-private fun fmtDur(s: Long): String {
+internal fun fmtDur(s: Long): String {
     val h = s / 3600; val m = (s % 3600) / 60
     return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
 
-private fun format(v: Double?, decimals: Int, unit: String): String {
-    if (v == null) return "–"
-    val num = "%.${decimals}f".format(v)
-    return if (unit.isEmpty()) num else "$num $unit"
-}
+/** Number only (same decimals as before), "–" when missing. The unit is rendered separately. */
+internal fun fmtNum(v: Double?, decimals: Int): String = if (v == null) "–" else "%.${decimals}f".format(v)
 
-private fun coolantColor(t: Double?): Color = when {
-    t == null -> Color(0xFF9EB6C3)
-    t < 70 -> Color(0xFF64B5F6)
-    t < 98 -> Color(0xFF81C784)
-    t < 105 -> Color(0xFFFFB74D)
-    else -> Color(0xFFFF5252)
+/** Coolant-temperature colour ramp (<70 blue, 70–98 green, 98–105 amber, >105 red). Night keeps
+ *  the original tones; day uses darker ones so the big number stays readable in sunlight. */
+@Composable
+internal fun coolantColor(t: Double?): Color {
+    val c = pc
+    return if (c.dark) when {
+        t == null -> c.dim
+        t < 70 -> Color(0xFF64B5F6)
+        t < 98 -> Color(0xFF81C784)
+        t < 105 -> Color(0xFFFFB74D)
+        else -> Color(0xFFFF5252)
+    } else when {
+        t == null -> c.dim
+        t < 70 -> c.accent
+        t < 98 -> c.greenText
+        t < 105 -> c.amberText
+        else -> c.redText
+    }
 }

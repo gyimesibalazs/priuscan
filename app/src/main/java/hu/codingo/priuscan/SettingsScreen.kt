@@ -6,6 +6,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -52,6 +60,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
     var enabled by remember { mutableStateOf(prefs.haEnabled) }
@@ -113,336 +122,336 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
         "cons" to R.string.opt_cons,
     )
 
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-    Column(
-        Modifier.fillMaxHeight().widthIn(max = 820.dp).fillMaxWidth()
-            .verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(stringResource(R.string.settings_title), fontSize = 28.sp, color = MaterialTheme.colorScheme.onBackground)
+    val c = pc
+    // hoisted so a narrow/wide relayout doesn't reset them
+    var homeLat by remember { mutableStateOf(prefs.homeLat) }
+    var homeLon by remember { mutableStateOf(prefs.homeLon) }
+    val gpsLoc by CanService.gps.collectAsState()
+    val appSt by AppUpdater.state.collectAsState()
+    val appPct by AppUpdater.progress.collectAsState()
+    val appLatest by AppUpdater.latestName.collectAsState()
+    val appMsg by AppUpdater.msg.collectAsState()
+    val gfMsg by AppUpdater.geofenceMsg.collectAsState()
+    LaunchedEffect(Unit) { AppUpdater.check(ctx) }
+    val nightPermRuntime by CanService.nightPermMissing.collectAsState()
 
-        // the main settings file read back EMPTY at startup (torn write at a power cut) ->
-        // tell the user what happened + what to re-check instead of silently showing defaults
-        if (prefs.mainSettingsLost) {
-            Text(stringResource(R.string.settings_lost_warn), fontSize = 13.sp, color = Color(0xFFFF6B6B))
-        }
-
+    // ---------- left column: connection, permissions, display, status strip, logging, dump ----------
+    val leftCol: @Composable ColumnScope.() -> Unit = {
         // ---- Connection status (ESP + TPMS) ----
-        Text(stringResource(R.string.connection_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
-        StatusRow(espConnected, stringResource(if (espConnected) R.string.connected else R.string.disconnected), espDevice.takeIf { espConnected })
-        StatusRow(tpmsConn, stringResource(if (tpmsConn) R.string.tpms_connected else R.string.tpms_no_signal), tpmsDev.takeIf { tpmsConn })
+        SettingsCard(stringResource(R.string.connection_title)) {
+            StatusRow(espConnected, stringResource(if (espConnected) R.string.connected else R.string.disconnected), espDevice.takeIf { espConnected })
+            StatusRow(tpmsConn, stringResource(if (tpmsConn) R.string.tpms_connected else R.string.tpms_no_signal), tpmsDev.takeIf { tpmsConn })
+        }
 
         // ---- Permissions ----
-        Text(stringResource(R.string.permissions_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
-        if (!overlayOk) {
-            Button(
-                onClick = { ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}"))) },
-                Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.perm_overlay)) }
-        }
-        Button(
-            onClick = {
-                val pm = ctx.getSystemService(PowerManager::class.java)
-                if (pm != null && !pm.isIgnoringBatteryOptimizations(ctx.packageName)) {
-                    ctx.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${ctx.packageName}")))
-                }
-            },
-            Modifier.fillMaxWidth(),
-        ) { Text(stringResource(R.string.perm_battery)) }
-        if (!locOk) {
+        SettingsCard(stringResource(R.string.permissions_title)) {
+            if (!overlayOk) {
+                Button(
+                    onClick = { ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}"))) },
+                    Modifier.fillMaxWidth(),
+                ) { Text(stringResource(R.string.perm_overlay)) }
+            }
             Button(
                 onClick = {
-                    locLauncher.launch(
-                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-                    )
+                    val pm = ctx.getSystemService(PowerManager::class.java)
+                    if (pm != null && !pm.isIgnoringBatteryOptimizations(ctx.packageName)) {
+                        ctx.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${ctx.packageName}")))
+                    }
                 },
                 Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.perm_location)) }
-        }
-
-        Text(stringResource(R.string.status_items_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
-        Text(
-            stringResource(R.string.status_items_desc),
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        statusOptions.forEach { (key, labelRes) ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Checkbox(
-                    checked = key in statusSel,
-                    onCheckedChange = {
-                        statusSel = if (it) statusSel + key else statusSel - key
+            ) { Text(stringResource(R.string.perm_battery)) }
+            if (!locOk) {
+                Button(
+                    onClick = {
+                        locLauncher.launch(
+                            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                        )
                     },
-                )
-                Text(stringResource(labelRes), color = MaterialTheme.colorScheme.onBackground)
+                    Modifier.fillMaxWidth(),
+                ) { Text(stringResource(R.string.perm_location)) }
             }
         }
 
-        OutlinedTextField(fontSize, { fontSize = it.filter(Char::isDigit) },
-            label = { Text(stringResource(R.string.font_size_label)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
+        // ---- Display: dark mode from the car's light sensor ----
+        SettingsCard(stringResource(R.string.display_title)) {
+            SwitchRow(stringResource(R.string.theme_auto_car), autoDark) { autoDark = it; prefs.autoDarkCar = it }
+            // A reinstall / in-app OTA revokes the adb-granted WRITE_SECURE_SETTINGS, and the system-
+            // wide flip then fails SILENTLY. Probe the perm directly (live, every time Settings opens)
+            // + the service's runtime detection, and show the exact fix instead of a mystery.
+            val nightPermOk = ctx.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (autoDark && (!nightPermOk || nightPermRuntime)) {
+                Text(stringResource(R.string.night_perm_missing), fontSize = 14.sp, color = c.redText)
+                Text("adb shell pm grant hu.codingo.priuscan android.permission.WRITE_SECURE_SETTINGS",
+                    fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = c.dim)
+            }
+        }
 
-        TextButton(onClick = { prefs.statusX = -1; prefs.statusY = -1 }) {
-            Text(stringResource(R.string.reset_status_pos))
+        // ---- Status strip ----
+        SettingsCard(stringResource(R.string.status_items_title)) {
+            Text(stringResource(R.string.status_items_desc), fontSize = 14.sp, color = c.dim)
+            statusOptions.forEach { (key, labelRes) ->
+                SwitchRow(stringResource(labelRes), key in statusSel) {
+                    statusSel = if (it) statusSel + key else statusSel - key
+                }
+            }
+            OutlinedTextField(fontSize, { fontSize = it.filter(Char::isDigit) },
+                label = { Text(stringResource(R.string.font_size_label)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+            TextButton(onClick = { prefs.statusX = -1; prefs.statusY = -1 }) {
+                Text(stringResource(R.string.reset_status_pos))
+            }
         }
 
         // ---- Local logging (without HA) ----
-        Text(stringResource(R.string.local_logging_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
-        Text(
-            stringResource(R.string.local_logging_desc, logInfo),
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = logEnabled, onCheckedChange = { logEnabled = it; prefs.logEnabled = it })
-            Spacer(Modifier.padding(6.dp))
-            Text(stringResource(R.string.logging_enabled), color = MaterialTheme.colorScheme.onBackground)
-        }
-        Row {
-            TextButton(onClick = {
-                DataLogger.shareIntent(ctx)?.let {
-                    ctx.startActivity(Intent.createChooser(it, ctx.getString(R.string.download_logs)))
-                }
-            }) { Text(stringResource(R.string.download_logs)) }
-            Spacer(Modifier.padding(8.dp))
-            TextButton(onClick = {
-                DataLogger.deleteAll(ctx)
-                logInfo = logInfoText(ctx, logTemplate)
-            }) { Text(stringResource(R.string.delete_logs)) }
+        SettingsCard(stringResource(R.string.local_logging_title)) {
+            Text(stringResource(R.string.local_logging_desc, logInfo), fontSize = 14.sp, color = c.dim)
+            SwitchRow(stringResource(R.string.logging_enabled), logEnabled) { logEnabled = it; prefs.logEnabled = it }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = {
+                    DataLogger.shareIntent(ctx)?.let {
+                        ctx.startActivity(Intent.createChooser(it, ctx.getString(R.string.download_logs)))
+                    }
+                }) { Text(stringResource(R.string.download_logs)) }
+                TextButton(onClick = {
+                    DataLogger.deleteAll(ctx)
+                    logInfo = logInfoText(ctx, logTemplate)
+                }) { Text(stringResource(R.string.delete_logs)) }
+            }
         }
 
         // ---- CAN dump (diagnostic capture) ----
-        Text(stringResource(R.string.dump_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
-        Text(stringResource(R.string.dump_desc), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = dumpActive, onCheckedChange = { CanService.setDump(it, dumpUnknown) })
-            Spacer(Modifier.padding(6.dp))
-            Text(
+        SettingsCard(stringResource(R.string.dump_title)) {
+            Text(stringResource(R.string.dump_desc), fontSize = 14.sp, color = c.dim)
+            SwitchRow(
                 when {
                     dumpActive -> "● " + DataLogger.humanSize(dumpBytes)
                     dumpFile != null -> DataLogger.humanSize(java.io.File(dumpFile!!).length())
                     else -> stringResource(R.string.dump_enabled)
                 },
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-        }
-        if (!dumpActive) Row(verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Checkbox(checked = dumpUnknown, onCheckedChange = { dumpUnknown = it })
-            Text(stringResource(R.string.dump_unknown), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-        }
-        dumpFile?.let { path ->
-            if (!dumpActive) TextButton(onClick = {
-                DumpLogger.shareIntent(ctx, path)?.let {
-                    ctx.startActivity(Intent.createChooser(it, ctx.getString(R.string.dump_share)))
-                }
-            }) { Text(stringResource(R.string.dump_share)) }
-        }
-
-        // ---- Firmware update (over USB) ----
-        Text(stringResource(R.string.flash_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
-        Text(
-            "ESP: " + CanService.fmtFw(fwRun ?: 0) + "  /  v" + CanService.fmtFw(CanService.BUNDLED_FW),
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        // NVS persistence test: restored shutdown epoch (offTs) + save counter (offN)
-        run {
-            val offN = canState.i("offN")
-            val offTs = canState.d("offTs")?.toLong() ?: 0L
-            val tsTxt = if (offTs > 0)
-                java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(offTs * 1000))
-            else "—"
-            Text(stringResource(R.string.nvs_status, offN, tsTxt),
-                fontSize = 13.sp,
-                color = if (offN > 0) Color(0xFF7CFC00) else MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        when (flSt) {
-            FlashState.FLASHING -> {
-                Text(flMsg, color = MaterialTheme.colorScheme.onBackground)
-                LinearProgressIndicator(progress = { flPct / 100f }, modifier = Modifier.fillMaxWidth())
-                Text("$flPct %", color = MaterialTheme.colorScheme.onBackground)
-            }
-            FlashState.DONE -> Text(flMsg, color = Color(0xFF7CFC00))
-            FlashState.ERROR -> Text(flMsg, color = Color(0xFFFF6B6B))
-            else -> {
-                if (fwRun != null && fwRun!! < CanService.BUNDLED_FW) {
-                    Text(stringResource(R.string.flash_warn), fontSize = 12.sp, color = Color(0xFFFFB74D))
-                    Button(onClick = { CanService.requestFlash() }, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.flash_update_btn, CanService.fmtFw(CanService.BUNDLED_FW)))
+                dumpActive,
+            ) { CanService.setDump(it, dumpUnknown) }
+            if (!dumpActive) SwitchRow(stringResource(R.string.dump_unknown), dumpUnknown, dim = true) { dumpUnknown = it }
+            dumpFile?.let { path ->
+                if (!dumpActive) TextButton(onClick = {
+                    DumpLogger.shareIntent(ctx, path)?.let {
+                        ctx.startActivity(Intent.createChooser(it, ctx.getString(R.string.dump_share)))
                     }
-                } else {
-                    Text(stringResource(R.string.flash_uptodate), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }) { Text(stringResource(R.string.dump_share)) }
+            }
+        }
+    }
+
+    // ---------- right column: firmware, app update, home, vehicle, TPMS, HA ----------
+    val rightCol: @Composable ColumnScope.() -> Unit = {
+        // ---- Firmware update (over USB) ----
+        SettingsCard(stringResource(R.string.flash_title)) {
+            Text(
+                "ESP: " + CanService.fmtFw(fwRun ?: 0) + "  /  v" + CanService.fmtFw(CanService.BUNDLED_FW),
+                fontSize = 14.sp, color = c.dim,
+            )
+            // NVS persistence test: restored shutdown epoch (offTs) + save counter (offN)
+            run {
+                val offN = canState.i("offN")
+                val offTs = canState.d("offTs")?.toLong() ?: 0L
+                val tsTxt = if (offTs > 0)
+                    java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(offTs * 1000))
+                else "—"
+                Text(stringResource(R.string.nvs_status, offN, tsTxt),
+                    fontSize = 14.sp,
+                    color = if (offN > 0) c.greenText else c.dim)
+            }
+            when (flSt) {
+                FlashState.FLASHING -> {
+                    Text(flMsg, color = c.text)
+                    LinearProgressIndicator(progress = { flPct / 100f }, modifier = Modifier.fillMaxWidth())
+                    Text("$flPct %", color = c.text)
+                }
+                FlashState.DONE -> Text(flMsg, color = c.greenText)
+                FlashState.ERROR -> Text(flMsg, color = c.redText)
+                else -> {
+                    if (fwRun != null && fwRun!! < CanService.BUNDLED_FW) {
+                        Text(stringResource(R.string.flash_warn), fontSize = 13.sp, color = c.amberText)
+                        Button(onClick = { CanService.requestFlash() }, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.flash_update_btn, CanService.fmtFw(CanService.BUNDLED_FW)))
+                        }
+                    } else {
+                        Text(stringResource(R.string.flash_uptodate), fontSize = 14.sp, color = c.dim)
+                    }
                 }
             }
         }
 
         // ---- App update (over GitHub Releases) ----
-        val appSt by AppUpdater.state.collectAsState()
-        val appPct by AppUpdater.progress.collectAsState()
-        val appLatest by AppUpdater.latestName.collectAsState()
-        val appMsg by AppUpdater.msg.collectAsState()
-        val gfMsg by AppUpdater.geofenceMsg.collectAsState()
-        LaunchedEffect(Unit) { AppUpdater.check(ctx) }
-        Text(stringResource(R.string.app_update_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
-        Text(
-            "App: v" + BuildConfig.VERSION_NAME + (if (gfMsg.isNotEmpty()) "   ·   geo $gfMsg" else ""),
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        when (appSt) {
-            AppUpdater.State.CHECKING -> Text(stringResource(R.string.app_checking), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            AppUpdater.State.DOWNLOADING -> {
-                LinearProgressIndicator(progress = { appPct / 100f }, modifier = Modifier.fillMaxWidth())
-                Text("$appPct %", color = MaterialTheme.colorScheme.onBackground)
-            }
-            AppUpdater.State.AVAILABLE -> {
-                Button(onClick = { AppUpdater.update(ctx) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.app_update_btn, appLatest ?: ""))
+        SettingsCard(stringResource(R.string.app_update_title)) {
+            Text(
+                "App: v" + BuildConfig.VERSION_NAME + (if (gfMsg.isNotEmpty()) "   ·   geo $gfMsg" else ""),
+                fontSize = 14.sp, color = c.dim,
+            )
+            when (appSt) {
+                AppUpdater.State.CHECKING -> Text(stringResource(R.string.app_checking), fontSize = 14.sp, color = c.dim)
+                AppUpdater.State.DOWNLOADING -> {
+                    LinearProgressIndicator(progress = { appPct / 100f }, modifier = Modifier.fillMaxWidth())
+                    Text("$appPct %", color = c.text)
                 }
+                AppUpdater.State.AVAILABLE -> {
+                    Button(onClick = { AppUpdater.update(ctx) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.app_update_btn, appLatest ?: ""))
+                    }
+                }
+                AppUpdater.State.ERROR -> Text(appMsg, fontSize = 14.sp, color = c.redText)
+                else -> Text(stringResource(R.string.app_uptodate), fontSize = 14.sp, color = c.dim)
             }
-            AppUpdater.State.ERROR -> Text(appMsg, fontSize = 13.sp, color = Color(0xFFFF6B6B))
-            else -> Text(stringResource(R.string.app_uptodate), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-
-        // ---- Display: dark mode from the car's light sensor ----
-        Text(stringResource(R.string.display_title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = autoDark, onCheckedChange = { autoDark = it; prefs.autoDarkCar = it })
-            Spacer(Modifier.padding(6.dp))
-            Text(stringResource(R.string.theme_auto_car), color = MaterialTheme.colorScheme.onBackground)
-        }
-        // A reinstall / in-app OTA revokes the adb-granted WRITE_SECURE_SETTINGS, and the system-
-        // wide flip then fails SILENTLY. Probe the perm directly (live, every time Settings opens)
-        // + the service's runtime detection, and show the exact fix instead of a mystery.
-        val nightPermRuntime by CanService.nightPermMissing.collectAsState()
-        val nightPermOk = ctx.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) ==
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (autoDark && (!nightPermOk || nightPermRuntime)) {
-            Text(stringResource(R.string.night_perm_missing), fontSize = 13.sp, color = Color(0xFFFF6B6B))
-            Text("adb shell pm grant hu.codingo.priuscan android.permission.WRITE_SECURE_SETTINGS",
-                fontSize = 11.sp, fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         // ---- Home location: auto-resets the "from-home" trip (slot 6) when the car departs here ----
-        var homeLat by remember { mutableStateOf(prefs.homeLat) }
-        var homeLon by remember { mutableStateOf(prefs.homeLon) }
-        val gpsLoc by CanService.gps.collectAsState()
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.home_title), color = MaterialTheme.colorScheme.onBackground)
-                Text(
-                    if (!homeLat.isNaN() && !homeLon.isNaN()) "%.5f, %.5f".format(homeLat, homeLon)
-                    else stringResource(R.string.home_unset),
-                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            TextButton(enabled = gpsLoc != null, onClick = {
-                gpsLoc?.let {
-                    prefs.homeLat = it.latitude.toFloat(); prefs.homeLon = it.longitude.toFloat()
-                    homeLat = prefs.homeLat; homeLon = prefs.homeLon
+        SettingsCard(null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    CardTitle(stringResource(R.string.home_title))
+                    Text(
+                        if (!homeLat.isNaN() && !homeLon.isNaN()) "%.5f, %.5f".format(homeLat, homeLon)
+                        else stringResource(R.string.home_unset),
+                        fontSize = 14.sp, color = c.dim)
                 }
-            }) { Text(stringResource(R.string.home_set_btn)) }
-        }
-
-        // ---- HV battery ----
-        OutlinedTextField(refAh, { refAh = it.filter { c -> c.isDigit() || c == '.' } },
-            label = { Text(stringResource(R.string.battery_ref_label)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
-
-        // ---- Oil-change interval (km + months; drives the due indicator on the Oil trip tab) ----
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(oilKm, { oilKm = it.filter { c -> c.isDigit() } },
-                label = { Text(stringResource(R.string.oil_interval_km)) },
-                modifier = Modifier.weight(1f), singleLine = true)
-            OutlinedTextField(oilMonths, { oilMonths = it.filter { c -> c.isDigit() } },
-                label = { Text(stringResource(R.string.oil_interval_mo)) },
-                modifier = Modifier.weight(1f), singleLine = true)
-        }
-
-        // ---- Fuel correction (sent to the ESP, persisted there; affects instant + trip fuel) ----
-        val curFCorr = canState.d("fCorr")
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(fuelCorr, { fuelCorr = it.filter { c -> c.isDigit() || c == '.' } },
-                label = { Text(stringResource(R.string.fuel_corr_label) + (curFCorr?.let { " — %.3f".format(it) } ?: "")) },
-                modifier = Modifier.weight(1f), singleLine = true)
-            TextButton(onClick = { fuelCorr.toFloatOrNull()?.let { if (it in 0.5f..2.0f) CanService.sendCommand("F$it") } }) {
-                Text(stringResource(R.string.btn_save))
+                TextButton(enabled = gpsLoc != null, onClick = {
+                    gpsLoc?.let {
+                        prefs.homeLat = it.latitude.toFloat(); prefs.homeLon = it.longitude.toFloat()
+                        homeLat = prefs.homeLat; homeLon = prefs.homeLon
+                    }
+                }) { Text(stringResource(R.string.home_set_btn)) }
             }
         }
-        // Manual refuel: use when the firmware missed the auto-detection (e.g. tanked across a
-        // power-off). Closes the current tank into the history and starts a fresh one.
-        TextButton(onClick = { CanService.sendCommand("K") }) {
-            Text(stringResource(R.string.refuel_btn))
+
+        // ---- Vehicle: HV battery reference, oil interval, fuel correction, manual refuel ----
+        SettingsCard(null) {
+            OutlinedTextField(refAh, { refAh = it.filter { c -> c.isDigit() || c == '.' } },
+                label = { Text(stringResource(R.string.battery_ref_label)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+
+            // ---- Oil-change interval (km + months; drives the due indicator on the Oil trip tab) ----
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(oilKm, { oilKm = it.filter { c -> c.isDigit() } },
+                    label = { Text(stringResource(R.string.oil_interval_km)) },
+                    modifier = Modifier.weight(1f), singleLine = true)
+                OutlinedTextField(oilMonths, { oilMonths = it.filter { c -> c.isDigit() } },
+                    label = { Text(stringResource(R.string.oil_interval_mo)) },
+                    modifier = Modifier.weight(1f), singleLine = true)
+            }
+
+            // ---- Fuel correction (sent to the ESP, persisted there; affects instant + trip fuel) ----
+            val curFCorr = canState.d("fCorr")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(fuelCorr, { fuelCorr = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text(stringResource(R.string.fuel_corr_label) + (curFCorr?.let { " — %.3f".format(it) } ?: "")) },
+                    modifier = Modifier.weight(1f), singleLine = true)
+                TextButton(onClick = { fuelCorr.toFloatOrNull()?.let { if (it in 0.5f..2.0f) CanService.sendCommand("F$it") } }) {
+                    Text(stringResource(R.string.btn_save))
+                }
+            }
+            // Manual refuel: use when the firmware missed the auto-detection (e.g. tanked across a
+            // power-off). Closes the current tank into the history and starts a fresh one.
+            TextButton(onClick = { CanService.sendCommand("K") }) {
+                Text(stringResource(R.string.refuel_btn))
+            }
         }
 
         // ---- TPMS pairing ----
-        Text(stringResource(R.string.tpms_section), fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
-        TextButton(onClick = { CanService.sendTpmsCommand(Tpms.QUERY) }) {
-            Text(stringResource(R.string.tpms_query))
-        }
-        tpmsWheels.forEach { (w, lblRes) ->
-            val lbl = stringResource(lblRes)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { CanService.startTpmsPairing(w) }) {
-                    Text(stringResource(R.string.tpms_pair_button, lbl))
-                }
-                tpmsIds[w]?.let {
-                    Spacer(Modifier.padding(6.dp))
-                    Text(stringResource(R.string.tpms_id_fmt, it), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        SettingsCard(stringResource(R.string.tpms_section)) {
+            TextButton(onClick = { CanService.sendTpmsCommand(Tpms.QUERY) }) {
+                Text(stringResource(R.string.tpms_query))
+            }
+            tpmsWheels.forEach { (w, lblRes) ->
+                val lbl = stringResource(lblRes)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { CanService.startTpmsPairing(w) }) {
+                        Text(stringResource(R.string.tpms_pair_button, lbl))
+                    }
+                    tpmsIds[w]?.let {
+                        Spacer(Modifier.padding(6.dp))
+                        Text(stringResource(R.string.tpms_id_fmt, it), color = c.dim, fontSize = 13.sp,
+                            fontFamily = FontFamily.Monospace)
+                    }
                 }
             }
-        }
-        TextButton(onClick = { CanService.stopTpmsPairing() }) {
-            Text(stringResource(R.string.tpms_pair_stop))
-        }
-
-        Text(
-            stringResource(R.string.ha_desc, prefix),
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = enabled, onCheckedChange = { enabled = it })
-            Spacer(Modifier.padding(6.dp))
-            Text(stringResource(R.string.ha_enabled), color = MaterialTheme.colorScheme.onBackground)
+            TextButton(onClick = { CanService.stopTpmsPairing() }) {
+                Text(stringResource(R.string.tpms_pair_stop))
+            }
         }
 
-        OutlinedTextField(host, { host = it }, label = { Text(stringResource(R.string.mqtt_broker)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(port, { port = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.mqtt_port)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(user, { user = it }, label = { Text(stringResource(R.string.mqtt_user)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(pass, { pass = it }, label = { Text(stringResource(R.string.mqtt_pass)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true,
-            visualTransformation = PasswordVisualTransformation())
-        OutlinedTextField(prefix, { prefix = it }, label = { Text(stringResource(R.string.mqtt_topic_prefix)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(interval, { interval = it.filter(Char::isDigit) },
-            label = { Text(stringResource(R.string.push_interval)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(wgTunnel, { wgTunnel = it },
-            label = { Text(stringResource(R.string.wg_tunnel)) },
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
+        // ---- Home Assistant (MQTT) ----
+        SettingsCard(null) {
+            Text(stringResource(R.string.ha_desc, prefix), fontSize = 14.sp, color = c.dim)
+            SwitchRow(stringResource(R.string.ha_enabled), enabled) { enabled = it }
+            OutlinedTextField(host, { host = it }, label = { Text(stringResource(R.string.mqtt_broker)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(port, { port = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.mqtt_port)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(user, { user = it }, label = { Text(stringResource(R.string.mqtt_user)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(pass, { pass = it }, label = { Text(stringResource(R.string.mqtt_pass)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                visualTransformation = PasswordVisualTransformation())
+            OutlinedTextField(prefix, { prefix = it }, label = { Text(stringResource(R.string.mqtt_topic_prefix)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(interval, { interval = it.filter(Char::isDigit) },
+                label = { Text(stringResource(R.string.push_interval)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(wgTunnel, { wgTunnel = it },
+                label = { Text(stringResource(R.string.wg_tunnel)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+        }
+    }
 
-        Spacer(Modifier.height(8.dp))
-        Button(
-            onClick = {
-                prefs.haEnabled = enabled
-                prefs.mqttHost = host
-                prefs.mqttPort = port.toIntOrNull() ?: 1883
-                prefs.mqttUser = user
-                prefs.mqttPass = pass
-                prefs.topicPrefix = prefix.ifBlank { "priuscan" }
-                prefs.pushIntervalSec = interval.toIntOrNull() ?: 30
-                prefs.wgTunnel = wgTunnel
-                prefs.statusItems = statusSel
-                prefs.statusFontSize = fontSize.toFloatOrNull() ?: 14f
-                prefs.batteryRefAh = refAh.toFloatOrNull() ?: 6.5f
-                prefs.oilKm = oilKm.toIntOrNull() ?: 10000
-                prefs.oilMonths = oilMonths.toIntOrNull() ?: 12
-                onClose()
-            },
-            Modifier.fillMaxWidth(),
-        ) { Text(stringResource(R.string.save)) }
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    val twoCols = maxWidth >= 900.dp
+    Column(
+        Modifier.fillMaxHeight().widthIn(max = 1400.dp).fillMaxWidth()
+            .verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(stringResource(R.string.settings_title), fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = c.text)
 
-        TextButton(onClick = onClose, Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
+        // the main settings file read back EMPTY at startup (torn write at a power cut) ->
+        // tell the user what happened + what to re-check instead of silently showing defaults
+        if (prefs.mainSettingsLost) {
+            Text(stringResource(R.string.settings_lost_warn), fontSize = 14.sp, color = c.redText)
+        }
+
+        if (twoCols) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = leftCol)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = rightCol)
+            }
+        } else {
+            leftCol()
+            rightCol()
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(
+                onClick = {
+                    prefs.haEnabled = enabled
+                    prefs.mqttHost = host
+                    prefs.mqttPort = port.toIntOrNull() ?: 1883
+                    prefs.mqttUser = user
+                    prefs.mqttPass = pass
+                    prefs.topicPrefix = prefix.ifBlank { "priuscan" }
+                    prefs.pushIntervalSec = interval.toIntOrNull() ?: 30
+                    prefs.wgTunnel = wgTunnel
+                    prefs.statusItems = statusSel
+                    prefs.statusFontSize = fontSize.toFloatOrNull() ?: 14f
+                    prefs.batteryRefAh = refAh.toFloatOrNull() ?: 6.5f
+                    prefs.oilKm = oilKm.toIntOrNull() ?: 10000
+                    prefs.oilMonths = oilMonths.toIntOrNull() ?: 12
+                    onClose()
+                },
+                Modifier.weight(1f).height(52.dp),
+            ) { Text(stringResource(R.string.save), fontSize = 17.sp) }
+
+            TextButton(onClick = onClose, Modifier.weight(1f).height(52.dp)) { Text(stringResource(R.string.cancel), fontSize = 17.sp) }
+        }
+        Spacer(Modifier.height(12.dp))
     }
 
     // ---- TPMS pairing dialog (with ~30 s countdown; auto-stop on success/timeout) ----
@@ -484,12 +493,39 @@ private fun logInfoText(ctx: Context, template: String): String =
 /** Connection status row: green/red dot + label, optional device sub-line. */
 @Composable
 private fun StatusRow(ok: Boolean, label: String, sub: String?) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(12.dp).clip(CircleShape).background(if (ok) Color(0xFF66BB6A) else Color(0xFFEF5350)))
-        Spacer(Modifier.padding(5.dp))
+    val c = pc
+    Row(
+        Modifier.fillMaxWidth().border(1.dp, c.cardBorder, RoundedCornerShape(12.dp)).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(16.dp).clip(CircleShape).background(if (ok) c.green else c.red))
+        Spacer(Modifier.width(14.dp))
         Column {
-            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-            if (sub != null) Text(sub, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            Text(label, color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+            if (sub != null) Text(sub, color = c.dim, fontSize = 13.sp)
         }
+    }
+}
+
+/** A settings group: card with an optional title, 10 dp between the rows. */
+@Composable
+private fun SettingsCard(title: String?, content: @Composable ColumnScope.() -> Unit) {
+    PCard(Modifier.fillMaxWidth(), padding = 18.dp) {
+        if (title != null) {
+            CardTitle(title)
+            Spacer(Modifier.height(10.dp))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+    }
+}
+
+/** Label on the left, Switch on the right (whole-row text wraps instead of clipping). */
+@Composable
+private fun SwitchRow(label: String, checked: Boolean, dim: Boolean = false, onChange: (Boolean) -> Unit) {
+    val c = pc
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f).padding(end = 12.dp),
+            color = if (dim) c.dim else c.text, fontSize = if (dim) 15.sp else 16.sp)
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
