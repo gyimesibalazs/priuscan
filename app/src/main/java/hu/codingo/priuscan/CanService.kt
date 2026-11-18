@@ -91,6 +91,9 @@ class CanService : Service() {
          *  logcat tag PriusProbe. For bench use: `adb shell am broadcast -a hu.codingo.priuscan.PROBE
          *  --es cmd "780 13"`. */
         const val ACTION_PROBE = "hu.codingo.priuscan.PROBE"
+        // debug builds only: replay a logged JSONL (files/replay.jsonl) as if it came from the ESP,
+        // so the UI can be checked on an emulator:  am broadcast -a hu.codingo.priuscan.REPLAY
+        const val ACTION_REPLAY = "hu.codingo.priuscan.REPLAY"
         val probeLog = MutableStateFlow<List<String>>(emptyList())
         fun probe(args: String) = sendCommand("X" + args.trim())
 
@@ -182,6 +185,24 @@ class CanService : Service() {
     }
     private val probeReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) { i.getStringExtra("cmd")?.let { probe(it) } }
+    }
+    private var replayThread: Thread? = null
+    private val replayReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            if (replayThread?.isAlive == true) return
+            val f = java.io.File(filesDir, i.getStringExtra("file") ?: "replay.jsonl")
+            val periodMs = i.getLongExtra("ms", 250L)
+            replayThread = Thread {
+                try {
+                    while (running) {
+                        f.forEachLine { l ->
+                            if (!running) return@forEachLine
+                            if (handleLine(l)) { connected.value = true; Thread.sleep(periodMs) }
+                        }
+                    }
+                } catch (e: Exception) { android.util.Log.w("PriusReplay", "replay stopped: $e") }
+            }.also { it.isDaemon = true; it.start() }
+        }
     }
     private var ioThread: Thread? = null
     private var tpmsThread: Thread? = null
@@ -300,6 +321,10 @@ class CanService : Service() {
         haPusher.start()
         prefs.sp.registerOnSharedPreferenceChangeListener(prefsListener)
         // bench-only entry for the read-only diagnostic probe (adb shell am broadcast ...)
+        if (BuildConfig.DEBUG) {
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(replayReceiver, IntentFilter(ACTION_REPLAY), Context.RECEIVER_EXPORTED)
+            else @Suppress("UnspecifiedRegisterReceiverFlag") registerReceiver(replayReceiver, IntentFilter(ACTION_REPLAY))
+        }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(probeReceiver, IntentFilter(ACTION_PROBE), Context.RECEIVER_EXPORTED)
         else @Suppress("UnspecifiedRegisterReceiverFlag") registerReceiver(probeReceiver, IntentFilter(ACTION_PROBE))
         if (Build.VERSION.SDK_INT >= 33)
@@ -345,6 +370,7 @@ class CanService : Service() {
         running = false
         try { unregisterReceiver(shutdownReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(probeReceiver) } catch (_: Exception) {}
+        if (BuildConfig.DEBUG) try { unregisterReceiver(replayReceiver) } catch (_: Exception) {}
         ioThread?.interrupt()
         tpmsThread?.interrupt()
         try { getSystemService(LocationManager::class.java)?.removeUpdates(locListener) } catch (_: Exception) {}
