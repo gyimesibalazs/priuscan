@@ -122,7 +122,8 @@ fun MainScreen(prefs: Prefs) {
                     when (titleRes) {
                         R.string.grp_hybrid_batt -> HybridBatteryTab(state, fields, prefs.batteryRefAh)
                         R.string.grp_drive_brake -> DriveTab(state, fields, prefs)
-                        else -> GroupTab(state, fields, hero = titleRes == R.string.grp_engine)
+                        R.string.grp_engine -> EngineTab(state, fields)
+                        else -> GroupTab(state, fields)
                     }
                 }
                 groups.size + 1 -> TpmsTab(tpmsReadings)

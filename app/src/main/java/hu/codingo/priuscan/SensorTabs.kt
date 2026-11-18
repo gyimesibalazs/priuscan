@@ -2,6 +2,7 @@ package hu.codingo.priuscan
 
 import android.location.Location
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
@@ -102,6 +104,75 @@ internal fun GroupTab(state: CanState, fields: List<Field>, hero: Boolean = fals
     TileGrid(fields.map { fieldSpec(state, it) }, cols, heroCount = if (hero) cols else 0)
 }
 
+/** Engine tab: rpm and speed as two round dials, the six next values beside them, the rest below. */
+@Composable
+internal fun EngineTab(state: CanState, fields: List<Field>) = TabPage { cols ->
+    val rpmF = fields.firstOrNull { it.key == "rpm" }; val spdF = fields.firstOrNull { it.key == "spd" }
+    val others = fields.filter { it.key != "rpm" && it.key != "spd" }.map { fieldSpec(state, it) }
+    val dials: @Composable RowScope.() -> Unit = {
+        if (rpmF != null) DialCard(state.d("rpm"), rpmF.unit, 6000f, 1000f, 4, Modifier.weight(1f).height(DIAL_H))
+        if (spdF != null) DialCard(state.d("spd"), spdF.unit, 180f, 20f, 1, Modifier.weight(1f).height(DIAL_H))
+    }
+    if (cols >= 4) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.weight(1.15f), horizontalArrangement = Arrangement.spacedBy(12.dp), content = dials)
+            Box(Modifier.weight(0.85f)) { TileGrid(others.take(6), 2) }
+        }
+        TileGrid(others.drop(6), cols)
+    } else {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), content = dials)
+        TileGrid(others, cols)
+    }
+}
+
+private val DIAL_H = 288.dp     // = three tile rows
+
+/** Round dial: 270 deg arc, labelled major ticks every [step], [minor] minor ticks between them,
+ *  accent arc + needle up to the value (clamped to 0..[max]), the number + unit in the lower centre
+ *  (no caption: the scale and the unit say what it is). */
+@Composable
+private fun DialCard(value: Double?, unit: String, max: Float, step: Float, minor: Int, modifier: Modifier) {
+    val c = pc
+    val tm = rememberTextMeasurer()
+    PCard(modifier, padding = 10.dp) {
+        Canvas(Modifier.fillMaxSize()) {
+            val sw = 9.dp.toPx()
+            // the 270 deg arc reaches 0.707 r below the centre -> the biggest circle that fits the card
+            val r = minOf(size.width / 2 - sw, (size.height - 1.5f * sw) / 1.707f)
+            val ctr = Offset(size.width / 2, r + sw)
+            val arcTl = Offset(ctr.x - r, ctr.y - r)
+            val f = ((value ?: 0.0) / max).toFloat().coerceIn(0f, 1f)
+            drawArc(c.track, 135f, 270f, false, arcTl, Size(2 * r, 2 * r), style = Stroke(sw, cap = StrokeCap.Round))
+            if (f > 0f) drawArc(c.accent, 135f, 270f * f, false, arcTl, Size(2 * r, 2 * r), style = Stroke(sw, cap = StrokeCap.Round))
+            fun dir(frac: Float): Offset { val a = Math.toRadians((135.0 + 270.0 * frac)); return Offset(kotlin.math.cos(a).toFloat(), kotlin.math.sin(a).toFloat()) }
+            val tick = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, fontFeatureSettings = "tnum")
+            val nMajor = (max / step).toInt()
+            for (i in 0..nMajor) {
+                val d = dir(i / nMajor.toFloat())
+                drawLine(c.text, ctr + d * (r - sw * 0.9f), ctr + d * (r - sw * 0.9f - 11.dp.toPx()), strokeWidth = 2.dp.toPx())
+                val l = tm.measure("%.0f".format(i * step), tick)
+                val lp = ctr + d * (r - sw * 0.9f - 28.dp.toPx())
+                drawText(l, c.text, Offset(lp.x - l.size.width / 2f, lp.y - l.size.height / 2f))
+                if (i < nMajor) for (k in 1..minor) {
+                    val dm = dir((i + k / (minor + 1f)) / nMajor)
+                    drawLine(c.dim, ctr + dm * (r - sw * 0.9f), ctr + dm * (r - sw * 0.9f - 6.dp.toPx()), strokeWidth = 1.dp.toPx())
+                }
+            }
+            if (value != null) {
+                val d = dir(f)
+                drawLine(c.text, ctr - d * (10.dp.toPx()), ctr + d * (r - sw * 0.9f - 14.dp.toPx()), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
+            }
+            drawCircle(c.card, 9.dp.toPx(), ctr); drawCircle(c.dim, 7.dp.toPx(), ctr)
+            val num = tm.measure(value?.let { "%.0f".format(it) } ?: "–",
+                TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum"))
+            val ny = ctr.y + r * 0.22f
+            drawText(num, c.text, Offset(ctr.x - num.size.width / 2f, ny))
+            val u = tm.measure(unit, TextStyle(fontSize = 15.sp))
+            drawText(u, c.dim, Offset(ctr.x - u.size.width / 2f, ny + num.size.height - 4.dp.toPx()))
+        }
+    }
+}
+
 /** Driving tab = the drive/brake fields + slope + drive mode, cruise/turn and exterior lights. */
 @Composable
 internal fun DriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = TabPage { cols ->
@@ -155,7 +226,7 @@ internal fun DriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = TabP
 }
 
 /** Keys of the battery group shown by the SOC arc / block chart / fan row instead of a tile. */
-private val BATT_SPECIAL = setOf("soc", "bmin", "bmax", "blkD", "battFan")
+private val BATT_SPECIAL = setOf("soc", "bmin", "bmax", "blkD", "battFan", "tb1", "tb2", "tb3", "hvAir", "hvA")
 
 /** Hybrid-battery tab: SOC arc + block-voltage chart, the remaining battery fields + SoH as
  *  tiles, the cooling fan as a bar, and the per-block internal resistance. */
@@ -165,12 +236,12 @@ internal fun HybridBatteryTab(state: CanState, fields: List<Field>, refAh: Float
     val c = pc
     if (cols >= 4) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SocCard(state, Modifier.width(290.dp).height(270.dp))
-            BlockChartCard(state, wide = true, modifier = Modifier.weight(1f).height(270.dp))
+            SocCard(state, Modifier.width(290.dp).height(336.dp))
+            BlockChartCard(state, wide = true, modifier = Modifier.weight(1f).height(336.dp))
         }
     } else {
         SocCard(state, Modifier.fillMaxWidth().height(250.dp))
-        BlockChartCard(state, wide = false, modifier = Modifier.fillMaxWidth().height(300.dp))
+        BlockChartCard(state, wide = false, modifier = Modifier.fillMaxWidth().height(366.dp))
     }
 
     // State of Health = learned capacity / reference capacity (degradation)
@@ -186,22 +257,6 @@ internal fun HybridBatteryTab(state: CanState, fields: List<Field>, refAh: Float
         icon = IcBatteryChargingFull,
     )
     TileGrid(tiles, cols)
-
-    // battery cooling fan as a progress row
-    val fan = state.d("battFan")
-    PCard(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.f_battFan), Modifier.weight(0.35f), color = c.text, fontSize = 17.sp,
-                fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.width(12.dp))
-            ThinBar(((fan ?: 0.0) / 100.0).toFloat(), c.green, Modifier.weight(0.65f), height = 12.dp)
-            Text(
-                if (fan == null) "–" else "%.0f %%".format(fan), Modifier.width(96.dp),
-                color = c.text, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, style = NumStyle,
-                textAlign = TextAlign.End, maxLines = 1, softWrap = false,
-            )
-        }
-    }
 
     // per-block internal resistance for the chart (on-demand "B"; refreshed every 5 s while this tab is open)
     LaunchedEffect(Unit) { while (true) { CanService.fetchBlockR(); kotlinx.coroutines.delay(5000) } }
@@ -231,6 +286,16 @@ private fun SocCard(state: CanState, modifier: Modifier) {
                         fontWeight = FontWeight.SemiBold)
                 }
                 Text(stringResource(R.string.f_soc), color = c.dim, fontSize = 16.sp, maxLines = 1)
+                // pack current + the power it means right now (hvA x VL): ▲ = charging, ▼ = discharging
+                val hvA = state.d("hvA")
+                if (hvA != null) {
+                    val kw = state.d("vl")?.let { kotlin.math.abs(hvA) * it / 1000.0 }
+                    val dir = if (hvA < -0.5) "▲ " else if (hvA > 0.5) "▼ " else ""
+                    Spacer(Modifier.height(8.dp))
+                    Text(dir + (kw?.let { "%.1f kW".format(it) } ?: "– kW"), color = if (hvA < -0.5) c.greenText else c.text,
+                        fontSize = 24.sp, fontWeight = FontWeight.SemiBold, style = NumStyle, maxLines = 1, softWrap = false)
+                    Text("%.1f A".format(hvA), color = c.dim, fontSize = 17.sp, style = NumStyle, maxLines = 1, softWrap = false)
+                }
             }
         }
     }
@@ -252,6 +317,21 @@ private fun BlockChartCard(state: CanState, wide: Boolean, modifier: Modifier) {
     val res by CanService.blockR.collectAsState()
     val weak = state.i("weakB")
     val tm = rememberTextMeasurer()
+    // temperature bands under the blocks: the three pack thermistors each over a third of the pack,
+    // the intake air across the whole width. (Which blocks each thermistor really sits at is NOT
+    // confirmed for this pack -- the thirds are a layout assumption.)
+    val tbands = listOf(Triple(stringResource(R.string.f_tb1), state.d("tb1"), 0 to 5),
+        Triple(stringResource(R.string.f_tb2), state.d("tb2"), 5 to 10),
+        Triple(stringResource(R.string.f_tb3), state.d("tb3"), 10 to 14))
+    val coolLabel = stringResource(R.string.batt_cooling); val air = state.d("hvAir")
+    val fan = ((state.d("battFan") ?: 0.0) / 100.0).toFloat().coerceIn(0f, 1f)
+    fun tempColor(t: Double?): Color = when {
+        t == null -> c.track
+        t < 25 -> c.accent
+        t < 40 -> c.green
+        t < 48 -> c.amber
+        else -> c.red
+    }
     val presentV = volts.filterNotNull()
     val mean = if (presentV.isEmpty()) null else presentV.average()
     val rVals = (0 until 14).map { i -> res.getOrNull(i)?.takeIf { !it.isNaN() } }
@@ -282,7 +362,9 @@ private fun BlockChartCard(state: CanState, wide: Boolean, modifier: Modifier) {
         Spacer(Modifier.height(8.dp))
         val small = TextStyle(fontSize = 12.sp, fontFeatureSettings = "tnum")
         Canvas(Modifier.fillMaxWidth().weight(1f)) {
-            val left = 30.dp.toPx(); val right = 46.dp.toPx(); val top = 18.dp.toPx(); val bottom = 20.dp.toPx()
+            val bandH = 24.dp.toPx(); val bandGap = 6.dp.toPx()
+            val left = 30.dp.toPx(); val right = 46.dp.toPx(); val top = 18.dp.toPx()
+            val bottom = 22.dp.toPx() + 2 * (bandH + bandGap)
             val pw = size.width - left - right; val ph = size.height - top - bottom
             if (pw <= 0f || ph <= 0f) return@Canvas
             fun label(t: String, x: Float, y: Float, col: Color, ax: Float = 0.5f, ay: Float = 0.5f, bold: Boolean = false) {
@@ -321,6 +403,26 @@ private fun BlockChartCard(state: CanState, wide: Boolean, modifier: Modifier) {
                     Offset(cx, top + ph * (0.5f - f))
                 }
             }
+            // temperature bands
+            val bandText = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum")
+            fun band(x0: Float, x1: Float, y: Float, col: Color, t: String) {
+                drawRoundRect(col, Offset(x0, y), Size(x1 - x0, bandH), CornerRadius(bandH / 2))
+                val l = tm.measure(t, bandText)
+                if (l.size.width < x1 - x0) drawText(l, Color(0xFF06121C), Offset((x0 + x1) / 2 - l.size.width / 2f, y + bandH / 2 - l.size.height / 2f))
+            }
+            val by = top + ph + 22.dp.toPx()
+            for ((name, t, span) in tbands)
+                band(left + cw * span.first + 2.dp.toPx(), left + cw * span.second - 2.dp.toPx(), by, tempColor(t),
+                    name + "  " + (t?.let { "%.0f °C".format(it) } ?: "–"))
+            // cooling: a progress bar of the battery fan (battFan %), the intake-air temperature as its caption
+            val fx0 = left + 2.dp.toPx(); val fx1 = left + pw - 2.dp.toPx(); val fy = by + bandH + bandGap
+            drawRoundRect(c.track, Offset(fx0, fy), Size(fx1 - fx0, bandH), CornerRadius(bandH / 2))
+            val fw = (fx1 - fx0) * fan
+            if (fw > 0f) drawRoundRect(c.accent, Offset(fx0, fy), Size(maxOf(fw, bandH), bandH), CornerRadius(bandH / 2))
+            val cl = tm.measure(coolLabel + ": " + (air?.let { "%.0f °C".format(it) } ?: "–"), bandText)
+            val cpos = Offset((fx0 + fx1) / 2 - cl.size.width / 2f, fy + bandH / 2 - cl.size.height / 2f)
+            drawText(cl, c.text, cpos)                                   // on the empty track
+            if (fw > 0f) clipRect(fx0, fy, fx0 + maxOf(fw, bandH), fy + bandH) { drawText(cl, c.onAccent, cpos) }   // on the fill
             for (i in 0 until 13) { val a = pts[i]; val b = pts[i + 1]
                 if (a != null && b != null) drawLine(c.accent, a, b, strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round) }
             pts.forEachIndexed { i, p -> if (p != null) {
