@@ -132,7 +132,12 @@ class Prefs(ctx: Context) {
         get() = sp.getFloat("status_font_size", 14f)
         set(v) = sp.edit().putFloat("status_font_size", v.coerceIn(8f, 48f)).apply()
 
-    /** The status-bar overlay position (px). -1 = not set yet. */
+    /** The status-bar overlay position (px). Negative values are REAL positions (the strip dragged
+     *  up into the system status bar sits above the window's origin) -> "not set yet" is the
+     *  absence of the key, see [statusPosSet]. */
+    val statusPosSet: Boolean get() = sp.contains("status_x") && sp.contains("status_y")
+    /** Back to the default position (removes both keys in one edit). */
+    fun clearStatusPos() = sp.edit().remove("status_x").remove("status_y").apply()
     var statusX: Int
         get() = sp.getInt("status_x", -1)
         set(v) = sp.edit().putInt("status_x", v).apply()

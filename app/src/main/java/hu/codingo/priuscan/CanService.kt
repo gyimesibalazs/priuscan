@@ -167,7 +167,7 @@ class CanService : Service() {
                 key == "status_font_size" -> main.post { overlays.refreshStatusStyle() }
                 // saving the position (drag) must NOT restart anything; only a reset (-1/-1) repositions
                 key == "status_x" || key == "status_y" -> {
-                    if (prefs.statusX < 0 && prefs.statusY < 0) main.post { overlays.resetStatusView() }
+                    if (!prefs.statusPosSet) main.post { overlays.resetStatusView() }
                 }
                 else -> {
                     haPusher.restart()

@@ -18,7 +18,13 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8-optimized + non-debuggable: Compose is markedly slower in a debug build (measured on
+            // the head unit). Signed with the DEBUG key on purpose, so it installs over the debug
+            // APK already on the head unit (same signature -> no uninstall, no data loss).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

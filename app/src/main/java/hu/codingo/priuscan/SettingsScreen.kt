@@ -198,7 +198,7 @@ fun SettingsScreen(prefs: Prefs, onClose: () -> Unit) {
             OutlinedTextField(fontSize, { fontSize = it.filter(Char::isDigit) },
                 label = { Text(stringResource(R.string.font_size_label)) },
                 modifier = Modifier.fillMaxWidth(), singleLine = true)
-            TextButton(onClick = { prefs.statusX = -1; prefs.statusY = -1 }) {
+            TextButton(onClick = { prefs.clearStatusPos() }) {
                 Text(stringResource(R.string.reset_status_pos))
             }
         }

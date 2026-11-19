@@ -67,8 +67,10 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
         val lp = baseParams().apply {
             // touchable (draggable), but does not take focus
             gravity = Gravity.TOP or Gravity.START
-            x = if (prefs.statusX >= 0) prefs.statusX else 8
-            y = if (prefs.statusY >= 0) prefs.statusY else statusBarHeight()
+            // a saved position may be negative (dragged up into the status bar) -- restore it as is
+            val saved = prefs.statusPosSet
+            x = if (saved) prefs.statusX else 8
+            y = if (saved) prefs.statusY else statusBarHeight()
         }
         // freely draggable anywhere; we save the new position
         tv.setOnTouchListener(object : View.OnTouchListener {
@@ -124,8 +126,8 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
     fun resetStatusView() {
         val v = statusView ?: return
         val lp = v.layoutParams as? WindowManager.LayoutParams ?: return
-        lp.x = if (prefs.statusX >= 0) prefs.statusX else 8
-        lp.y = if (prefs.statusY >= 0) prefs.statusY else statusBarHeight()
+        lp.x = if (prefs.statusPosSet) prefs.statusX else 8
+        lp.y = if (prefs.statusPosSet) prefs.statusY else statusBarHeight()
         try { wm.updateViewLayout(v, lp) } catch (_: Exception) {}
     }
 
