@@ -31,9 +31,13 @@ Assistant. Two halves:
 6. **Child of the model naming quirk**: in `Prius3DView.kt`, door mask 0x80
    (driver) maps to mesh `Door_fr`, and 0x40 (passenger) to `Door_fl` — the GLB
    names are swapped vs reality. Keep firmware bitmask and app mapping consistent.
-7. Production firmware has **no Wi-Fi/OTA/web_server**. They're only temporarily
+7. **The diagnostic probe is READ-ONLY.** `X<reqid> <hex bytes>` may only ever carry read
+   services (the whitelist lives in `probe_service_ok` in `prius_parse.h`); never add a write,
+   clear, active-test, session-control or security-access service. It talks to the airbag ECU.
+   The four polled ECUs (7E0/7E2/7C4/7B0) and 7DF are excluded so the poll loop isn't disturbed.
+8. Production firmware has **no Wi-Fi/OTA/web_server**. They're only temporarily
    enabled for G-sensor calibration (raw0..raw7 on the web UI).
-8. **The Android app is multilingual — every user-facing UI string is a string
+9. **The Android app is multilingual — every user-facing UI string is a string
    resource, translated to all supported locales.** Base (English) lives in
    `app/src/main/res/values/strings.xml`; per-language overrides in
    `values-<lang>/` (currently `hu, de, fr, es, it, pt, nl, pl`). Sensor labels
@@ -56,7 +60,15 @@ Assistant. Two halves:
   `local.properties` holds the user's Windows SDK path — temporarily swap it to the
   Linux SDK (`sdk.dir=/home/gazdi/Android/Sdk`), build, restore. Otherwise `adb install`
   re-installs the STALE old APK. Verify the APK timestamp is fresh.
-* Tooling: `tools/install-app.sh` (build with the Linux SDK + install over network adb),
+* UI check without the car: debug builds register `hu.codingo.priuscan.REPLAY`, which loops
+  `files/replay.jsonl` (push it with `run-as`) through `handleLine`. Logs carry no `rblk` line;
+  prepend one by hand if the resistance bars matter.
+* Head unit: installing kills the app; if the user is driving with another app in front, restart
+  only the service (`am start-foreground-service -n hu.codingo.priuscan/.CanService`), don't
+  launch the activity over their navigation.
+* Tooling: `tools/install-app.sh [--debug]` (build with the Linux SDK + install over network adb;
+  release build by default), `tools/release.sh` (GitHub release the in-app updater consumes;
+  bump `versionCode`/`versionName` first),
   `tools/pull-logs.sh` (download new logs/dumps to `carlogs/`). `carlogs/` is gitignored.
 * No unit tests; validation is against real car logs (JSON) and CAN dumps. When changing
   a PID, sanity-check ranges against §6 of the guide.
@@ -73,10 +85,11 @@ MQTT discovery must stay in sync; if you add a key, update all three. Trip data 
 **Host→ESP commands** (`parse_host_line`): `T<unix>` set time, `D0/D1/D2` dump,
 `H`/`HO` refuel/oil history, `F<factor>` fuel correction, `R<2..6>` reset slot,
 `C<dst><src>` copy a live trip into A/B/C (src `B`=since-boot/`H`=from-home),
-`B` emit per-block internal resistance, `G0`/`G1`/`G2` app geofence state
+`B` emit per-block internal resistance, `X<reqid> <hex bytes>` read-only diagnostic probe (answer: `{"xr":{"req","rsp","n","d"}}`, or
+`"to":1` on timeout / `"err"` when refused), `G0`/`G1`/`G2` app geofence state
 (0=unknown/not-covered, 1=belterület, 2=országút → `city_state`, persisted across key-off;
 city km / city-EV km per slot accrue only in state 1). **On-demand responses**
-(not in the 4 Hz line): `{"rhist":…}`, `{"ohist":…}`, `{"rblk":[…14…],"rn":N}`.
+(not in the 4 Hz line): `{"rhist":…}`, `{"ohist":…}`, `{"rblk":[…14…],"rn":N}`, `{"xr":…}`.
 
 **Flash persistence**: trip slots + histories + learned capacity/weak-block in ONE NVS
 blob (`prius_persist.h`, namespace `priuscan`, magic `0x5043000x`). Changing `TripSlot`
@@ -92,7 +105,10 @@ shutdown/quiet detection). NVS partition is ~446 KB.
 3. Cruise: the SET bit (`0x399 b1.bit1`) is empirically inferred — confirm with a controlled
    on/off test; the set-SPEED value is not on the broadcast (0x1D2/0x1D3 absent).
 4. Decide InfluxDB location for the HA history chain (deep battery-health trend lives there).
-5. Implement DTC read-out (mode 03/07) + P-code decoding.
+5. DTC read-out. Measured with the probe (fw 3.55): the airbag ECU is 0x780→0x788 and answers
+   the Toyota KWP service `13` (`53 00` = no stored codes) and the `21` data list, NOT `19`/`03`/`07`.
+   Open: the `53` layout with codes present, the address scan above 0x727, UDS ECUs (0x724 →
+   `19 02 xx`), and a firmware-side path for the four polled ECUs (mode 03/07 + P-code decoding).
 6. Verify on-device: the daily flash ring + per-block-R boot seed (only host-tested).
 
 ## Style
