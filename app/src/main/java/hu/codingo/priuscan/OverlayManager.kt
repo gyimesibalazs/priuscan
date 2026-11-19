@@ -68,9 +68,8 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
             // touchable (draggable), but does not take focus
             gravity = Gravity.TOP or Gravity.START
             // a saved position may be negative (dragged up into the status bar) -- restore it as is
-            val saved = prefs.statusPosSet
-            x = if (saved) prefs.statusX else 8
-            y = if (saved) prefs.statusY else statusBarHeight()
+            x = if (prefs.statusPosSet) prefs.statusX else defaultStatusX()
+            y = if (prefs.statusPosSet) prefs.statusY else defaultStatusY(tv)
         }
         // freely draggable anywhere; we save the new position
         tv.setOnTouchListener(object : View.OnTouchListener {
@@ -126,9 +125,21 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
     fun resetStatusView() {
         val v = statusView ?: return
         val lp = v.layoutParams as? WindowManager.LayoutParams ?: return
-        lp.x = if (prefs.statusPosSet) prefs.statusX else 8
-        lp.y = if (prefs.statusPosSet) prefs.statusY else statusBarHeight()
+        lp.x = if (prefs.statusPosSet) prefs.statusX else defaultStatusX()
+        lp.y = if (prefs.statusPosSet) prefs.statusY else defaultStatusY(v)
         try { wm.updateViewLayout(v, lp) } catch (_: Exception) {}
+    }
+
+    // Default position = ON the system status bar. The overlay's origin is the top-left of the
+    // area BELOW the status bar (measured on the head unit: containing frame [0,72]), so the bar
+    // itself is at negative y. Vertically centred in the bar; horizontally right after the ROM's
+    // home button (the button occupies about one bar-height on the left; the strip has its own
+    // 20 px left padding).
+    private fun defaultStatusX(): Int = statusBarHeight() * 5 / 4
+    private fun defaultStatusY(v: View): Int {
+        val sbh = statusBarHeight()
+        v.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        return -sbh + (sbh - v.measuredHeight) / 2
     }
 
     private fun statusBarHeight(): Int {
