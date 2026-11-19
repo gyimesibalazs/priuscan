@@ -54,7 +54,10 @@ class OverlayManager(private val ctx: Context, private val prefs: Prefs) {
         if (text.isEmpty()) { hideStatus(); return }
         if (!canDraw()) { hideStatus(); return }
         // reuse the existing view: refresh text + style (font size/color)
-        statusView?.let { it.text = text; styleStatus(it); return }
+        // (unchanged text -> nothing to do: this runs on every ~4 Hz sample, and setText + restyle
+        // would re-layout and redraw the overlay window each time; style changes come through
+        // refreshStatusStyle())
+        statusView?.let { if (it.text.toString() != text) { it.text = text; styleStatus(it) }; return }
         val tv = TextView(ctx).apply {
             this.text = text
             setTypeface(typeface, Typeface.BOLD)

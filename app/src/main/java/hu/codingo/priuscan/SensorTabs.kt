@@ -23,6 +23,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -110,7 +114,7 @@ internal fun EngineTab(state: CanState, fields: List<Field>) = TabPage { cols ->
     val rpmF = fields.firstOrNull { it.key == "rpm" }; val spdF = fields.firstOrNull { it.key == "spd" }
     val others = fields.filter { it.key != "rpm" && it.key != "spd" }.map { fieldSpec(state, it) }
     val dials: @Composable RowScope.() -> Unit = {
-        if (rpmF != null) DialCard(state.d("rpm"), rpmF.unit, 6000f, 1000f, 4, Modifier.weight(1f).height(DIAL_H))
+        if (rpmF != null) DialCard(state.d("rpm"), rpmF.unit, 7500f, 1500f, 2, Modifier.weight(1f).height(DIAL_H))
         if (spdF != null) DialCard(state.d("spd"), spdF.unit, 180f, 20f, 1, Modifier.weight(1f).height(DIAL_H))
     }
     if (cols >= 4) {
@@ -129,11 +133,26 @@ private val DIAL_H = 288.dp     // = three tile rows
 
 /** Round dial: 270 deg arc, labelled major ticks every [step], [minor] minor ticks between them,
  *  accent arc + needle up to the value (clamped to 0..[max]), the number + unit in the lower centre
- *  (no caption: the scale and the unit say what it is). */
+ *  (no caption: the scale and the unit say what it is).
+ *  The needle and the arc glide between the ~4 Hz samples (250 ms linear transition).
+ *  The animated fraction is read ONLY inside the draw lambda, so a frame of the animation is a
+ *  redraw of this one canvas -- no recomposition, no layout; the scale text is measured once up
+ *  front, only the counting number is re-measured per frame.
+ *  At rest nothing is drawn at all. */
 @Composable
 private fun DialCard(value: Double?, unit: String, max: Float, step: Float, minor: Int, modifier: Modifier) {
     val c = pc
     val tm = rememberTextMeasurer()
+    // the VALUE is animated (not the clamped fraction), so the number counts along with the needle
+    val anim = animateFloatAsState((value ?: 0.0).toFloat(), tween(DIAL_MS, easing = LinearEasing), label = "dial")
+    val nMajor = (max / step).toInt()
+    val tickLabels = remember(tm, max, step) {
+        val st = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, fontFeatureSettings = "tnum")
+        (0..nMajor).map { tm.measure("%.0f".format(it * step), st) }
+    }
+    val numStyle = remember { TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum") }
+    val u = remember(tm, unit) { tm.measure(unit, TextStyle(fontSize = 15.sp)) }
+    val hasValue = value != null
     PCard(modifier, padding = 10.dp) {
         Canvas(Modifier.fillMaxSize()) {
             val sw = 9.dp.toPx()
@@ -141,16 +160,15 @@ private fun DialCard(value: Double?, unit: String, max: Float, step: Float, mino
             val r = minOf(size.width / 2 - sw, (size.height - 1.5f * sw) / 1.707f)
             val ctr = Offset(size.width / 2, r + sw)
             val arcTl = Offset(ctr.x - r, ctr.y - r)
-            val f = ((value ?: 0.0) / max).toFloat().coerceIn(0f, 1f)
+            val shown = anim.value
+            val f = (shown / max).coerceIn(0f, 1f)
             drawArc(c.track, 135f, 270f, false, arcTl, Size(2 * r, 2 * r), style = Stroke(sw, cap = StrokeCap.Round))
             if (f > 0f) drawArc(c.accent, 135f, 270f * f, false, arcTl, Size(2 * r, 2 * r), style = Stroke(sw, cap = StrokeCap.Round))
             fun dir(frac: Float): Offset { val a = Math.toRadians((135.0 + 270.0 * frac)); return Offset(kotlin.math.cos(a).toFloat(), kotlin.math.sin(a).toFloat()) }
-            val tick = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, fontFeatureSettings = "tnum")
-            val nMajor = (max / step).toInt()
             for (i in 0..nMajor) {
                 val d = dir(i / nMajor.toFloat())
                 drawLine(c.text, ctr + d * (r - sw * 0.9f), ctr + d * (r - sw * 0.9f - 11.dp.toPx()), strokeWidth = 2.dp.toPx())
-                val l = tm.measure("%.0f".format(i * step), tick)
+                val l = tickLabels[i]
                 val lp = ctr + d * (r - sw * 0.9f - 28.dp.toPx())
                 drawText(l, c.text, Offset(lp.x - l.size.width / 2f, lp.y - l.size.height / 2f))
                 if (i < nMajor) for (k in 1..minor) {
@@ -158,20 +176,23 @@ private fun DialCard(value: Double?, unit: String, max: Float, step: Float, mino
                     drawLine(c.dim, ctr + dm * (r - sw * 0.9f), ctr + dm * (r - sw * 0.9f - 6.dp.toPx()), strokeWidth = 1.dp.toPx())
                 }
             }
-            if (value != null) {
+            if (hasValue) {
                 val d = dir(f)
                 drawLine(c.text, ctr - d * (10.dp.toPx()), ctr + d * (r - sw * 0.9f - 14.dp.toPx()), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
             }
             drawCircle(c.card, 9.dp.toPx(), ctr); drawCircle(c.dim, 7.dp.toPx(), ctr)
-            val num = tm.measure(value?.let { "%.0f".format(it) } ?: "–",
-                TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum"))
+            // the number shows where the needle IS right now (measured per frame: one short string)
+            val num = tm.measure(if (hasValue) Math.round(shown).toString() else "–", numStyle)
             val ny = ctr.y + r * 0.22f
             drawText(num, c.text, Offset(ctr.x - num.size.width / 2f, ny))
-            val u = tm.measure(unit, TextStyle(fontSize = 15.sp))
             drawText(u, c.dim, Offset(ctr.x - u.size.width / 2f, ny + num.size.height - 4.dp.toPx()))
         }
     }
 }
+
+// Needle transition between two samples: 250 ms = the firmware's sample period, linear, so
+// consecutive 4 Hz samples join into one even sweep.
+private const val DIAL_MS = 250
 
 /** Driving tab = the drive/brake fields + slope + drive mode, cruise/turn and exterior lights. */
 @Composable
