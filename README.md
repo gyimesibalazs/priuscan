@@ -48,8 +48,9 @@ put `prius_can_full_v2.yaml` and `prius_parse.h` in the same dir, then
 `esphome compile prius_can_full_v2.yaml`. Host-test the pure logic with
 `g++ -std=gnu++17 -I. <test>.cpp` (include `prius_parse.h`).
 
-**App** (from repo root): `./gradlew :app:assembleDebug` →
-`app/build/outputs/apk/debug/app-debug.apk`. (Building from WSL: see `CLAUDE.md` —
+**App** (from repo root): `./gradlew :app:assembleRelease` →
+`app/build/outputs/apk/release/app-release.apk` (R8-optimized, debug-signed; `:app:assembleDebug`
+for a development build). (Building from WSL: see `CLAUDE.md` —
 `local.properties` must point at the Linux SDK or the build silently keeps the
 stale APK. `tools/install-app.sh` handles the swap + network-adb install.)
 

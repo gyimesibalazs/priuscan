@@ -391,11 +391,13 @@ Prereqs in WSL: `openjdk-17-jdk`, Android cmdline-tools, env vars
 
 ```bash
 cd priuscan
-./gradlew assembleDebug        # debug build is correct: self-signed, installable
-# APK: app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:assembleRelease   # what runs in the car: R8-optimized, signed with the DEBUG key
+# APK: app/build/outputs/apk/release/app-release.apk
+./gradlew :app:assembleDebug     # development build (REPLAY broadcast, debugger); same signature,
+# APK: app/build/outputs/apk/debug/app-debug.apk   so the two install over each other
 ```
 Install from Windows (WSL can't see USB by default): copy the APK out via
-`\\wsl$\...` and `adb install -r app-debug.apk`. Keep the project on the WSL
+`\\wsl$\...` and `adb install -r app-release.apk`. Keep the project on the WSL
 native FS (`~/...`), not `/mnt/c`, for speed.
 
 Use **debug**, not release — no signing key needed, no minification (which can

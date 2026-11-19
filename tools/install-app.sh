@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Build the latest debug APK (with the Linux SDK) and install it on the head unit.
+# Build the latest APK (with the Linux SDK) and install it on the head unit. Default = the
+# R8-optimized release build (what runs in the car; debug-signed, so both variants install over
+# each other); --debug = the debug build (needed for the REPLAY broadcast / a debugger).
 #
-#   tools/install-app.sh [--no-build] [IP]
+#   tools/install-app.sh [--debug] [--no-build] [IP]
 #
 #   --no-build : skip the build, install the existing APK
 #   IP         : head-unit IP (otherwise the hotspot range is scanned)
@@ -17,24 +19,26 @@ cd "$ROOT"
 source "$ROOT/tools/priuscan-device.sh"
 
 PKG=hu.codingo.priuscan
-APK=app/build/outputs/apk/debug/app-debug.apk
 LINUX_SDK="${ANDROID_SDK_LINUX:-$HOME/Android/Sdk}"
 CANSVC=app/src/main/java/hu/codingo/priuscan/CanService.kt
 
-NOBUILD=0; IPARG=""
+NOBUILD=0; IPARG=""; VARIANT=release
 for a in "$@"; do
   case "$a" in
     --no-build) NOBUILD=1 ;;
+    --debug)    VARIANT=debug ;;
     *)          IPARG="$a" ;;
   esac
 done
+APK=app/build/outputs/apk/$VARIANT/app-$VARIANT.apk
+TASK=":app:assemble$( [ "$VARIANT" = debug ] && echo Debug || echo Release )"
 
 if [ "$NOBUILD" -eq 0 ]; then
   echo ">> Building (Linux SDK: $LINUX_SDK) ..."
   [ -d "$LINUX_SDK" ] || { echo "!! Linux SDK not found: $LINUX_SDK (set ANDROID_SDK_LINUX)"; exit 1; }
   cp local.properties /tmp/priuscan-lp.bak 2>/dev/null || true
   echo "sdk.dir=$LINUX_SDK" > local.properties
-  if ./gradlew :app:assembleDebug; then BUILT=1; else BUILT=0; fi
+  if ./gradlew "$TASK"; then BUILT=1; else BUILT=0; fi
   [ -f /tmp/priuscan-lp.bak ] && cp /tmp/priuscan-lp.bak local.properties || true
   [ "$BUILT" -eq 1 ] || { echo "!! Build failed"; exit 1; }
 fi

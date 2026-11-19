@@ -12,7 +12,7 @@ import java.net.URL
 
 /**
  * In-app updater off GitHub Releases (mirrors the firmware OTA pattern). The latest release carries:
- *   - app-debug.apk            the new APK (user-confirmed install),
+ *   - app-release.apk          the new APK (any *.apk asset; user-confirmed install),
  *   - update.json              {"versionCode":N,"versionName":"x.y","fw":NNN},
  *   - <region>.bgf …           the geofence sets — downloaded into filesDir/geofence so the data can
  *                              grow WITHOUT a full APK update; they override the APK's baked-in copies.

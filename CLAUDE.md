@@ -51,7 +51,8 @@ Assistant. Two halves:
 * Firmware: `esphome compile prius_can_full_v2.yaml` (the user OTAs; assistant does
   compile + bundle the `.bin` into `app/src/main/assets/firmware.bin`, never flashes).
   Host-test pure logic by `g++ -std=gnu++17 -I. <test>.cpp` including `prius_parse.h`.
-* App: `./gradlew :app:assembleDebug`. **From WSL the build fails SILENTLY** because
+* App: `./gradlew :app:assembleRelease` (R8-optimized, debug-signed — this is what runs in the car and
+  what `tools/release.sh` publishes; `:app:assembleDebug` for the REPLAY broadcast / debugging). **From WSL the build fails SILENTLY** because
   `local.properties` holds the user's Windows SDK path — temporarily swap it to the
   Linux SDK (`sdk.dir=/home/gazdi/Android/Sdk`), build, restore. Otherwise `adb install`
   re-installs the STALE old APK. Verify the APK timestamp is fresh.

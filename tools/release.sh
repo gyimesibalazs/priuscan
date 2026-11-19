@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Publish a GitHub Release the in-app updater (AppUpdater.kt) consumes:
-#   - the debug APK (user-confirmed self-install),
+#   - the R8-optimized release APK (debug-signed, so it installs over any earlier build;
+#     user-confirmed self-install),
 #   - update.json {versionCode, versionName, fw},
 #   - every geofence <region>.bgf (so the app can sync data without a full APK update).
 #
@@ -13,7 +14,7 @@ VC=$(grep -oE 'versionCode = [0-9]+' app/build.gradle.kts | grep -oE '[0-9]+')
 VN=$(grep -oE 'versionName = "[^"]+"' app/build.gradle.kts | sed -E 's/.*"([^"]+)"/\1/')
 FW=$(grep -oE 'BUNDLED_FW = [0-9]+' app/src/main/java/hu/codingo/priuscan/CanService.kt | grep -oE '[0-9]+')
 TAG="${1:-app-v$VN}"
-APK=app/build/outputs/apk/debug/app-debug.apk
+APK=app/build/outputs/apk/release/app-release.apk
 GEO=app/src/main/assets/geofence
 
 echo ">> App v$VN (versionCode $VC), FW $FW, tag $TAG"
@@ -26,7 +27,7 @@ LP_BAK="local.properties.bak"
 cp local.properties "$LP_BAK" 2>/dev/null || true
 trap '[ -f "$LP_BAK" ] && mv "$LP_BAK" local.properties' EXIT
 echo "sdk.dir=${ANDROID_SDK_LINUX:-$HOME/Android/Sdk}" > local.properties
-./gradlew :app:assembleDebug
+./gradlew :app:assembleRelease
 [ -f "$APK" ] || { echo "!! build produced no APK"; exit 1; }
 
 # the asset MUST be literally "update.json" (AppUpdater looks for that name) -> stage in a temp dir
