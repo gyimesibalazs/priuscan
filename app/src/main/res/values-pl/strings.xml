@@ -124,7 +124,6 @@
     <string name="f_mg1r">Prędkość MG1</string>
     <string name="f_mg1q">Moment MG1</string>
     <string name="f_mg2t">Temp. MG2</string>
-    <string name="f_mg2r">Prędkość MG2</string>
     <string name="f_mg2q">Moment MG2</string>
     <string name="f_inv1">Falownik MG1</string>
     <string name="f_inv2">Falownik MG2</string>
@@ -158,15 +157,10 @@
     <string name="f_evap">Parownik</string>
     <string name="f_acw">Moc A/C</string>
     <string name="f_solar">Czujnik nasłonecznienia</string>
-    <string name="f_acAmb">Na zewnątrz (klimatyzacja)</string>
     <string name="f_blower">Poziom dmuchawy</string>
     <string name="f_acPress">Ciśnienie czynnika chłodniczego</string>
 
     <!-- ===== Sensor labels (driving / brake) ===== -->
-    <string name="f_wFL">Koło LP</string>
-    <string name="f_wFR">Koło PP</string>
-    <string name="f_wRL">Koło LT</string>
-    <string name="f_wRR">Koło PT</string>
     <string name="f_wDif">Różnica kół przednich</string>
     <string name="f_gLat">Przyspieszenie boczne</string>
     <string name="f_gFwd">Przyspieszenie wzdłużne</string>
@@ -216,7 +210,6 @@
     <string name="f_cwL">Ostrzeżenie ogniwa (uczone)</string>
     <string name="f_wblk">Słaby blok (uczony)</string>
     <string name="f_wz">Słaby blok Z</string>
-    <string name="f_setSpd">Prędkość tempomatu</string>
     <!-- GPS + cruise strip -->
     <string name="gps_title">GPS</string>
     <string name="gps_no_fix">brak sygnału</string>
@@ -240,7 +233,6 @@
     <string name="connection_title">Połączenie</string>
     <!-- battery capacity / SoH -->
     <string name="f_capAh">Pojemność</string>
-    <string name="f_capKwh">Energia</string>
     <string name="f_capSoh">Stan zdrowia (SoH)</string>
     <string name="battery_ref_label">Pojemność odniesienia (Ah)</string>
     <!-- refuel tab -->
@@ -318,13 +310,11 @@
     <string name="oil_interval_mo">Interwał oleju (mies.)</string>
     <string name="refuel_btn">Zatankowano (ręcznie)</string>
     <string name="btn_save">Zapisz</string>
-    <string name="grp_cruise">Tempomat / kier.</string>
     <string name="grp_drivemode">Tryb jazdy</string>
     <string name="f_drivemode">Tryb</string>
     <string name="f_evmode">Tryb EV</string>
     <string name="dm_normal">Normalny</string>
     <string name="f_cruise">Tempomat</string>
-    <string name="f_turn">Kierunkowskaz</string>
     <string name="nvs_status">NVS: zapisy=%1$d, ostatnie wył.=%2$s</string>
     <string name="warn_weak_block">Słabe ogniwo: #%1$d</string>
     <string name="warn_high_res">Wysoka rezystancja: #%1$d</string>

@@ -124,7 +124,6 @@
     <string name="f_mg1r">MG1-Drehzahl</string>
     <string name="f_mg1q">MG1-Drehmoment</string>
     <string name="f_mg2t">MG2-Temp.</string>
-    <string name="f_mg2r">MG2-Drehzahl</string>
     <string name="f_mg2q">MG2-Drehmoment</string>
     <string name="f_inv1">Inverter MG1</string>
     <string name="f_inv2">Inverter MG2</string>
@@ -158,15 +157,10 @@
     <string name="f_evap">Verdampfer</string>
     <string name="f_acw">A/C-Leistung</string>
     <string name="f_solar">Sonnensensor</string>
-    <string name="f_acAmb">Außen (Klima)</string>
     <string name="f_blower">Gebläsestufe</string>
     <string name="f_acPress">Kältemitteldruck</string>
 
     <!-- ===== Sensor labels (driving / brake) ===== -->
-    <string name="f_wFL">Rad VL</string>
-    <string name="f_wFR">Rad VR</string>
-    <string name="f_wRL">Rad HL</string>
-    <string name="f_wRR">Rad HR</string>
     <string name="f_wDif">Vorderrad-Differenz</string>
     <string name="f_gLat">Querbeschleunigung</string>
     <string name="f_gFwd">Längsbeschleunigung</string>
@@ -215,7 +209,6 @@
     <string name="f_cwL">Zellwarnung (gelernt)</string>
     <string name="f_wblk">Schwacher Block (gelernt)</string>
     <string name="f_wz">Schwacher Block Z</string>
-    <string name="f_setSpd">Tempomat-Sollwert</string>
     <!-- GPS + cruise strip -->
     <string name="gps_title">GPS</string>
     <string name="gps_no_fix">kein Fix</string>
@@ -239,7 +232,6 @@
     <string name="connection_title">Verbindung</string>
     <!-- battery capacity / SoH -->
     <string name="f_capAh">Kapazität</string>
-    <string name="f_capKwh">Energie</string>
     <string name="f_capSoh">Gesundheitszustand (SoH)</string>
     <string name="battery_ref_label">Referenzkapazität (Ah)</string>
     <!-- refuel tab -->
@@ -317,13 +309,11 @@
     <string name="oil_interval_mo">Ölwechsel-Intervall (Monate)</string>
     <string name="refuel_btn">Getankt (manuell)</string>
     <string name="btn_save">Speichern</string>
-    <string name="grp_cruise">Tempomat / Blinker</string>
     <string name="grp_drivemode">Fahrmodus</string>
     <string name="f_drivemode">Modus</string>
     <string name="f_evmode">EV-Modus</string>
     <string name="dm_normal">Normal</string>
     <string name="f_cruise">Tempomat</string>
-    <string name="f_turn">Blinker</string>
     <string name="nvs_status">NVS: Speich.=%1$d, letztes Aus=%2$s</string>
     <string name="warn_weak_block">Schwache Zelle: #%1$d</string>
     <string name="warn_high_res">Hoher Widerstand: #%1$d</string>

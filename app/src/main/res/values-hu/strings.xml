@@ -123,7 +123,6 @@
     <string name="f_mg1r">MG1 fordulat</string>
     <string name="f_mg1q">MG1 nyomaték</string>
     <string name="f_mg2t">MG2 hőmérséklet</string>
-    <string name="f_mg2r">MG2 fordulat</string>
     <string name="f_mg2q">MG2 nyomaték</string>
     <string name="f_inv1">Inverter MG1</string>
     <string name="f_inv2">Inverter MG2</string>
@@ -157,15 +156,10 @@
     <string name="f_evap">Párologtató</string>
     <string name="f_acw">A/C teljesítmény</string>
     <string name="f_solar">Napfény érzékelő</string>
-    <string name="f_acAmb">Külső (klíma)</string>
     <string name="f_blower">Ventilátor szint</string>
     <string name="f_acPress">Hűtőközeg nyomás</string>
 
     <!-- ===== Sensor labels (driving / brake) ===== -->
-    <string name="f_wFL">Kerék BE</string>
-    <string name="f_wFR">Kerék JE</string>
-    <string name="f_wRL">Kerék BH</string>
-    <string name="f_wRR">Kerék JH</string>
     <string name="f_wDif">Első kerék eltérés</string>
     <string name="f_gLat">Oldalgyorsulás</string>
     <string name="f_gFwd">Hosszgyorsulás</string>
@@ -215,7 +209,6 @@
     <string name="f_cwL">Cella figy. (tanult)</string>
     <string name="f_wblk">Gyenge blokk (tanult)</string>
     <string name="f_wz">Gyenge blokk Z</string>
-    <string name="f_setSpd">Tempomat sebesség</string>
     <!-- GPS + cruise strip -->
     <string name="gps_title">GPS</string>
     <string name="gps_no_fix">nincs jel</string>
@@ -239,7 +232,6 @@
     <string name="connection_title">Kapcsolat</string>
     <!-- battery capacity / SoH -->
     <string name="f_capAh">Kapacitás</string>
-    <string name="f_capKwh">Energia</string>
     <string name="f_capSoh">Egészségi állapot (SoH)</string>
     <string name="battery_ref_label">Referencia kapacitás (Ah)</string>
     <!-- refuel tab -->
@@ -317,13 +309,11 @@
     <string name="oil_interval_mo">Olajcsere-intervallum (hónap)</string>
     <string name="refuel_btn">Tankoltam (kézi)</string>
     <string name="btn_save">Mentés</string>
-    <string name="grp_cruise">Tempomat / index</string>
     <string name="grp_drivemode">Vezetési mód</string>
     <string name="f_drivemode">Mód</string>
     <string name="f_evmode">EV mód</string>
     <string name="dm_normal">Normál</string>
     <string name="f_cruise">Tempomat</string>
-    <string name="f_turn">Index</string>
     <string name="nvs_status">NVS: mentések=%1$d, utolsó kikapcsolás=%2$s</string>
     <string name="warn_weak_block">Gyenge cella: #%1$d</string>
     <string name="warn_high_res">Magas ellenállás: #%1$d</string>

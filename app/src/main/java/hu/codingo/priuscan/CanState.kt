@@ -32,6 +32,9 @@ object Fields {
         // The polled accelerator PID ("pedal", 7E0 2101) is not listed: it is the raw sensor
         // (rests at 16 %, tops out at 74 %; = 0.47 x gasB + 16.3, r 0.97 on the logs) and slower
         // than the broadcast gasB. Not shown and not sent to Home Assistant; it stays in the log.
+        // Likewise dropped as copies / dead (10k log lines, 2026-11-21): the four wheel speeds
+        // (= 0.99 x spd; wDif stays), mg2r (= 74 x spd, fixed gear), capKwh (= 0.2 x capAh),
+        // acAmb / setSpd / turn (never arrive on this car).
         R.string.grp_engine_drive to listOf(
             Field("rpm", R.string.f_rpm, "rpm"),
             Field("spd", R.string.f_spd, "km/h"),
@@ -52,10 +55,6 @@ object Fields {
             Field("gLat", R.string.f_gLat, "m/s²", 2),   // + = right turn
             Field("gFwd", R.string.f_gFwd, "m/s²", 2),   // fw >= 3.56: real accelerometer (sees slope), + = speeding up / nose up
             Field("brkP", R.string.f_brkP, "V", 2),
-            Field("wFL", R.string.f_wFL, "km/h", 1),
-            Field("wFR", R.string.f_wFR, "km/h", 1),
-            Field("wRL", R.string.f_wRL, "km/h", 1),
-            Field("wRR", R.string.f_wRR, "km/h", 1),
             Field("wDif", R.string.f_wDif, "%", 2),
         ),
         R.string.grp_hybrid_drive to listOf(
@@ -63,7 +62,6 @@ object Fields {
             Field("mg1r", R.string.f_mg1r, "rpm"),
             Field("mg1q", R.string.f_mg1q, "Nm"),
             Field("mg2t", R.string.f_mg2t, "°C"),
-            Field("mg2r", R.string.f_mg2r, "rpm"),
             Field("mg2q", R.string.f_mg2q, "Nm"),
             Field("inv1", R.string.f_inv1, "°C"),
             Field("inv2", R.string.f_inv2, "°C"),
@@ -95,7 +93,6 @@ object Fields {
             Field("wblk", R.string.f_wblk),
             Field("wz", R.string.f_wz, "", 2),
             Field("capAh", R.string.f_capAh, "Ah", 2),
-            Field("capKwh", R.string.f_capKwh, "kWh", 2),
         ),
         R.string.grp_climate to listOf(
             Field("cabin", R.string.f_cabin, "°C"),
@@ -104,7 +101,6 @@ object Fields {
             Field("evap", R.string.f_evap, "°C"),
             Field("acw", R.string.f_acw, "W"),
             Field("solar", R.string.f_solar),
-            Field("acAmb", R.string.f_acAmb, "°C"),
             Field("blower", R.string.f_blower),
             Field("acPress", R.string.f_acPress, "MPa", 2),
         ),

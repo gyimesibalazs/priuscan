@@ -124,7 +124,6 @@
     <string name="f_mg1r">MG1-toerental</string>
     <string name="f_mg1q">MG1-koppel</string>
     <string name="f_mg2t">MG2-temp</string>
-    <string name="f_mg2r">MG2-toerental</string>
     <string name="f_mg2q">MG2-koppel</string>
     <string name="f_inv1">Omvormer MG1</string>
     <string name="f_inv2">Omvormer MG2</string>
@@ -158,15 +157,10 @@
     <string name="f_evap">Verdamper</string>
     <string name="f_acw">A/C-vermogen</string>
     <string name="f_solar">Zonnesensor</string>
-    <string name="f_acAmb">Buiten (klimaat)</string>
     <string name="f_blower">Ventilatorstand</string>
     <string name="f_acPress">Koudemiddeldruk</string>
 
     <!-- ===== Sensor labels (driving / brake) ===== -->
-    <string name="f_wFL">Wiel LV</string>
-    <string name="f_wFR">Wiel RV</string>
-    <string name="f_wRL">Wiel LA</string>
-    <string name="f_wRR">Wiel RA</string>
     <string name="f_wDif">Verschil voorwielen</string>
     <string name="f_gLat">Dwarsversnelling</string>
     <string name="f_gFwd">Langsversnelling</string>
@@ -217,7 +211,6 @@
     <string name="f_cwL">Celwaarschuwing (geleerd)</string>
     <string name="f_wblk">Zwak blok (geleerd)</string>
     <string name="f_wz">Zwak blok Z</string>
-    <string name="f_setSpd">Cruise-snelheid</string>
     <!-- GPS + cruise strip -->
     <string name="gps_title">GPS</string>
     <string name="gps_no_fix">geen fix</string>
@@ -241,7 +234,6 @@
     <string name="connection_title">Verbinding</string>
     <!-- battery capacity / SoH -->
     <string name="f_capAh">Capaciteit</string>
-    <string name="f_capKwh">Energie</string>
     <string name="f_capSoh">Gezondheidstoestand (SoH)</string>
     <string name="battery_ref_label">Referentiecapaciteit (Ah)</string>
     <!-- refuel tab -->
@@ -319,13 +311,11 @@
     <string name="oil_interval_mo">Olie-interval (maanden)</string>
     <string name="refuel_btn">Getankt (handmatig)</string>
     <string name="btn_save">Opslaan</string>
-    <string name="grp_cruise">Cruise / richting</string>
     <string name="grp_drivemode">Rijmodus</string>
     <string name="f_drivemode">Modus</string>
     <string name="f_evmode">EV-modus</string>
     <string name="dm_normal">Normaal</string>
     <string name="f_cruise">Cruise</string>
-    <string name="f_turn">Richtingaanw.</string>
     <string name="nvs_status">NVS: opsl.=%1$d, laatste uit=%2$s</string>
     <string name="warn_weak_block">Zwakke cel: #%1$d</string>
     <string name="warn_high_res">Hoge weerstand: #%1$d</string>

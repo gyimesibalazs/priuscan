@@ -123,7 +123,6 @@
     <string name="f_mg1r">Régimen MG1</string>
     <string name="f_mg1q">Par MG1</string>
     <string name="f_mg2t">Temp. MG2</string>
-    <string name="f_mg2r">Régimen MG2</string>
     <string name="f_mg2q">Par MG2</string>
     <string name="f_inv1">Inversor MG1</string>
     <string name="f_inv2">Inversor MG2</string>
@@ -157,15 +156,10 @@
     <string name="f_evap">Evaporador</string>
     <string name="f_acw">Potencia A/C</string>
     <string name="f_solar">Sensor solar</string>
-    <string name="f_acAmb">Exterior (climatización)</string>
     <string name="f_blower">Nivel del ventilador</string>
     <string name="f_acPress">Presión del refrigerante</string>
 
     <!-- ===== Sensor labels (driving / brake) ===== -->
-    <string name="f_wFL">Rueda DI</string>
-    <string name="f_wFR">Rueda DD</string>
-    <string name="f_wRL">Rueda TI</string>
-    <string name="f_wRR">Rueda TD</string>
     <string name="f_wDif">Dif. rueda delantera</string>
     <string name="f_gLat">Aceleración lateral</string>
     <string name="f_gFwd">Aceleración longitudinal</string>
@@ -215,7 +209,6 @@
     <string name="f_cwL">Aviso de celda (aprend.)</string>
     <string name="f_wblk">Bloque débil (aprend.)</string>
     <string name="f_wz">Bloque débil Z</string>
-    <string name="f_setSpd">Velocidad de crucero</string>
     <!-- GPS + cruise strip -->
     <string name="gps_title">GPS</string>
     <string name="gps_no_fix">sin señal</string>
@@ -239,7 +232,6 @@
     <string name="connection_title">Conexión</string>
     <!-- battery capacity / SoH -->
     <string name="f_capAh">Capacidad</string>
-    <string name="f_capKwh">Energía</string>
     <string name="f_capSoh">Estado de salud (SoH)</string>
     <string name="battery_ref_label">Capacidad de referencia (Ah)</string>
     <!-- refuel tab -->
@@ -317,13 +309,11 @@
     <string name="oil_interval_mo">Intervalo de aceite (meses)</string>
     <string name="refuel_btn">Repostado (manual)</string>
     <string name="btn_save">Guardar</string>
-    <string name="grp_cruise">Crucero / inter.</string>
     <string name="grp_drivemode">Modo conducción</string>
     <string name="f_drivemode">Modo</string>
     <string name="f_evmode">Modo EV</string>
     <string name="dm_normal">Normal</string>
     <string name="f_cruise">Crucero</string>
-    <string name="f_turn">Intermitente</string>
     <string name="nvs_status">NVS: guard.=%1$d, último apagado=%2$s</string>
     <string name="warn_weak_block">Celda débil: #%1$d</string>
     <string name="warn_high_res">Resistencia alta: #%1$d</string>

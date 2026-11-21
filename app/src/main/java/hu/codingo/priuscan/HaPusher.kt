@@ -247,11 +247,12 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
 
     private companion object {
         /** keys whose value is a code / bitmask / flag -> no statistics (would be meaningless) */
-        val DISCRETE = setOf("gear", "ev", "city", "turn", "lights", "dtcCur", "dtcHist", "fw",
+        val DISCRETE = setOf("gear", "ev", "city", "lights", "dtcCur", "dtcHist", "fw",
             "door", "cruise", "wpRun", "wpW", "cellW", "weakB", "tHot", "solar", "blower", "cwL",
             "wblk", "run")
-        /** dropped keys ("pedal": the raw accelerator sensor, a squeezed copy of gasB) */
-        val REMOVED = listOf("pedal")
+        /** dropped keys: copies of another value ("pedal" ~ gasB, wheel speeds and "mg2r" ~ spd,
+         *  "capKwh" = 0.2 x capAh) and ones that never arrive on this car */
+        val REMOVED = listOf("pedal", "wFL", "wFR", "wRL", "wRR", "mg2r", "capKwh", "acAmb", "setSpd", "turn")
         const val TANK_SLOT = 2   // slots[]: 0 boot, 1 lifetime, 2 tank, 3 oil, 4-6 A/B/C, 7 home
         /** key -> HA friendly name -> unit; keys the firmware emits but Fields.groups don't list */
         val EXTRA = listOf(
@@ -261,8 +262,8 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
             Triple("city", R.string.ha_city, ""), Triple("hsi", R.string.ha_hsi, "%"),
             Triple("mg1Pow", R.string.ha_mg1Pow, "kW"), Triple("mg2Pow", R.string.ha_mg2Pow, "kW"),
             Triple("vbat", R.string.f_vbat, "V"), Triple("amb", R.string.f_amb, "°C"),
-            Triple("ambL", R.string.f_ambL, ""), Triple("setSpd", R.string.f_setSpd, "km/h"),
-            Triple("turn", R.string.f_turn, ""), Triple("lights", R.string.ha_lights, ""),
+            Triple("ambL", R.string.f_ambL, ""),
+            Triple("lights", R.string.ha_lights, ""),
             Triple("dtcCur", R.string.f_dtcCur, ""), Triple("dtcHist", R.string.f_dtcHist, ""),
             Triple("fw", R.string.ha_fw, ""),
             Triple("tkDist", R.string.ha_tk_dist, "km"), Triple("tkFuel", R.string.ha_tk_fuel, "L"),

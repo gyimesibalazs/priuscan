@@ -123,7 +123,6 @@
     <string name="f_mg1r">Regime MG1</string>
     <string name="f_mg1q">Coppia MG1</string>
     <string name="f_mg2t">Temp. MG2</string>
-    <string name="f_mg2r">Regime MG2</string>
     <string name="f_mg2q">Coppia MG2</string>
     <string name="f_inv1">Inverter MG1</string>
     <string name="f_inv2">Inverter MG2</string>
@@ -157,15 +156,10 @@
     <string name="f_evap">Evaporatore</string>
     <string name="f_acw">Potenza A/C</string>
     <string name="f_solar">Sensore solare</string>
-    <string name="f_acAmb">Esterna (clima)</string>
     <string name="f_blower">Livello ventola</string>
     <string name="f_acPress">Pressione refrigerante</string>
 
     <!-- ===== Sensor labels (driving / brake) ===== -->
-    <string name="f_wFL">Ruota AS</string>
-    <string name="f_wFR">Ruota AD</string>
-    <string name="f_wRL">Ruota PS</string>
-    <string name="f_wRR">Ruota PD</string>
     <string name="f_wDif">Diff. ruote anteriori</string>
     <string name="f_gLat">Accelerazione laterale</string>
     <string name="f_gFwd">Accelerazione longitudinale</string>
@@ -215,7 +209,6 @@
     <string name="f_cwL">Avviso cella (appreso)</string>
     <string name="f_wblk">Blocco debole (appreso)</string>
     <string name="f_wz">Blocco debole Z</string>
-    <string name="f_setSpd">Velocità cruise</string>
     <!-- GPS + cruise strip -->
     <string name="gps_title">GPS</string>
     <string name="gps_no_fix">nessun fix</string>
@@ -239,7 +232,6 @@
     <string name="connection_title">Connessione</string>
     <!-- battery capacity / SoH -->
     <string name="f_capAh">Capacità</string>
-    <string name="f_capKwh">Energia</string>
     <string name="f_capSoh">Stato di salute (SoH)</string>
     <string name="battery_ref_label">Capacità di riferimento (Ah)</string>
     <!-- refuel tab -->
@@ -317,13 +309,11 @@
     <string name="oil_interval_mo">Intervallo olio (mesi)</string>
     <string name="refuel_btn">Rifornito (manuale)</string>
     <string name="btn_save">Salva</string>
-    <string name="grp_cruise">Cruise / frecce</string>
     <string name="grp_drivemode">Modalità guida</string>
     <string name="f_drivemode">Modo</string>
     <string name="f_evmode">Modalità EV</string>
     <string name="dm_normal">Normale</string>
     <string name="f_cruise">Cruise</string>
-    <string name="f_turn">Freccia</string>
     <string name="nvs_status">NVS: salv.=%1$d, ultimo spegn.=%2$s</string>
     <string name="warn_weak_block">Cella debole: #%1$d</string>
     <string name="warn_high_res">Resistenza alta: #%1$d</string>

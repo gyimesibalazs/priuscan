@@ -79,8 +79,7 @@ internal fun tileIcon(key: String, unit: String): ImageVector = when (key) {
     "battFan", "blower" -> IcWindPower
     "evap" -> IcAcUnit
     "comp" -> IcCyclone
-    "acAmb", "solar" -> IcWbSunny
-    "wFL", "wFR", "wRL", "wRR" -> IcTireRepair
+    "solar" -> IcWbSunny
     "wDif" -> IcCompareArrows
     "gLat" -> IcSwapHoriz
     "gFwd" -> IcSwapVert
@@ -113,7 +112,7 @@ private val ENGINE_KEYS = setOf("maf", "map", "iat", "thr", "injml", "run")
 
 /** Engine + driving tab: rpm and speed as two round dials with the six live driving values beside
  *  them (the fields listed before the engine section), then the engine and the driving sections,
- *  drive mode, cruise/turn and the exterior lights. */
+ *  drive mode + cruise and the exterior lights. */
 @Composable
 internal fun EngineDriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = TabPage { cols ->
     val rpmF = fields.firstOrNull { it.key == "rpm" }; val spdF = fields.firstOrNull { it.key == "spd" }
@@ -208,7 +207,7 @@ private fun DialCard(value: Double?, unit: String, max: Float, step: Float, mino
 private const val DIAL_MS = 250
 
 /** The driving part of the engine + driving tab: the drive/brake fields + slope, then drive
- *  mode, cruise/turn and exterior lights. */
+ *  mode + cruise and exterior lights. */
 @Composable
 private fun androidx.compose.foundation.layout.ColumnScope.DriveSections(state: CanState, fields: List<Field>, prefs: Prefs, cols: Int) {
     val t by CanService.tilt.collectAsState()
@@ -227,23 +226,12 @@ private fun androidx.compose.foundation.layout.ColumnScope.DriveSections(state: 
     SectionTitle(stringResource(R.string.grp_drivemode), Modifier.padding(top = 6.dp))
     val dm = state.i("dmode")
     val ev = state.i("ev") != 0
+    val cr = state.i("cruise") != 0
     TileGrid(listOf(
         TileSpec(stringResource(R.string.f_drivemode),
             when (dm) { 1 -> "ECO"; 2 -> "PWR"; else -> stringResource(R.string.dm_normal) }, highlight = dm != 0, icon = IcTune),
         TileSpec(stringResource(R.string.f_evmode), if (ev) "● EV" else "○", highlight = ev, icon = IcElectricCar),
-    ), cols)
-
-    // cruise control + turn signal (firmware decodes them; not elsewhere in the UI)
-    SectionTitle(stringResource(R.string.grp_cruise), Modifier.padding(top = 6.dp))
-    val cr = state.i("cruise") != 0
-    val ss = state.d("setSpd")
-    val turn = state.i("turn")
-    TileGrid(listOf(
         TileSpec(stringResource(R.string.f_cruise), if (cr) "●" else "○", highlight = cr, icon = IcSpeed),
-        TileSpec(stringResource(R.string.f_setSpd), if (ss != null && ss > 0) "%.0f".format(ss) else "–",
-            if (ss != null && ss > 0) "km/h" else "", icon = IcSpeed),
-        TileSpec(stringResource(R.string.f_turn), when (turn) { 1 -> "◄"; 2 -> "►"; else -> "–" },
-            highlight = turn == 1 || turn == 2, icon = IcTurnRight),
     ), cols)
 
     SectionTitle(stringResource(R.string.grp_lights), Modifier.padding(top = 6.dp))

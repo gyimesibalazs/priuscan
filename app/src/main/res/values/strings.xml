@@ -181,7 +181,6 @@
     <string name="f_mg1r">MG1 speed</string>
     <string name="f_mg1q">MG1 torque</string>
     <string name="f_mg2t">MG2 temp</string>
-    <string name="f_mg2r">MG2 speed</string>
     <string name="f_mg2q">MG2 torque</string>
     <string name="f_inv1">Inverter MG1</string>
     <string name="f_inv2">Inverter MG2</string>
@@ -215,15 +214,10 @@
     <string name="f_evap">Evaporator</string>
     <string name="f_acw">A/C power</string>
     <string name="f_solar">Solar sensor</string>
-    <string name="f_acAmb">Outside (climate)</string>
     <string name="f_blower">Blower level</string>
     <string name="f_acPress">Refrigerant pressure</string>
 
     <!-- ===== Sensor labels (driving / brake) ===== -->
-    <string name="f_wFL">Wheel FL</string>
-    <string name="f_wFR">Wheel FR</string>
-    <string name="f_wRL">Wheel RL</string>
-    <string name="f_wRR">Wheel RR</string>
     <string name="f_wDif">Front wheel diff</string>
     <string name="f_gLat">Lateral acceleration</string>
     <string name="f_gFwd">Longitudinal acceleration</string>
@@ -250,9 +244,7 @@
     <string name="f_cwL">Cell warning (learned)</string>
     <string name="f_wblk">Weak block (learned)</string>
     <string name="f_wz">Weak block Z-score</string>
-    <string name="f_setSpd">Cruise set speed</string>
     <string name="f_capAh">Capacity</string>
-    <string name="f_capKwh">Energy</string>
     <string name="f_capSoh">State of health</string>
     <string name="battery_ref_label">Reference capacity (Ah)</string>
 
@@ -319,13 +311,11 @@
     <string name="oil_interval_mo">Oil interval (months)</string>
     <string name="refuel_btn">Refueled (manual)</string>
     <string name="btn_save">Save</string>
-    <string name="grp_cruise">Cruise / turn</string>
     <string name="grp_drivemode">Drive mode</string>
     <string name="f_drivemode">Mode</string>
     <string name="f_evmode">EV mode</string>
     <string name="dm_normal">Normal</string>
     <string name="f_cruise">Cruise</string>
-    <string name="f_turn">Turn signal</string>
     <string name="nvs_status">NVS: saves=%1$d, last shutdown=%2$s</string>
     <string name="warn_weak_block">Weak cell: #%1$d</string>
     <string name="warn_high_res">High resistance: #%1$d</string>
