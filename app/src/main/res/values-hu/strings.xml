@@ -113,7 +113,6 @@
     <string name="f_map">Szívócső nyomás</string>
     <string name="f_iat">Szívólevegő</string>
     <string name="f_thr">Fojtószelep</string>
-    <string name="f_pedal">Gázpedál-érzékelő (nyers)</string>
     <string name="f_fuel">Fogyasztás</string>
     <string name="f_engNm">Motor nyomaték</string>
     <string name="f_injml">Befecskendezés</string>

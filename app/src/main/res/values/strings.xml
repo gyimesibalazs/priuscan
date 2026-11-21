@@ -171,7 +171,6 @@
     <string name="f_map">Manifold pressure</string>
     <string name="f_iat">Intake air</string>
     <string name="f_thr">Throttle</string>
-    <string name="f_pedal">Accelerator sensor (raw)</string>
     <string name="f_fuel">Consumption</string>
     <string name="f_engNm">Engine torque</string>
     <string name="f_injml">Injection</string>

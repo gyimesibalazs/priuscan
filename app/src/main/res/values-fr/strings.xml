@@ -113,7 +113,6 @@
     <string name="f_map">Pression d\'admission</string>
     <string name="f_iat">Air d\'admission</string>
     <string name="f_thr">Papillon</string>
-    <string name="f_pedal">Capteur d\'accélérateur (brut)</string>
     <string name="f_fuel">Consommation</string>
     <string name="f_engNm">Couple moteur</string>
     <string name="f_injml">Injection</string>

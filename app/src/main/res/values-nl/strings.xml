@@ -114,7 +114,6 @@
     <string name="f_map">Spruitstukdruk</string>
     <string name="f_iat">Inlaatlucht</string>
     <string name="f_thr">Gasklep</string>
-    <string name="f_pedal">Gaspedaalsensor (ruw)</string>
     <string name="f_fuel">Verbruik</string>
     <string name="f_engNm">Motorkoppel</string>
     <string name="f_injml">Inspuiting</string>

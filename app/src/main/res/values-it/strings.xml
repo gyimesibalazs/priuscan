@@ -113,7 +113,6 @@
     <string name="f_map">Pressione collettore</string>
     <string name="f_iat">Aria aspirata</string>
     <string name="f_thr">Farfalla</string>
-    <string name="f_pedal">Sensore acceleratore (grezzo)</string>
     <string name="f_fuel">Consumo</string>
     <string name="f_engNm">Coppia motore</string>
     <string name="f_injml">Iniezione</string>

@@ -114,7 +114,6 @@
     <string name="f_map">Ciśnienie w kolektorze</string>
     <string name="f_iat">Powietrze dolotowe</string>
     <string name="f_thr">Przepustnica</string>
-    <string name="f_pedal">Czujnik pedału gazu (surowy)</string>
     <string name="f_fuel">Zużycie</string>
     <string name="f_engNm">Moment obrotowy silnika</string>
     <string name="f_injml">Wtrysk</string>

@@ -113,7 +113,6 @@
     <string name="f_map">Pressão do coletor</string>
     <string name="f_iat">Ar de admissão</string>
     <string name="f_thr">Borboleta</string>
-    <string name="f_pedal">Sensor do acelerador (bruto)</string>
     <string name="f_fuel">Consumo</string>
     <string name="f_engNm">Binário do motor</string>
     <string name="f_injml">Injeção</string>

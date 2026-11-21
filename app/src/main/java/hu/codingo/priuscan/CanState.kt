@@ -31,7 +31,7 @@ object Fields {
         // engine + driving in ONE tab (EngineDriveTab lays it out: dials, then sections by key).
         // The polled accelerator PID ("pedal", 7E0 2101) is not listed: it is the raw sensor
         // (rests at 16 %, tops out at 74 %; = 0.47 x gasB + 16.3, r 0.97 on the logs) and slower
-        // than the broadcast gasB. Still sent to Home Assistant (HaPusher.EXTRA).
+        // than the broadcast gasB. Not shown and not sent to Home Assistant; it stays in the log.
         R.string.grp_engine_drive to listOf(
             Field("rpm", R.string.f_rpm, "rpm"),
             Field("spd", R.string.f_spd, "km/h"),

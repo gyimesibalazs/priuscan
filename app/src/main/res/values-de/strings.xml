@@ -114,7 +114,6 @@
     <string name="f_map">Saugrohrdruck</string>
     <string name="f_iat">Ansaugluft</string>
     <string name="f_thr">Drosselklappe</string>
-    <string name="f_pedal">Gaspedalsensor (roh)</string>
     <string name="f_fuel">Verbrauch</string>
     <string name="f_engNm">Motordrehmoment</string>
     <string name="f_injml">Einspritzung</string>
