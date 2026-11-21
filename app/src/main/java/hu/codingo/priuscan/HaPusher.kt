@@ -251,7 +251,7 @@ class HaPusher(private val ctx: Context, private val prefs: Prefs) {
         const val TANK_SLOT = 2   // slots[]: 0 boot, 1 lifetime, 2 tank, 3 oil, 4-6 A/B/C, 7 home
         /** key -> HA friendly name -> unit; keys the firmware emits but Fields.groups don't list */
         val EXTRA = listOf(
-            Triple("odo", R.string.f_odo, "km"), Triple("fuelIn", R.string.f_fuelIn, "%"),
+            Triple("odo", R.string.f_odo, "km"), Triple("pedal", R.string.f_pedal, "%"), Triple("fuelIn", R.string.f_fuelIn, "%"),
             Triple("fuelL", R.string.ha_fuelL, "L"), Triple("fuelGm", R.string.ha_fuelGm, "L"),
             Triple("gear", R.string.ha_gear, ""), Triple("ev", R.string.ha_ev, ""),
             Triple("city", R.string.ha_city, ""), Triple("hsi", R.string.ha_hsi, "%"),

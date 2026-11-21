@@ -95,6 +95,7 @@
     <string name="ha_tk_city">Tank Ortsgebiet-km</string>
 
     <!-- ===== Sensor group titles ===== -->
+    <string name="grp_engine_drive">Motor / Fahren</string>
     <string name="grp_engine">Motor</string>
     <string name="grp_hybrid_drive">Hybridantrieb</string>
     <string name="grp_hybrid_batt">Hybridbatterie</string>
@@ -113,7 +114,7 @@
     <string name="f_map">Saugrohrdruck</string>
     <string name="f_iat">Ansaugluft</string>
     <string name="f_thr">Drosselklappe</string>
-    <string name="f_pedal">Gaspedal</string>
+    <string name="f_pedal">Gaspedalsensor (roh)</string>
     <string name="f_fuel">Verbrauch</string>
     <string name="f_engNm">Motordrehmoment</string>
     <string name="f_injml">Einspritzung</string>
@@ -170,7 +171,7 @@
     <string name="f_wDif">Vorderrad-Differenz</string>
     <string name="f_gLat">Querbeschleunigung</string>
     <string name="f_gFwd">Längsbeschleunigung</string>
-    <string name="f_gasB">Gas</string>
+    <string name="f_gasB">Gaspedal</string>
     <string name="f_yaw">Gierrate</string>
     <string name="f_pitch">Längsneigung (Bug hoch +)</string>
     <string name="f_roll">Querneigung (rechts +)</string>

@@ -94,6 +94,7 @@
     <string name="ha_tk_city">Tank belterületi km</string>
 
     <!-- ===== Sensor group titles ===== -->
+    <string name="grp_engine_drive">Motor / vezetés</string>
     <string name="grp_engine">Motor</string>
     <string name="grp_hybrid_drive">Hibrid hajtás</string>
     <string name="grp_hybrid_batt">Hibrid akkumulátor</string>
@@ -112,7 +113,7 @@
     <string name="f_map">Szívócső nyomás</string>
     <string name="f_iat">Szívólevegő</string>
     <string name="f_thr">Fojtószelep</string>
-    <string name="f_pedal">Gázpedál</string>
+    <string name="f_pedal">Gázpedál-érzékelő (nyers)</string>
     <string name="f_fuel">Fogyasztás</string>
     <string name="f_engNm">Motor nyomaték</string>
     <string name="f_injml">Befecskendezés</string>
@@ -169,7 +170,7 @@
     <string name="f_wDif">Első kerék eltérés</string>
     <string name="f_gLat">Oldalgyorsulás</string>
     <string name="f_gFwd">Hosszgyorsulás</string>
-    <string name="f_gasB">Gáz</string>
+    <string name="f_gasB">Gázpedál</string>
     <string name="f_yaw">Perdülési sebesség</string>
     <string name="f_pitch">Hosszdőlés (orr fel +)</string>
     <string name="f_roll">Oldaldőlés (jobbra +)</string>

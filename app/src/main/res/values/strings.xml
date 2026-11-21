@@ -152,6 +152,7 @@
 
     <!-- ===== Sensor group titles ===== -->
     <string name="grp_trip">Trip</string>
+    <string name="grp_engine_drive">Engine / driving</string>
     <string name="grp_engine">Engine</string>
     <string name="grp_hybrid_drive">Hybrid drive</string>
     <string name="grp_hybrid_batt">Hybrid battery</string>
@@ -170,7 +171,7 @@
     <string name="f_map">Manifold pressure</string>
     <string name="f_iat">Intake air</string>
     <string name="f_thr">Throttle</string>
-    <string name="f_pedal">Accelerator</string>
+    <string name="f_pedal">Accelerator sensor (raw)</string>
     <string name="f_fuel">Consumption</string>
     <string name="f_engNm">Engine torque</string>
     <string name="f_injml">Injection</string>
@@ -231,7 +232,7 @@
     <string name="f_pitch">Pitch (nose up +)</string>
     <string name="f_roll">Roll (right side down +)</string>
     <string name="f_steer">Steering angle</string>
-    <string name="f_gasB">Gas</string>
+    <string name="f_gasB">Accelerator</string>
     <string name="f_brkP">Brake pressure</string>
 
     <!-- ===== Sensor labels (maintenance / status) ===== -->

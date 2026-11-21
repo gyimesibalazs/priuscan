@@ -108,11 +108,20 @@ internal fun GroupTab(state: CanState, fields: List<Field>, hero: Boolean = fals
     TileGrid(fields.map { fieldSpec(state, it) }, cols, heroCount = if (hero) cols else 0)
 }
 
-/** Engine tab: rpm and speed as two round dials, the six next values beside them, the rest below. */
+/** Keys of the engine section; what follows them in the group is the driving section. */
+private val ENGINE_KEYS = setOf("maf", "map", "iat", "thr", "injml", "run")
+
+/** Engine + driving tab: rpm and speed as two round dials with the six live driving values beside
+ *  them (the fields listed before the engine section), then the engine and the driving sections,
+ *  drive mode, cruise/turn and the exterior lights. */
 @Composable
-internal fun EngineTab(state: CanState, fields: List<Field>) = TabPage { cols ->
+internal fun EngineDriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = TabPage { cols ->
     val rpmF = fields.firstOrNull { it.key == "rpm" }; val spdF = fields.firstOrNull { it.key == "spd" }
-    val others = fields.filter { it.key != "rpm" && it.key != "spd" }.map { fieldSpec(state, it) }
+    val rest = fields.filter { it.key != "rpm" && it.key != "spd" }
+    val firstEngine = rest.indexOfFirst { it.key in ENGINE_KEYS }.let { if (it < 0) rest.size else it }
+    val top = rest.take(firstEngine).map { fieldSpec(state, it) }
+    val engine = rest.drop(firstEngine).filter { it.key in ENGINE_KEYS }.map { fieldSpec(state, it) }
+    val drive = rest.drop(firstEngine).filter { it.key !in ENGINE_KEYS }
     val dials: @Composable RowScope.() -> Unit = {
         if (rpmF != null) DialCard(state.d("rpm"), rpmF.unit, 7500f, 1500f, 2, Modifier.weight(1f).height(DIAL_H))
         if (spdF != null) DialCard(state.d("spd"), spdF.unit, 180f, 20f, 1, Modifier.weight(1f).height(DIAL_H))
@@ -120,13 +129,17 @@ internal fun EngineTab(state: CanState, fields: List<Field>) = TabPage { cols ->
     if (cols >= 4) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.weight(1.15f), horizontalArrangement = Arrangement.spacedBy(12.dp), content = dials)
-            Box(Modifier.weight(0.85f)) { TileGrid(others.take(6), 2) }
+            Box(Modifier.weight(0.85f)) { TileGrid(top.take(6), 2) }
         }
-        TileGrid(others.drop(6), cols)
+        if (top.size > 6) TileGrid(top.drop(6), cols)
     } else {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), content = dials)
-        TileGrid(others, cols)
+        TileGrid(top, cols)
     }
+    SectionTitle(stringResource(R.string.grp_engine), Modifier.padding(top = 6.dp))
+    TileGrid(engine, cols)
+    SectionTitle(stringResource(R.string.grp_drive_brake), Modifier.padding(top = 6.dp))
+    DriveSections(state, drive, prefs, cols)
 }
 
 private val DIAL_H = 288.dp     // = three tile rows
@@ -194,9 +207,10 @@ private fun DialCard(value: Double?, unit: String, max: Float, step: Float, mino
 // consecutive 4 Hz samples join into one even sweep.
 private const val DIAL_MS = 250
 
-/** Driving tab = the drive/brake fields + slope + drive mode, cruise/turn and exterior lights. */
+/** The driving part of the engine + driving tab: the drive/brake fields + slope, then drive
+ *  mode, cruise/turn and exterior lights. */
 @Composable
-internal fun DriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = TabPage { cols ->
+private fun androidx.compose.foundation.layout.ColumnScope.DriveSections(state: CanState, fields: List<Field>, prefs: Prefs, cols: Int) {
     val t by CanService.tilt.collectAsState()
     // slope from the G sensor (same values as the dashboard level, zero offset applied)
     val pitch = t?.let { it.pitch - prefs.tiltZeroPitch }

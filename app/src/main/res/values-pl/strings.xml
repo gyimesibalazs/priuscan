@@ -95,6 +95,7 @@
     <string name="ha_tk_city">Bak: km w terenie zabudowanym</string>
 
     <!-- ===== Sensor group titles ===== -->
+    <string name="grp_engine_drive">Silnik / jazda</string>
     <string name="grp_engine">Silnik</string>
     <string name="grp_hybrid_drive">Napęd hybrydowy</string>
     <string name="grp_hybrid_batt">Akumulator hybrydowy</string>
@@ -113,7 +114,7 @@
     <string name="f_map">Ciśnienie w kolektorze</string>
     <string name="f_iat">Powietrze dolotowe</string>
     <string name="f_thr">Przepustnica</string>
-    <string name="f_pedal">Pedał gazu</string>
+    <string name="f_pedal">Czujnik pedału gazu (surowy)</string>
     <string name="f_fuel">Zużycie</string>
     <string name="f_engNm">Moment obrotowy silnika</string>
     <string name="f_injml">Wtrysk</string>
@@ -170,7 +171,7 @@
     <string name="f_wDif">Różnica kół przednich</string>
     <string name="f_gLat">Przyspieszenie boczne</string>
     <string name="f_gFwd">Przyspieszenie wzdłużne</string>
-    <string name="f_gasB">Gaz</string>
+    <string name="f_gasB">Pedał gazu</string>
     <string name="f_yaw">Prędkość odchylania</string>
     <string name="f_pitch">Pochylenie wzdłużne (przód w górę +)</string>
     <string name="f_roll">Przechył boczny (w prawo +)</string>

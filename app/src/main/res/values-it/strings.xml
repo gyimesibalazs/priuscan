@@ -94,6 +94,7 @@
     <string name="ha_tk_city">Serbatoio: km urbani</string>
 
     <!-- ===== Sensor group titles ===== -->
+    <string name="grp_engine_drive">Motore / guida</string>
     <string name="grp_engine">Motore</string>
     <string name="grp_hybrid_drive">Trazione ibrida</string>
     <string name="grp_hybrid_batt">Batteria ibrida</string>
@@ -112,7 +113,7 @@
     <string name="f_map">Pressione collettore</string>
     <string name="f_iat">Aria aspirata</string>
     <string name="f_thr">Farfalla</string>
-    <string name="f_pedal">Acceleratore</string>
+    <string name="f_pedal">Sensore acceleratore (grezzo)</string>
     <string name="f_fuel">Consumo</string>
     <string name="f_engNm">Coppia motore</string>
     <string name="f_injml">Iniezione</string>
@@ -169,7 +170,7 @@
     <string name="f_wDif">Diff. ruote anteriori</string>
     <string name="f_gLat">Accelerazione laterale</string>
     <string name="f_gFwd">Accelerazione longitudinale</string>
-    <string name="f_gasB">Gas</string>
+    <string name="f_gasB">Acceleratore</string>
     <string name="f_yaw">Velocità di imbardata</string>
     <string name="f_pitch">Beccheggio (muso su +)</string>
     <string name="f_roll">Rollio (destra +)</string>

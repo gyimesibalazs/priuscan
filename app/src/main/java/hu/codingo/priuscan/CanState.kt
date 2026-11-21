@@ -28,20 +28,35 @@ object Fields {
     )
 
     val groups: List<Pair<Int, List<Field>>> = listOf(
-        R.string.grp_engine to listOf(
-            Field("ct", R.string.f_ct, "°C"),
+        // engine + driving in ONE tab (EngineDriveTab lays it out: dials, then sections by key).
+        // The polled accelerator PID ("pedal", 7E0 2101) is not listed: it is the raw sensor
+        // (rests at 16 %, tops out at 74 %; = 0.47 x gasB + 16.3, r 0.97 on the logs) and slower
+        // than the broadcast gasB. Still sent to Home Assistant (HaPusher.EXTRA).
+        R.string.grp_engine_drive to listOf(
             Field("rpm", R.string.f_rpm, "rpm"),
             Field("spd", R.string.f_spd, "km/h"),
+            Field("ct", R.string.f_ct, "°C"),
             Field("load", R.string.f_load, "%"),
+            Field("gasB", R.string.f_gasB, "%", 0),
+            Field("brkPos", R.string.f_brkPos, "%", 0),
+            Field("fuel", R.string.f_fuel, "l/h", 1),
+            Field("engNm", R.string.f_engNm, "Nm"),
             Field("maf", R.string.f_maf, "g/s", 1),
             Field("map", R.string.f_map, "kPa"),
             Field("iat", R.string.f_iat, "°C"),
             Field("thr", R.string.f_thr, "%"),
-            Field("pedal", R.string.f_pedal, "%"),
-            Field("fuel", R.string.f_fuel, "l/h", 1),
-            Field("engNm", R.string.f_engNm, "Nm"),
             Field("injml", R.string.f_injml, "ml", 3),
             Field("run", R.string.f_run, "s"),
+            Field("steer", R.string.f_steer, "°"),
+            Field("yaw", R.string.f_yaw, "°/s", 1),      // + = turning right
+            Field("gLat", R.string.f_gLat, "m/s²", 2),   // + = right turn
+            Field("gFwd", R.string.f_gFwd, "m/s²", 2),   // fw >= 3.56: real accelerometer (sees slope), + = speeding up / nose up
+            Field("brkP", R.string.f_brkP, "V", 2),
+            Field("wFL", R.string.f_wFL, "km/h", 1),
+            Field("wFR", R.string.f_wFR, "km/h", 1),
+            Field("wRL", R.string.f_wRL, "km/h", 1),
+            Field("wRR", R.string.f_wRR, "km/h", 1),
+            Field("wDif", R.string.f_wDif, "%", 2),
         ),
         R.string.grp_hybrid_drive to listOf(
             Field("mg1t", R.string.f_mg1t, "°C"),
@@ -92,20 +107,6 @@ object Fields {
             Field("acAmb", R.string.f_acAmb, "°C"),
             Field("blower", R.string.f_blower),
             Field("acPress", R.string.f_acPress, "MPa", 2),
-        ),
-        R.string.grp_drive_brake to listOf(
-            Field("wFL", R.string.f_wFL, "km/h", 1),
-            Field("wFR", R.string.f_wFR, "km/h", 1),
-            Field("wRL", R.string.f_wRL, "km/h", 1),
-            Field("wRR", R.string.f_wRR, "km/h", 1),
-            Field("wDif", R.string.f_wDif, "%", 2),
-            Field("gLat", R.string.f_gLat, "m/s²", 2),   // fw >= 3.54: + = right turn
-            Field("gFwd", R.string.f_gFwd, "m/s²", 2),   // fw >= 3.56: real accelerometer (sees slope), + = speeding up / nose up
-            Field("yaw", R.string.f_yaw, "°/s", 1),      // fw >= 3.54: + = turning right
-            Field("steer", R.string.f_steer, "°"),
-            Field("brkP", R.string.f_brkP, "V", 2),
-            Field("gasB", R.string.f_gasB, "%", 0),
-            Field("brkPos", R.string.f_brkPos, "%", 0),
         ),
     )
 }

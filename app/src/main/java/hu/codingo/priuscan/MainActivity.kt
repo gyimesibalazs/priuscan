@@ -121,8 +121,7 @@ fun MainScreen(prefs: Prefs) {
                     val (titleRes, fields) = groups[tab - 1]
                     when (titleRes) {
                         R.string.grp_hybrid_batt -> HybridBatteryTab(state, fields, prefs.batteryRefAh)
-                        R.string.grp_drive_brake -> DriveTab(state, fields, prefs)
-                        R.string.grp_engine -> EngineTab(state, fields)
+                        R.string.grp_engine_drive -> EngineDriveTab(state, fields, prefs)
                         else -> GroupTab(state, fields)
                     }
                 }

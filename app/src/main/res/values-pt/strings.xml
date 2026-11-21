@@ -94,6 +94,7 @@
     <string name="ha_tk_city">Depósito: km urbanos</string>
 
     <!-- ===== Sensor group titles ===== -->
+    <string name="grp_engine_drive">Motor / condução</string>
     <string name="grp_engine">Motor</string>
     <string name="grp_hybrid_drive">Tração híbrida</string>
     <string name="grp_hybrid_batt">Bateria híbrida</string>
@@ -112,7 +113,7 @@
     <string name="f_map">Pressão do coletor</string>
     <string name="f_iat">Ar de admissão</string>
     <string name="f_thr">Borboleta</string>
-    <string name="f_pedal">Acelerador</string>
+    <string name="f_pedal">Sensor do acelerador (bruto)</string>
     <string name="f_fuel">Consumo</string>
     <string name="f_engNm">Binário do motor</string>
     <string name="f_injml">Injeção</string>
@@ -169,7 +170,7 @@
     <string name="f_wDif">Diferencial das rodas dianteiras</string>
     <string name="f_gLat">Aceleração lateral</string>
     <string name="f_gFwd">Aceleração longitudinal</string>
-    <string name="f_gasB">Gás</string>
+    <string name="f_gasB">Acelerador</string>
     <string name="f_yaw">Velocidade de guinada</string>
     <string name="f_pitch">Inclinação longitudinal (frente acima +)</string>
     <string name="f_roll">Inclinação lateral (direita +)</string>
