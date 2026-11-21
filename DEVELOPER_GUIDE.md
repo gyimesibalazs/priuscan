@@ -447,13 +447,17 @@ pre-rendered PNGs now).
      `b2-3` and `b4-5` are the sensor's **two accelerometers mounted ±45°**, 0.0359 m/s² per
      count, zero 512 — **not** "steering torque + lateral accel" as the generic Toyota DBC says.
      `gLat = 0.0254 × (g1 + g2)` (r 0.91–0.95 vs v × yaw, slope 0.82–0.94), 1/16 EMA.
-   * **0x320** `b4` is a **signed int8** (0 = level standstill): the VSC's filtered longitudinal
-     acceleration. `gFwd = 0.040 × s8(b4)` — the scale is **fitted** (0.037–0.042, r 0.86–0.96),
-     treat it as ±10 %. (The pair difference `g2 − g1` gives the same signal but too noisy.)
-   * Signs: `yaw` and `gLat` + = right turn (same as `steer`), `gFwd` + = speeding up. Both G
-     values include gravity (road slope / camber).
+     `gFwd = 0.0254 × (g2 − g1)`, 1/16 EMA (**fw ≥ 3.56**): noisy per frame, but on 1 s means it
+     matches wheel dv/dt with slope 0.97–0.98, and the remainder wanders by degrees with the hills.
+   * **0x320** `b4` (signed int8, ~0.040 m/s² per count) is the VSC's longitudinal acceleration
+     **without gravity**: minus wheel dv/dt it stays within 0.2° on the dumps, and on a logged
+     motorway drive (2026-11-21) it ignored GPS slopes of −1.2…+0.7°. It was `gFwd` in fw 3.54–3.55,
+     which made the level's pitch read ~0 everywhere. Not decoded any more.
+   * Signs: `yaw` and `gLat` + = right turn (same as `steer`), `gFwd` + = speeding up / nose up.
+     Both G values include gravity (road slope / camber).
    * 0x4A1 `b0-1` (s16, ~0.00064 m/s² per count, + = left) is a filtered lateral copy; unused.
-   Still open: pin the 0x320 scale with a known incline or a GPS-speed-aligned drive.
+   Still open: check the fw 3.56 pitch against GPS altitude on a logged drive (the JSONL carries
+   `galt`; logging is throttled to 1 Hz).
 2. **Rear doors L/R** — now split (bit2 0x04 = rear-L, bit3 0x08 = rear-R, a
    best guess). Confirm L/R by opening one rear door; swap the two
    `publish_state` lines in the 0x620 handler if reversed.

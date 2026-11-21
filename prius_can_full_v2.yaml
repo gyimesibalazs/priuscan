@@ -964,10 +964,8 @@ canbus:
         then: { lambda: 'prius::on_broadcast(0x612, x);' }
       - can_id: 0x611   # Combination meter: odometer (km)
         then: { lambda: 'prius::on_broadcast(0x611, x);' }
-      - can_id: 0x024   # KINEMATICS: yaw rate + the two 45-deg accelerometers -> yaw, gLat
+      - can_id: 0x024   # KINEMATICS: yaw rate + the two 45-deg accelerometers -> yaw, gLat, gFwd
         then: { lambda: 'prius::on_broadcast(0x024, x);' }
-      - can_id: 0x320   # VSC: longitudinal acceleration -> gFwd
-        then: { lambda: 'prius::on_broadcast(0x320, x);' }
       - can_id: 0x245   # gas pedal % broadcast
         then: { lambda: 'prius::on_broadcast(0x245, x);' }
       - can_id: 0x025   # steering angle broadcast

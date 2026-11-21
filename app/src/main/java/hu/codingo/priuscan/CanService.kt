@@ -100,12 +100,12 @@ class CanService : Service() {
         fun mergeLastRefuel() = sendCommand("M")   // merge the last refuel-history entry into the tank
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 355                        // bundled firmware version (3.55)
+        const val BUNDLED_FW = 356                        // bundled firmware version (3.56)
         const val TRACK_MID = 45                          // com.qf.backcar: 91 track images, 45 = straight
         const val STEER_LOCK_DEG = 517.0                  // steering-wheel angle at full lock (345 counts x 1.5 deg)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
-        val tilt = MutableStateFlow<Tilt?>(null)          // pitch / roll from the G sensor (fw >= 3.54)
+        val tilt = MutableStateFlow<Tilt?>(null)          // pitch / roll from the G sensor (fw >= 3.56)
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
         val flashState = MutableStateFlow(FlashState.IDLE)
         val flashProgress = MutableStateFlow(0)           // 0..100
@@ -740,7 +740,7 @@ class CanService : Service() {
         updateNotifications(s)
         updateStatusStrip(s)
         updateReverseTrack(s)
-        tilt.value = if ((fwRunning.value ?: 0) >= 354) tiltEst.update(s, android.os.SystemClock.elapsedRealtime()) else null
+        tilt.value = if ((fwRunning.value ?: 0) >= 356) tiltEst.update(s, android.os.SystemClock.elapsedRealtime()) else null
 
         // dark/light: prefer the RAW ambient-light sensor (0x620 b2:b3, ~31 bright .. ~600 dark,
         // confirmed by the lamp test) — fast and independent of the light switch. Fall back to the

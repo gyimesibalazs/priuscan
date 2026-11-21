@@ -120,7 +120,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 355;   // 3.55: read-only diagnostic probe ("X<id> <bytes>")
+inline constexpr int FW_VERSION = 356;   // 3.56: gFwd from the 0x024 accelerometer pair (sees the road slope)
 // 3.54: gLat/gFwd in m/s2 + yaw rate (deg/s) from the 0x024 kinematics frame
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
@@ -288,7 +288,6 @@ inline float    fuel_fin_prev = NAN;                // previous raw fuelIn (flap
 inline uint32_t fuel_flap_ms = 0;                   // last time fuelIn jumped wildly (boot bounce/glitch)
 inline uint8_t  fuel_lowcnt = 0;                    // consecutive samples fuelIn held well below fuel_ref
 inline constexpr float G45_SCALE = 0.0359f * 0.70711f;   // one 45-deg accelerometer count -> m/s2 on the car axis
-inline constexpr float GFWD_SCALE = 0.040f;                 // 0x320 b4 count -> m/s2 (fitted, +-10 %)
 inline constexpr float HSI_REGEN = -12.0f;          // HSI needle (signed, +-127) below this = CHG/regen
 inline constexpr float BRKPOS_REGEN = 3.0f;         // brake pedal position above this = braking (regen)
 // Tank calibration: liters from the fuelIn gauge %. Derived from the logs + the 39.42 L refuel
@@ -624,27 +623,29 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
       //        acceleration, each x cos45 = 0.0254 m/s2 per count. Dumps: the sum matches v x yaw
       //        with r 0.91..0.95, slope 0.82..0.94. (Earlier notes called b2-3 "steering torque" and
       //        b4-5 "lateral accel" after the generic Toyota DBC -- on this car neither is true.)
-      //        The difference is too noisy for the smaller longitudinal signal (r 0.57..0.73 vs
-      //        dv/dt) -> gFwd comes from the VSC's filtered copy in 0x320 instead.
-      // Emitted: yaw deg/s + = turning RIGHT (same sense as steer); gLat m/s2 + = right turn.
-      // A real accelerometer: it also sees road camber (gravity). The raw G counts are noisy
-      // (~10 counts per frame) -> 1/16 EMA (~0.2 s at 80 Hz).
+      //        Per frame the difference is noisy (r 0.57..0.73 vs dv/dt), but it is the only signal
+      //        that carries the road slope -> gFwd since fw 3.56 (was the VSC's 0x320 copy, see there).
+      //        Dumps, 1 s means: -(b2-3 - b4-5) x 0.0254 vs wheel dv/dt slope 0.97..0.98, and what is
+      //        left after removing dv/dt wanders by several degrees with the hills.
+      // Emitted: yaw deg/s + = turning RIGHT (same sense as steer); gLat m/s2 + = right turn; gFwd
+      // m/s2 + = speeding up / nose up. Real accelerometers: they also see road camber and slope
+      // (gravity). The raw G counts are noisy (~10 counts per frame) -> 1/16 EMA (~0.2 s at 80 Hz).
       if (x.size() >= 6) {
         int y  = ((x[0] & 0x03) << 8) | x[1];
         float g1 = (float)((((x[2] & 0x03) << 8) | x[3]) - 512);
         float g2 = (float)((((x[4] & 0x03) << 8) | x[5]) - 512);
         float lat = G45_SCALE * (g1 + g2);
+        float fwd = G45_SCALE * (g2 - g1);
         V[YAW]  = -0.244f * (float)(y - 513);
         V[GLAT] = std::isnan(V[GLAT]) ? lat : V[GLAT] + (lat - V[GLAT]) * (1.0f / 16.0f);
+        V[GFWD] = std::isnan(V[GFWD]) ? fwd : V[GFWD] + (fwd - V[GFWD]) * (1.0f / 16.0f);
       }
       return;
     }
-    case 0x320:  // VSC: LONGITUDINAL acceleration, byte[4] SIGNED int8, 0 = level standstill, + =
-      // speeding up (it is the difference of the two 0x024 accelerometers, filtered: also sees road
-      // slope). Scale FITTED vs wheel-speed dv/dt on 3 dumps: 0.037..0.042 m/s2 per count (r 0.86..
-      // 0.96) -> 0.040, +-10 % uncertain. (fw < 3.54 read it as "154 - b4": wrong, like the steering.)
-      if (x.size() >= 5) V[GFWD] = GFWD_SCALE * (float)(int8_t)x[4];
-      return;
+    // 0x320 b4 (s8, ~0.040 m/s2 per count, + = speeding up) is the VSC's longitudinal acceleration,
+    // but it carries NO gravity: minus wheel dv/dt it stays within 0.2 deg on the dumps, and on a
+    // logged motorway drive (2026-11-21) it ignored GPS slopes of -1.2..+0.7 deg. Useless for the
+    // level, so not decoded any more (fw 3.54..3.55: gFwd; fw < 3.54: "154 - b4", wrong).
     // 0x4A1 b0-1 (s16, ~0.00064 m/s2 per count, + = left) is the VSC's filtered copy of the lateral
     // acceleration (r 0.92..0.98 vs the 0x024 pair). Not decoded any more (fw < 3.54: raw gLat).
     case 0x245:  // gas pedal byte[2] (0..200 -> %); ALSO MG2 rpm = byte0:byte1 (broadcast, was poll

@@ -10,7 +10,8 @@ data class Tilt(val pitch: Double, val roll: Double, val speedKmh: Double)
 
 /** The accelerometers see gravity AND the car's own acceleration; subtracting the latter leaves
  *  the slope: pitch from `gFwd - dv/dt` (wheel speed), roll from `gLat - v * yaw`. Fed with the
- *  ~4 Hz firmware samples (fw >= 3.54: gFwd/gLat in m/s2, yaw in deg/s). Replayed on the raw dumps
+ *  ~4 Hz firmware samples (gFwd/gLat in m/s2, yaw in deg/s). Needs fw >= 3.56: before that gFwd was
+ *  the VSC's 0x320 value, which carries no gravity, so the pitch always came out ~0. Replayed on the raw dumps
  *  this keeps a flat-road drive within +-2..3 deg where the uncompensated reading swings +-7..12.
  *  The display never stops: while accelerating / braking / cornering the compensation is less
  *  exact, so the filter just follows more slowly (gain / (1 + (a/0.7)^2 + (lat/1.0)^2)) -- on the

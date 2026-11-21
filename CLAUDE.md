@@ -99,8 +99,9 @@ health/trip ring (`DailyRec`, one record/day accumulated across drives, written 
 shutdown/quiet detection). NVS partition is ~446 KB.
 
 ## Top open tasks (see DEVELOPER_GUIDE §6 for detail)
-1. G-sensor: decoded since fw 3.54 (`gLat`/`yaw` from 0x024, `gFwd` from 0x320 b4 signed). Only
-   the `gFwd` scale (0.040 m/s² per count, fitted, ±10 %) still wants a known-incline check.
+1. G-sensor: `gLat`/`gFwd`/`yaw` all come from 0x024 (fw 3.56; the two ±45° accelerometers' sum
+   and difference). 0x320 b4 carries no gravity — don't use it for the slope again. Open: check
+   the pitch against GPS altitude (`galt` in the JSONL) on a logged drive.
 2. Separate rear-door L/R bits (targeted dump).
 3. Cruise: the SET bit (`0x399 b1.bit1`) is empirically inferred — confirm with a controlled
    on/off test; the set-SPEED value is not on the broadcast (0x1D2/0x1D3 absent).
