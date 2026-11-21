@@ -85,7 +85,7 @@ MQTT discovery must stay in sync; if you add a key, update all three. Trip data 
 **Host→ESP commands** (`parse_host_line`): `T<unix>` set time, `D0/D1/D2` dump,
 `H`/`HO` refuel/oil history, `F<factor>` fuel correction, `R<2..6>` reset slot,
 `C<dst><src>` copy a live trip into A/B/C (src `B`=since-boot/`H`=from-home),
-`B` emit per-block internal resistance, `X<reqid> <hex bytes>` read-only diagnostic probe (answer: `{"xr":{"req","rsp","n","d"}}`, or
+`B` emit per-block internal resistance, `Z`/`Z0` store the current attitude as level (standstill only) / clear it, `X<reqid> <hex bytes>` read-only diagnostic probe (answer: `{"xr":{"req","rsp","n","d"}}`, or
 `"to":1` on timeout / `"err"` when refused), `G0`/`G1`/`G2` app geofence state
 (0=unknown/not-covered, 1=belterület, 2=országút → `city_state`, persisted across key-off;
 city km / city-EV km per slot accrue only in state 1). **On-demand responses**
@@ -99,9 +99,11 @@ health/trip ring (`DailyRec`, one record/day accumulated across drives, written 
 shutdown/quiet detection). NVS partition is ~446 KB.
 
 ## Top open tasks (see DEVELOPER_GUIDE §6 for detail)
-1. G-sensor: `gLat`/`gFwd`/`yaw` all come from 0x024 (fw 3.56; the two ±45° accelerometers' sum
-   and difference). 0x320 b4 carries no gravity — don't use it for the slope again. Open: check
-   the pitch against GPS altitude (`galt` in the JSONL) on a logged drive.
+1. G-sensor: `gLat`/`gFwd`/`yaw` all come from 0x024 (the two ±45° accelerometers' sum and
+   difference). 0x320 b4 carries no gravity — don't use it for the slope again. `pitch`/`roll` are
+   computed in the firmware (`tilt_tick`, fw 3.57) from 250 ms window means of every frame; the
+   level zero lives in NVS (`tzp`/`tzr`). Open: check the pitch against GPS altitude (`galt` in the
+   JSONL) on a logged drive.
 2. Separate rear-door L/R bits (targeted dump).
 3. Cruise: the SET bit (`0x399 b1.bit1`) is empirically inferred — confirm with a controlled
    on/off test; the set-SPEED value is not on the broadcast (0x1D2/0x1D3 absent).

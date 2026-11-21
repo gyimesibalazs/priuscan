@@ -1102,4 +1102,5 @@ interval:
                  |(id(door_trunk).state?0x01:0);
           snprintf(extra, sizeof(extra), "\"door\":%d,\"cruise\":%d,\"belt\":%d",
                    dm, id(cruise_on).state?1:0, id(belt_driver).state?1:0);
+          prius::tilt_tick(millis());    // pitch / roll from the frames of the last 250 ms
           prius::emit_json(extra, millis());

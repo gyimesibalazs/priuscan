@@ -83,6 +83,8 @@ internal fun tileIcon(key: String, unit: String): ImageVector = when (key) {
     "wDif" -> IcCompareArrows
     "gLat" -> IcSwapHoriz
     "gFwd" -> IcSwapVert
+    "pitch" -> IcHeight
+    "roll" -> IcSwapHoriz
     "yaw" -> IcRotateRight
     "steer" -> IcExplore
     "brkP", "brkPos" -> IcAdjust
@@ -114,7 +116,7 @@ private val ENGINE_KEYS = setOf("maf", "map", "iat", "thr", "injml", "run")
  *  them (the fields listed before the engine section), then the engine and the driving sections,
  *  drive mode + cruise and the exterior lights. */
 @Composable
-internal fun EngineDriveTab(state: CanState, fields: List<Field>, prefs: Prefs) = TabPage { cols ->
+internal fun EngineDriveTab(state: CanState, fields: List<Field>) = TabPage { cols ->
     val rpmF = fields.firstOrNull { it.key == "rpm" }; val spdF = fields.firstOrNull { it.key == "spd" }
     val rest = fields.filter { it.key != "rpm" && it.key != "spd" }
     val firstEngine = rest.indexOfFirst { it.key in ENGINE_KEYS }.let { if (it < 0) rest.size else it }
@@ -138,7 +140,7 @@ internal fun EngineDriveTab(state: CanState, fields: List<Field>, prefs: Prefs) 
     SectionTitle(stringResource(R.string.grp_engine), Modifier.padding(top = 6.dp))
     TileGrid(engine, cols)
     SectionTitle(stringResource(R.string.grp_drive_brake), Modifier.padding(top = 6.dp))
-    DriveSections(state, drive, prefs, cols)
+    DriveSections(state, drive, cols)
 }
 
 private val DIAL_H = 288.dp     // = three tile rows
@@ -209,18 +211,8 @@ private const val DIAL_MS = 250
 /** The driving part of the engine + driving tab: the drive/brake fields + slope, then drive
  *  mode + cruise and exterior lights. */
 @Composable
-private fun androidx.compose.foundation.layout.ColumnScope.DriveSections(state: CanState, fields: List<Field>, prefs: Prefs, cols: Int) {
-    val t by CanService.tilt.collectAsState()
-    // slope from the G sensor (same values as the dashboard level, zero offset applied)
-    val pitch = t?.let { it.pitch - prefs.tiltZeroPitch }
-    val roll = t?.let { it.roll - prefs.tiltZeroRoll }
-    TileGrid(
-        fields.map { fieldSpec(state, it) } + listOf(
-            TileSpec(stringResource(R.string.f_pitch), fmtNum(pitch, 1), if (pitch == null) "" else "°", icon = IcHeight),
-            TileSpec(stringResource(R.string.f_roll), fmtNum(roll, 1), if (roll == null) "" else "°", icon = IcSwapHoriz),
-        ),
-        cols,
-    )
+private fun androidx.compose.foundation.layout.ColumnScope.DriveSections(state: CanState, fields: List<Field>, cols: Int) {
+    TileGrid(fields.map { fieldSpec(state, it) }, cols)
 
     // drive mode (0x49B b4): NORMAL/ECO/PWR selector + independent EV toggle
     SectionTitle(stringResource(R.string.grp_drivemode), Modifier.padding(top = 6.dp))

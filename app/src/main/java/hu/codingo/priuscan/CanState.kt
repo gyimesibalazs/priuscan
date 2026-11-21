@@ -54,6 +54,8 @@ object Fields {
             Field("yaw", R.string.f_yaw, "°/s", 1),      // + = turning right
             Field("gLat", R.string.f_gLat, "m/s²", 2),   // + = right turn
             Field("gFwd", R.string.f_gFwd, "m/s²", 2),   // fw >= 3.56: real accelerometer (sees slope), + = speeding up / nose up
+            Field("pitch", R.string.f_pitch, "°", 1),    // fw >= 3.57: road slope, level zero applied
+            Field("roll", R.string.f_roll, "°", 1),
             Field("brkP", R.string.f_brkP, "V", 2),
             Field("wDif", R.string.f_wDif, "%", 2),
         ),

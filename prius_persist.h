@@ -102,6 +102,8 @@ inline void prius_persist_save(uint32_t epoch) {
     nvs_set_u32(h, "tkn", prius::tank_known ? 1u : 0u);
     nvs_set_u32(h, "gver", prius::GAUGE_CAL_VER); }         // which HEAD/MEAS the anchor was computed with
   nvs_set_u32(h, "csta", prius::city_state);                // geofence state -> resume on next boot
+  nvs_set_i32(h, "tzp", (int32_t)lroundf(prius::tilt_zero_p * 100.0f));   // level zero, centi-degrees
+  nvs_set_i32(h, "tzr", (int32_t)lroundf(prius::tilt_zero_r * 100.0f));
   nvs_commit(h);
   nvs_close(h);
 }
@@ -190,6 +192,9 @@ inline void prius_persist_load() {
       if (nvs_get_u32(h, "tkn",  &tk) == ESP_OK) prius::tank_known = (tk != 0);
     }
     uint32_t cs; if (nvs_get_u32(h, "csta", &cs) == ESP_OK && cs <= 2) prius::city_state = (uint8_t)cs;
+    int32_t tz;
+    if (nvs_get_i32(h, "tzp", &tz) == ESP_OK && tz > -3000 && tz < 3000) prius::tilt_zero_p = tz * 0.01f;
+    if (nvs_get_i32(h, "tzr", &tz) == ESP_OK && tz > -3000 && tz < 3000) prius::tilt_zero_r = tz * 0.01f;
     nvs_close(h);
   }
   if (!loaded) {

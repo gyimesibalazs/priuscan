@@ -52,6 +52,7 @@ enum VKey {
   RANGE,                        // distance-to-empty (km) = fuelL / distance-weighted consumption EMA
   CITY,                         // 1 = inside a built-up area (belterület), set by app geofence via "G1"/"G0"
   YAW,                          // yaw rate (deg/s, + = turning right), 0x024 b0-1 (fw >= 3.54)
+  PITCH, ROLL,                  // road slope seen by the G sensor, deg (tilt_tick), zero applied
   N_JSON,                       // number of fields that go into the JSON (length of FIELDS)
   RAW0 = N_JSON, RAW1, RAW2, RAW3, RAW4, RAW5, RAW6, RAW7,
   V_COUNT
@@ -80,7 +81,7 @@ inline const char *KEYS[V_COUNT] = {
   "tDist","tFuel","tAvg",
   "capAh","capKwh",
   "tMove","tSpd","tEv",
-  "odo","gasB","lights","ambL","dmode","ev","range","city","yaw",
+  "odo","gasB","lights","ambL","dmode","ev","range","city","yaw","pitch","roll",
   "raw0","raw1","raw2","raw3","raw4","raw5","raw6","raw7",
 };
 
@@ -120,7 +121,7 @@ inline void out_write(const char *p, int len) {
 // is older than the bundled one. "O<size>\n" over serial starts a serial OTA: the
 // running firmware writes the streamed image to the inactive OTA partition via the
 // IDF esp_ota API (preserves NVS), then reboots. The OTA loop runs in the YAML.
-inline constexpr int FW_VERSION = 356;   // 3.56: gFwd from the 0x024 accelerometer pair (sees the road slope)
+inline constexpr int FW_VERSION = 357;   // 3.57: pitch / roll computed here (was the app), "Z" level zero
 // 3.54: gLat/gFwd in m/s2 + yaw rate (deg/s) from the 0x024 kinematics frame
 inline bool ota_request = false;         // set by "O" command, consumed by YAML
 inline uint32_t ota_size = 0;            // image size to receive
@@ -269,6 +270,7 @@ inline int      copy_dst  = -1;         // app sent "C<dst><src>" -> copy a live
 inline char     copy_src  = 0;          // 'B' = since-boot, 'H' = from-home
 inline bool     merge_request = false;  // app sent "M" -> merge the last refuel-history entry into the tank (YAML)
 inline bool     force_refuel = false;   // app sent "K" -> manual refuel (auto-detect missed it); YAML commits it
+inline uint8_t  tilt_zero_cmd;           // level zero request (defined with the tilt code)
 inline bool     persist_request = false; // ask the YAML to flush the NVS blob (refuel / reset / corrected epoch)
 inline bool     persist_loaded = false; // true after the boot NVS read -> only THEN may we write
 inline uint8_t  city_state = 0;          // geofence: 0=unknown (no fix / not covered), 1=belterület,
@@ -343,6 +345,7 @@ inline void parse_host_line(const char *line, uint32_t now_ms) {
   if (line[0] == 'G') { uint8_t g = line[1] - '0'; if (g <= 2) city_state = g; return; }  // geofence 0/1/2
   if (line[0] == 'M') { merge_request = true; return; }  // merge last refuel-history entry into the tank
   if (line[0] == 'K') { force_refuel = true; return; }   // manual "I refueled" (auto-detect missed it)
+  if (line[0] == 'Z') { tilt_zero_cmd = (line[1] == '0') ? 2 : 1; return; }  // level: Z = this is level, Z0 = clear
   if (line[0] == 'S') { persist_request = true; return; } // flush trip state to NVS NOW (host shutting down)
   if (line[0] == 'H') { if (line[1] == 'O') ohist_request = true; else hist_request = true; return; }  // H/HO history
   if (line[0] == 'F') {                                   // fuel correction: "F<factor>" (e.g. F1.05)
@@ -596,6 +599,65 @@ inline void parse_payload(uint16_t resp_id, const uint8_t *p, int n) {
 // commaai/opendbc "toyota_prius_2010_pt.dbc" (Gen3/XW30). There is no send_data
 // here, this is a pure decoder (ESPHome-free).
 inline volatile bool can_paused = false;   // set on OTA start: stop all CAN processing
+// ---- Level (road slope) from the G sensor --------------------------------------------------
+// The accelerometers see gravity AND the car's own acceleration; removing the latter leaves the
+// slope: pitch from a_fwd - dv/dt (rear wheel speed), roll from a_lat - v * yaw.
+// Done HERE, not in the app, because every frame is available (0x024 and 0x0AA at ~80 Hz):
+//  * per 250 ms window the accelerations and the wheel speed are AVERAGED over all frames;
+//  * the difference of two consecutive window-mean speeds is the acceleration averaged over both
+//    windows (triangular weight), so it is compared with the mean of the two window accelerations
+//    -- same time span on both sides, no lag mismatch, wheel-speed noise averaged out;
+//  * v * yaw is formed per frame from simultaneous values.
+// While accelerating / braking / cornering the compensation is less exact -> the filter follows
+// more slowly instead of freezing. pitch + = nose up, roll + = right side lower, degrees.
+// "Z" (host) stores the current attitude as level (standstill only), "Z0" clears it; the two
+// zero offsets are persisted (prius_persist.h, keys tzp/tzr).
+inline float tilt_zero_p = 0.0f, tilt_zero_r = 0.0f;   // deg, subtracted from the output
+// tilt_zero_cmd (declared above): 1 = set, 2 = clear, from the host line
+inline float tl_v = NAN;                                // latest rear-wheel speed, m/s, signed
+inline float tl_sf = 0, tl_sl = 0, tl_sc = 0, tl_sv = 0; inline uint16_t tl_n = 0, tl_nv = 0;
+inline float tl_pf = NAN, tl_pv = NAN;                  // previous window: mean a_fwd, mean speed
+inline uint32_t tl_pt = 0;                              // previous window end, ms
+inline float tl_pitch = NAN, tl_roll = NAN;             // filtered, before the zero offsets
+inline void tilt_wheel(float v_ms) {
+  tl_v = (V[GEAR] == 1.0f) ? -v_ms : v_ms;              // wheel speeds are unsigned; 1 = R
+  tl_sv += tl_v; tl_nv++;
+}
+inline void tilt_frame(float fwd, float lat, float yaw_dps) {
+  if (std::isnan(tl_v)) return;
+  tl_sf += fwd; tl_sl += lat; tl_sc += tl_v * yaw_dps * 0.0174533f; tl_n++;
+}
+inline void tilt_reset() { tl_pf = NAN; tl_pitch = NAN; tl_roll = NAN; V[PITCH] = NAN; V[ROLL] = NAN; }
+inline void tilt_tick(uint32_t now_ms) {                // every 250 ms, before emit_json
+  constexpr float G = 9.81f, TAU = 1.5f, SOFT_ACC = 0.7f, SOFT_LAT = 1.0f;
+  if (tl_n < 4 || tl_nv < 4) {                          // no G / wheel frames (bus asleep): start over
+    if (now_ms - tl_pt > 1000u) tilt_reset();
+    tl_sf = tl_sl = tl_sc = tl_sv = 0; tl_n = tl_nv = 0; return;
+  }
+  float af = tl_sf / tl_n, al = tl_sl / tl_n, ac = tl_sc / tl_n, vm = tl_sv / tl_nv;
+  tl_sf = tl_sl = tl_sc = tl_sv = 0; tl_n = tl_nv = 0;
+  float dt = (float)(now_ms - tl_pt) * 0.001f;
+  bool first = std::isnan(tl_pf) || dt <= 0.05f || dt > 1.0f;
+  float pf = tl_pf, pv = tl_pv;
+  tl_pf = af; tl_pv = vm; tl_pt = now_ms;
+  if (first) return;
+  float acc = (vm - pv) / dt;                           // dv/dt over the two windows
+  float sp = (0.5f * (af + pf) - acc) / G, sr = -(al - ac) / G;
+  float p = asinf(sp < -1 ? -1 : sp > 1 ? 1 : sp) * 57.29578f;
+  float r = asinf(sr < -1 ? -1 : sr > 1 ? 1 : sr) * 57.29578f;
+  if (std::isnan(tl_pitch)) { tl_pitch = p; tl_roll = r; }
+  else {
+    float qa = acc / SOFT_ACC, ql = ac / SOFT_LAT, k = dt / TAU;
+    if (k > 1) k = 1;
+    k /= 1.0f + qa * qa + ql * ql;
+    tl_pitch += (p - tl_pitch) * k; tl_roll += (r - tl_roll) * k;
+  }
+  if (tilt_zero_cmd == 2) { tilt_zero_p = tilt_zero_r = 0; persist_request = true; }
+  else if (tilt_zero_cmd == 1 && fabsf(vm) < 0.15f) { tilt_zero_p = tl_pitch; tilt_zero_r = tl_roll; persist_request = true; }
+  tilt_zero_cmd = 0;
+  V[PITCH] = tl_pitch - tilt_zero_p; V[ROLL] = tl_roll - tilt_zero_r;
+}
+
 inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
   if (can_paused) return;                   // OTA in progress -> free the CPU for the flash
   switch (id) {
@@ -639,6 +701,7 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
         V[YAW]  = -0.244f * (float)(y - 513);
         V[GLAT] = std::isnan(V[GLAT]) ? lat : V[GLAT] + (lat - V[GLAT]) * (1.0f / 16.0f);
         V[GFWD] = std::isnan(V[GFWD]) ? fwd : V[GFWD] + (fwd - V[GFWD]) * (1.0f / 16.0f);
+        tilt_frame(fwd, lat, V[YAW]);
       }
       return;
     }
@@ -702,6 +765,7 @@ inline void on_broadcast(uint16_t id, const std::vector<uint8_t> &x) {
         V[WFL] = (float)(((uint16_t)x[2]<<8)|x[3]) * 0.01f - 67.67f;
         V[WRR] = (float)(((uint16_t)x[4]<<8)|x[5]) * 0.01f - 67.67f;
         V[WRL] = (float)(((uint16_t)x[6]<<8)|x[7]) * 0.01f - 67.67f;
+        tilt_wheel((V[WRR] + V[WRL]) * (0.5f / 3.6f));
         float fr = V[WFR], fl = V[WFL];
         if (fr + fl > 20.0f) V[WDIF] = 200.0f * fabsf(fr - fl) / (fr + fl);
       }
@@ -1444,7 +1508,7 @@ inline const Field FIELDS[] = {
   {DTCCUR,"\"dtcCur\":",9,0}, {DTCHIST,"\"dtcHist\":",10,0},
   {ACAMB,"\"acAmb\":",8,2}, {BLOWER,"\"blower\":",9,0}, {ACPRESS,"\"acPress\":",10,2},
   {FUELIN,"\"fuelIn\":",9,2}, {FUELL,"\"fuelL\":",8,1}, {FUELGM,"\"fuelGm\":",9,1}, {RANGE,"\"range\":",8,0},
-  {CITY,"\"city\":",7,0}, {YAW,"\"yaw\":",6,1},
+  {CITY,"\"city\":",7,0}, {YAW,"\"yaw\":",6,1}, {PITCH,"\"pitch\":",8,1}, {ROLL,"\"roll\":",7,1},
   {CTR,"\"ctR\":",6,2}, {WPRUN,"\"wpRun\":",8,0}, {WPW,"\"wpW\":",6,0}, {CELLW,"\"cellW\":",8,0},
   {ELEN,"\"eLen\":",7,2}, {EFF,"\"eFF\":",6,2}, {EOK,"\"eOK\":",6,2}, {LOOPS,"\"loops\":",8,2},
   {GEAR,"\"gear\":",7,0}, {TURN,"\"turn\":",7,0}, {SETSPD,"\"setSpd\":",9,0},

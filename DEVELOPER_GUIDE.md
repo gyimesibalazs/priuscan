@@ -456,7 +456,14 @@ pre-rendered PNGs now).
    * Signs: `yaw` and `gLat` + = right turn (same as `steer`), `gFwd` + = speeding up / nose up.
      Both G values include gravity (road slope / camber).
    * 0x4A1 `b0-1` (s16, ~0.00064 m/s² per count, + = left) is a filtered lateral copy; unused.
-   Still open: check the fw 3.56 pitch against GPS altitude on a logged drive (the JSONL carries
+   * **Level (`pitch`/`roll`, fw ≥ 3.57)** — computed in the firmware (`tilt_tick`, every 250 ms):
+     the accelerations and the rear-wheel speed are averaged over all frames of the window; the
+     difference of two consecutive window-mean speeds is compared with the mean of the two window
+     accelerations (same time span on both sides), `v × yaw` is formed per frame. The filter
+     (τ 1.5 s) slows down while accelerating / cornering. Host `Z` stores the current attitude as
+     level (standstill only), `Z0` clears it; NVS keys `tzp`/`tzr`. (fw 3.54–3.56: the app did this
+     from the 4 Hz samples.)
+   Still open: check the pitch against GPS altitude on a logged drive (the JSONL carries
    `galt`; logging is throttled to 1 Hz).
 2. **Rear doors L/R** — now split (bit2 0x04 = rear-L, bit3 0x08 = rear-R, a
    best guess). Confirm L/R by opening one rear door; swap the two

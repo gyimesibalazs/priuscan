@@ -85,6 +85,8 @@ class CanService : Service() {
         /** Per-block internal resistance (mΩ), fetched on demand ("B"); 14 values, NaN = not ready. */
         val blockR = MutableStateFlow<List<Float>>(emptyList())
         fun fetchBlockR() = sendCommand("B")
+        /** Level zero (fw >= 3.57): the firmware stores the current attitude as level -- only at standstill. */
+        fun zeroLevel() = sendCommand("Z")
 
         /** Read-only diagnostic probe (fw >= 3.55): "X<reqid> <hex bytes>", e.g. probe("780 13"). The
          *  firmware lets only READ services through. Answers ({"xr":...}) collect in [probeLog] and
@@ -100,12 +102,11 @@ class CanService : Service() {
         fun mergeLastRefuel() = sendCommand("M")   // merge the last refuel-history entry into the tank
 
         // ---- Firmware over-the-USB flashing ----
-        const val BUNDLED_FW = 356                        // bundled firmware version (3.56)
+        const val BUNDLED_FW = 357                        // bundled firmware version (3.57)
         const val TRACK_MID = 45                          // com.qf.backcar: 91 track images, 45 = straight
         const val STEER_LOCK_DEG = 517.0                  // steering-wheel angle at full lock (345 counts x 1.5 deg)
         /** Format an encoded version (>=100 -> major.minor, else plain). */
         fun fmtFw(v: Int): String = if (v >= 100) "${v / 100}.${v % 100}" else "$v"
-        val tilt = MutableStateFlow<Tilt?>(null)          // pitch / roll from the G sensor (fw >= 3.56)
         val fwRunning = MutableStateFlow<Int?>(null)      // version reported by the ESP ("fw")
         val flashState = MutableStateFlow(FlashState.IDLE)
         val flashProgress = MutableStateFlow(0)           // 0..100
@@ -712,7 +713,6 @@ class CanService : Service() {
     private var trackLevel = -1
     private var trackSentMs = 0L
 
-    private val tiltEst = TiltEstimator()
 
     /** Feed the head unit's own reverse-camera app (com.qf.backcar) with the steering angle so it
      *  draws its dynamic trajectory lines. Reverse-engineered from QF_BackCar.apk: it listens for
@@ -740,7 +740,6 @@ class CanService : Service() {
         updateNotifications(s)
         updateStatusStrip(s)
         updateReverseTrack(s)
-        tilt.value = if ((fwRunning.value ?: 0) >= 356) tiltEst.update(s, android.os.SystemClock.elapsedRealtime()) else null
 
         // dark/light: prefer the RAW ambient-light sensor (0x620 b2:b3, ~31 bright .. ~600 dark,
         // confirmed by the lamp test) — fast and independent of the light switch. Fall back to the

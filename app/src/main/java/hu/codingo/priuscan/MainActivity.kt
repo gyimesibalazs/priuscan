@@ -121,7 +121,7 @@ fun MainScreen(prefs: Prefs) {
                     val (titleRes, fields) = groups[tab - 1]
                     when (titleRes) {
                         R.string.grp_hybrid_batt -> HybridBatteryTab(state, fields, prefs.batteryRefAh)
-                        R.string.grp_engine_drive -> EngineDriveTab(state, fields, prefs)
+                        R.string.grp_engine_drive -> EngineDriveTab(state, fields)
                         else -> GroupTab(state, fields)
                     }
                 }
@@ -141,10 +141,9 @@ private val HEADER_H = 164.dp      // common min height of the header card and t
  *  trip chips + the selected trip's statistics card. The level card exists only with tilt data. */
 @Composable
 private fun DashboardTab(state: CanState, prefs: Prefs) {
-    val tilt by CanService.tilt.collectAsState()
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         // narrow screens: no level card (the angles are still listed on the drive tab)
-        val t = tilt
+        val t = state.tilt()
         val showLevel = t != null && maxWidth >= 900.dp
         Row(
             Modifier.widthIn(max = 1400.dp).fillMaxSize().verticalScroll(rememberScrollState())
@@ -152,7 +151,7 @@ private fun DashboardTab(state: CanState, prefs: Prefs) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (showLevel && t != null)
-                PCard(horizontalAlignment = Alignment.CenterHorizontally) { LevelPanel(t, prefs) }
+                PCard(horizontalAlignment = Alignment.CenterHorizontally) { LevelPanel(t) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     HeaderCard(state, Modifier.weight(1f))
@@ -170,11 +169,9 @@ private const val LEVEL_RANGE = 8.0   // deg at the end of a tube
 /** Bullseye level, the car seen from above: the bubble drifts towards the HIGHER end like in a
  *  real circular level -- up = nose up, left = right side lower. Rings at 4 and 8 deg; the bubble
  *  stops on the rim and turns amber beyond 8 deg. Hold the panel ~1.3 s at standstill to store
- *  the current attitude as level. */
+ *  the current attitude as level (kept by the firmware). */
 @Composable
-private fun LevelPanel(t: Tilt, prefs: Prefs, modifier: Modifier = Modifier) {
-    var zeroP by remember { mutableStateOf(prefs.tiltZeroPitch) }
-    var zeroR by remember { mutableStateOf(prefs.tiltZeroRoll) }
+private fun LevelPanel(t: Tilt, modifier: Modifier = Modifier) {
     val cur by androidx.compose.runtime.rememberUpdatedState(t)
     var holding by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
@@ -185,15 +182,12 @@ private fun LevelPanel(t: Tilt, prefs: Prefs, modifier: Modifier = Modifier) {
             val now = withFrameNanos { it }
             progress = ((now - start) / 1_300_000_000f).coerceAtMost(1f)
             if (progress >= 1f) {
-                if (cur.speedKmh < 1.0) {              // zero only at standstill
-                    zeroP = cur.pitch.toFloat(); zeroR = cur.roll.toFloat()
-                    prefs.tiltZeroPitch = zeroP; prefs.tiltZeroRoll = zeroR
-                }
+                if (cur.speedKmh < 1.0) CanService.zeroLevel()   // the firmware stores it (standstill only)
                 holding = false; break
             }
         }
     }
-    val pitch = t.pitch - zeroP; val roll = t.roll - zeroR
+    val pitch = t.pitch; val roll = t.roll
     val c = pc
     Column(modifier.width(LEVEL_SIZE).pointerInput(Unit) {
         detectTapGestures(onPress = { holding = true; tryAwaitRelease(); holding = false })
